@@ -36,7 +36,7 @@ coverage/
 *.tmp
 *.temp
 test-*.js
-test-*.ps1
+*.ps1
 
 # Mobile
 mobile/android/
