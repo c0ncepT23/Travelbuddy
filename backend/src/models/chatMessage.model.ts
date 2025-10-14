@@ -71,7 +71,7 @@ export class ChatMessageModel {
 
     return result.rows
       .reverse()
-      .map((row) => ({
+      .map((row: any) => ({
         role: row.sender_type === 'agent' ? ('assistant' as const) : ('user' as const),
         content: row.content,
       }));
