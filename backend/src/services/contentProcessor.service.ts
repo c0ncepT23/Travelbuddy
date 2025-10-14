@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { load } from 'cheerio';
 import Tesseract from 'tesseract.js';
-import { Innertube } from 'youtubei.js';
 import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
 import {
@@ -97,7 +96,8 @@ export class ContentProcessorService {
     try {
       logger.info(`Fetching video info and transcript for ${videoId}...`);
       
-      // Initialize Innertube
+      // Initialize Innertube (dynamic import for ESM module)
+      const { Innertube } = await import('youtubei.js');
       const youtube = await Innertube.create();
       
       // Get video info
