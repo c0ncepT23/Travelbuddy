@@ -43,8 +43,11 @@ export class ChatService {
       );
 
       // Check if message contains a URL for processing
+      logger.info(`📥 Received message content: "${content}"`);
       const urls = extractUrls(content);
+      logger.info(`🔗 Extracted URLs: ${JSON.stringify(urls)}`);
       if (urls.length > 0) {
+        logger.info(`✅ URL detected, processing: ${urls[0]}`);
         // Process first URL asynchronously
         this.processUrlMessage(userId, tripGroupId, urls[0]);
         
