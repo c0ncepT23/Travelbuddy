@@ -106,11 +106,15 @@ export class ChatService {
     url: string
   ): Promise<void> {
     try {
+      logger.info(`🔍 Processing URL: ${url}`);
       const sourceType = ContentProcessorService.detectContentType(url);
+      logger.info(`📝 Detected source type: ${sourceType}`);
 
       // Special handling for YouTube videos using Gemini
       if (sourceType === ItemSourceType.YOUTUBE) {
+        logger.info(`🎬 Starting YouTube video extraction for: ${url}`);
         const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
+        logger.info(`✅ YouTube extraction complete. Video type: ${analysis.video_type}, Places: ${analysis.places.length}`);
         
         // Check if this is a how-to video
         if (analysis.video_type === 'howto') {
@@ -310,7 +314,8 @@ export class ChatService {
 
       logger.info(`Content processed and saved: ${savedItem.id}`);
     } catch (error: any) {
-      logger.error('URL processing error:', error);
+      logger.error('❌ URL processing error:', error);
+      logger.error('Error details:', { message: error.message, stack: error.stack });
       await this.sendAgentMessage(
         tripGroupId,
         `Hmm, I had trouble processing that link. Could you share more details about it? 🤔`
