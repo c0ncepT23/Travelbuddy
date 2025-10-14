@@ -1,4 +1,4 @@
-import { Pool, PoolConfig } from 'pg';
+import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -6,7 +6,7 @@ dotenv.config();
 // Support both Supabase (DATABASE_URL) and local PostgreSQL
 const connectionString = process.env.DATABASE_URL;
 
-const poolConfig: PoolConfig = connectionString
+const poolConfig: any = connectionString
   ? {
       connectionString,
       ssl: {
