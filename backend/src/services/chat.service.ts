@@ -116,8 +116,17 @@ export class ChatService {
       // Special handling for YouTube videos using Gemini
       if (sourceType === ItemSourceType.YOUTUBE) {
         logger.info(`🎬 Starting YouTube video extraction for: ${url}`);
-        const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
-        logger.info(`✅ YouTube extraction complete. Video type: ${analysis.video_type}, Places: ${analysis.places.length}`);
+                const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
+        const seenPlaceKeys = new Set<string>();
+        const uniquePlaces = analysis.places.filter((place) => {
+          const key = ChatService.getPlaceDedupKey(place.name, place.location_name);
+          if (seenPlaceKeys.has(key)) {
+            return false;
+          }
+          seenPlaceKeys.add(key);
+          return true;
+        });
+        logger.info(`?o. YouTube extraction complete. Video type: ${analysis.video_type}, Places: ${uniquePlaces.length}`);
         
         // Check if this is a how-to video
         if (analysis.video_type === 'howto') {
@@ -152,12 +161,12 @@ export class ChatService {
         // Send summary first
         await this.sendAgentMessage(
           tripGroupId,
-          `📺 ${analysis.summary}\n\nFound ${analysis.places.length} place(s)! Adding them now...`
+          `📺 ${analysis.summary}\n\nFound ${uniquePlaces.length} place(s)! Adding them now...`
         );
 
         // Save each place
         let savedCount = 0;
-        for (const place of analysis.places) {
+        for (const place of uniquePlaces) {
           // Check for duplicates
           const duplicates = await SavedItemModel.findDuplicates(
             tripGroupId,
@@ -326,6 +335,14 @@ export class ChatService {
     }
   }
 
+  private static getPlaceDedupKey(name?: string, locationName?: string): string {
+    const normalize = (value?: string) =>
+      value ? value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() : '';
+    const normalizedName = normalize(name);
+    const normalizedLocation = normalize(locationName);
+    return `${normalizedName}__${normalizedLocation}`;
+  }
+
   /**
    * Send agent message
    */
@@ -459,4 +476,15 @@ export class ChatService {
     };
   }
 }
+
+
+
+
+
+
+
+
+
+
+
 

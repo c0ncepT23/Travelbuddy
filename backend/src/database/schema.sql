@@ -117,7 +117,8 @@ CREATE TABLE IF NOT EXISTS user_locations (
     trip_group_id UUID REFERENCES trip_groups(id) ON DELETE CASCADE,
     latitude DECIMAL(10, 8) NOT NULL,
     longitude DECIMAL(11, 8) NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, trip_group_id)
 );
 
 CREATE INDEX idx_user_locations_user ON user_locations(user_id);
