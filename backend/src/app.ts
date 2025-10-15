@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { config } from './config/env';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -14,9 +15,10 @@ import locationRoutes from './routes/location.routes';
 
 const app: Application = express();
 
-// Trust proxy - required for Railway and other cloud platforms
-// This allows rate limiting to work correctly with X-Forwarded-For headers
-app.set('trust proxy', true);
+// Trust the first proxy in production (Railway) so client IP is preserved, but
+// keep default behavior locally to avoid permissive trust proxy settings
+const trustProxySetting = config.nodeEnv === 'production' ? 1 : false;
+app.set('trust proxy', trustProxySetting);
 
 // Security middleware
 app.use(helmet());
