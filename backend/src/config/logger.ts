@@ -8,16 +8,27 @@ const logFormat = winston.format.combine(
   winston.format.json()
 );
 
+const transports: winston.transport[] = [
+  // Write all logs with importance level of 'error' or less to error.log
+  new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+  // Write all logs to combined.log
+  new winston.transports.File({ filename: 'logs/combined.log' }),
+];
+
+if (config.nodeEnv === 'production') {
+  // Mirror logs to stdout in production so Railway/containers capture them
+  transports.push(
+    new winston.transports.Console({
+      format: winston.format.json(),
+    })
+  );
+}
+
 const logger = winston.createLogger({
   level: config.nodeEnv === 'production' ? 'info' : 'debug',
   format: logFormat,
   defaultMeta: { service: 'travel-agent-api' },
-  transports: [
-    // Write all logs with importance level of 'error' or less to error.log
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    // Write all logs to combined.log
-    new winston.transports.File({ filename: 'logs/combined.log' }),
-  ],
+  transports,
 });
 
 // If we're not in production, log to the console with simple format
