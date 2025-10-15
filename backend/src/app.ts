@@ -14,6 +14,10 @@ import locationRoutes from './routes/location.routes';
 
 const app: Application = express();
 
+// Trust proxy - required for Railway and other cloud platforms
+// This allows rate limiting to work correctly with X-Forwarded-For headers
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet());
 app.use(
