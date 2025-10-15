@@ -10,6 +10,8 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Trust proxy configuration for Railway/cloud deployment
+  validate: { trustProxy: false },
 });
 
 export const authLimiter = rateLimit({
@@ -20,6 +22,8 @@ export const authLimiter = rateLimit({
     error: 'Too many authentication attempts, please try again later',
   },
   skipSuccessfulRequests: true,
+  // Trust proxy configuration for Railway/cloud deployment
+  validate: { trustProxy: false },
 });
 
 export const contentSubmissionLimiter = rateLimit({
@@ -29,5 +33,7 @@ export const contentSubmissionLimiter = rateLimit({
     success: false,
     error: 'Too many content submissions, please slow down',
   },
+  // Trust proxy configuration for Railway/cloud deployment
+  validate: { trustProxy: false },
 });
 
