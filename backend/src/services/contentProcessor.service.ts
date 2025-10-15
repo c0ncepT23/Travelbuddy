@@ -19,6 +19,13 @@ import {
 } from '../types';
 import logger from '../config/logger';
 
+type YouTubeModule = typeof import('youtubei.js');
+
+const loadYouTubeModule = async (): Promise<YouTubeModule> => {
+  const dynamicImport = new Function('specifier', 'return import(specifier);');
+  return dynamicImport('youtubei.js') as Promise<YouTubeModule>;
+};
+
 export class ContentProcessorService {
   /**
    * Detect content type from URL
@@ -97,7 +104,11 @@ export class ContentProcessorService {
       logger.info(`Fetching video info and transcript for ${videoId}...`);
       
       // Initialize Innertube (dynamic import for ESM module)
-      const { Innertube } = await import('youtubei.js');
+      const ytModule = await loadYouTubeModule();
+      const Innertube = ytModule.Innertube || (ytModule as any).default?.Innertube;
+      if (!Innertube) {
+        throw new Error('Failed to load youtubei.js module (Innertube not found)');
+      }
       const youtube = await Innertube.create();
       
       // Get video info
