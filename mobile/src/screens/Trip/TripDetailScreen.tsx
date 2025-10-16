@@ -103,12 +103,18 @@ export default function TripDetailScreen({ route, navigation }: any) {
     [selectedCategory, selectedTag]
   );
 
-  const loadItems = useCallback(
+const loadItems = useCallback(
   async (forceRefresh = false) => {
     try {
       if (activeTab === 'hub') {
-        // We no longer render full cards for hub; smart collections are fetched elsewhere
-        setItems([]);
+        let source = savedItemsCache;
+        if (!source || forceRefresh) {
+          const fetched = await fetchTripItems(tripId, { status: ItemStatus.SAVED });
+          setSavedItemsCache(fetched);
+          source = fetched;
+        }
+        const filtered = applyFilters(source ?? []);
+        setItems(filtered);
       } else {
         let source = visitedItemsCache;
         if (!source || forceRefresh) {
@@ -131,7 +137,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
     visitedItemsCache,
     setItems,
   ]
-  );
+);
 
   const loadTripData = useCallback(async () => {
   setSavedItemsCache(null);
