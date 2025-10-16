@@ -197,20 +197,23 @@ export class SavedItemModel {
     const lngDelta = radiusMeters / (111000 * Math.cos((lat * Math.PI) / 180));
 
     const result = await query(
-      `SELECT *,
-       (6371000 * acos(
-         cos(radians($2)) * cos(radians(location_lat)) *
-         cos(radians(location_lng) - radians($3)) +
-         sin(radians($2)) * sin(radians(location_lat))
-       )) AS distance
-       FROM saved_items
-       WHERE trip_group_id = $1
-       AND location_lat IS NOT NULL
-       AND location_lng IS NOT NULL
-       AND location_lat BETWEEN $2 - $4 AND $2 + $4
-       AND location_lng BETWEEN $3 - $5 AND $3 + $5
-       HAVING distance <= $6
-       ORDER BY distance ASC`,
+      `SELECT *
+       FROM (
+         SELECT *,
+           (6371000 * acos(
+             cos(radians($2)) * cos(radians(location_lat)) *
+             cos(radians(location_lng) - radians($3)) +
+             sin(radians($2)) * sin(radians(location_lat))
+           )) AS distance
+         FROM saved_items
+         WHERE trip_group_id = $1
+           AND location_lat IS NOT NULL
+           AND location_lng IS NOT NULL
+           AND location_lat BETWEEN $2 - $4 AND $2 + $4
+           AND location_lng BETWEEN $3 - $5 AND $3 + $5
+       ) s
+       WHERE s.distance <= $6
+       ORDER BY s.distance ASC`,
       [tripGroupId, lat, lng, latDelta, lngDelta, radiusMeters]
     );
 
