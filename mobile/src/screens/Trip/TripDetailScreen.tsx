@@ -16,6 +16,7 @@ import { useItemStore } from '../../stores/itemStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { format } from 'date-fns';
 import {
+  Trip,
   ItemCategory,
   ItemStatus,
   SavedItem,
@@ -61,8 +62,8 @@ export default function TripDetailScreen({ route, navigation }: any) {
     leaveTrip,
     updateTripBanner,
   } = tripStore;
-  const setCurrentTrip =
-    typeof (tripStore as any).setCurrentTrip === 'function' ? (tripStore as any).setCurrentTrip : undefined;
+  const maybeSetCurrentTrip = (tripStore as { setCurrentTrip?: (trip: Trip | null) => void }).setCurrentTrip;
+  const setCurrentTrip = typeof maybeSetCurrentTrip === 'function' ? maybeSetCurrentTrip : undefined;
   const {
     items,
     fetchTripItems,
@@ -103,52 +104,52 @@ export default function TripDetailScreen({ route, navigation }: any) {
     [selectedCategory, selectedTag]
   );
 
-const loadItems = useCallback(
-  async (forceRefresh = false) => {
-    try {
-      if (activeTab === 'hub') {
-        let source = savedItemsCache;
-        if (!source || forceRefresh) {
-          const fetched = await fetchTripItems(tripId, { status: ItemStatus.SAVED });
-          setSavedItemsCache(fetched);
-          source = fetched;
+  const loadItems = useCallback(
+    async (forceRefresh = false) => {
+      try {
+        if (activeTab === 'hub') {
+          let source = savedItemsCache;
+          if (!source || forceRefresh) {
+            const fetched = await fetchTripItems(tripId, { status: ItemStatus.SAVED });
+            setSavedItemsCache(fetched);
+            source = fetched;
+          }
+          const filtered = applyFilters(source ?? []);
+          setItems(filtered);
+        } else {
+          let source = visitedItemsCache;
+          if (!source || forceRefresh) {
+            const fetchedVisited = await fetchTripItems(tripId, { status: ItemStatus.VISITED });
+            setVisitedItemsCache(fetchedVisited);
+            source = fetchedVisited;
+          }
+          setItems((source ?? []).filter((item) => item.status === ItemStatus.VISITED));
         }
-        const filtered = applyFilters(source ?? []);
-        setItems(filtered);
-      } else {
-        let source = visitedItemsCache;
-        if (!source || forceRefresh) {
-          const fetchedVisited = await fetchTripItems(tripId, { status: ItemStatus.VISITED });
-          setVisitedItemsCache(fetchedVisited);
-          source = fetchedVisited;
-        }
-        setItems((source ?? []).filter((item) => item.status === ItemStatus.VISITED));
+      } catch (error) {
+        console.error('Load items error:', error);
       }
-    } catch (error) {
-      console.error('Load items error:', error);
-    }
-  },
-  [
-    activeTab,
-    applyFilters,
-    fetchTripItems,
-    tripId,
-    savedItemsCache,
-    visitedItemsCache,
-    setItems,
-  ]
-);
+    },
+    [
+      activeTab,
+      applyFilters,
+      fetchTripItems,
+      tripId,
+      savedItemsCache,
+      visitedItemsCache,
+      setItems,
+    ]
+  );
 
   const loadTripData = useCallback(async () => {
-  setSavedItemsCache(null);
-  setVisitedItemsCache(null);
-  // Clear UI list immediately to avoid showing stale items from previous trip
-  clearItems();
-  // Clear current trip to avoid showing previous details while fetching
-  setCurrentTrip?.(null as any);
-  await Promise.all([fetchTripDetails(tripId), fetchTripMembers(tripId)]);
-  await loadItems(true);
-}, [fetchTripDetails, fetchTripMembers, tripId, loadItems, clearItems, setCurrentTrip]);
+    setSavedItemsCache(null);
+    setVisitedItemsCache(null);
+    // Clear UI list immediately to avoid showing stale items from previous trip
+    clearItems();
+    // Clear current trip to avoid showing previous details while fetching
+    setCurrentTrip?.(null);
+    await Promise.all([fetchTripDetails(tripId), fetchTripMembers(tripId)]);
+    await loadItems(true);
+  }, [fetchTripDetails, fetchTripMembers, tripId, loadItems, clearItems, setCurrentTrip]);
 
   const getPreferredGroups = useCallback(
     (categoryKey: string) =>
