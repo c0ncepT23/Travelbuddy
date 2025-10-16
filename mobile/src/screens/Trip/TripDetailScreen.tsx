@@ -123,7 +123,8 @@ export default function TripDetailScreen({ route, navigation }: any) {
             setVisitedItemsCache(fetchedVisited);
             source = fetchedVisited;
           }
-          setItems((source ?? []).filter((item) => item.status === ItemStatus.VISITED));
+          const filteredVisited = (source ?? []).filter((item) => item.status === ItemStatus.VISITED);
+          setItems(filteredVisited);
         }
       } catch (error) {
         console.error('Load items error:', error);
@@ -237,7 +238,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
           groupsForCollections.map(async (group) => {
             const topValues = nextFacetsByGroup[group].slice(0, 3).map((facet) => facet.value);
             if (topValues.length === 0) {
-              return [group, []] as const;
+              return [group, [] as TagGroupItems[]] as const;
             }
             const grouped = await fetchItemsGroupedByTag(tripId, group, {
               category: categoryFilter,
@@ -250,7 +251,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
 
         const nextCollections: Record<string, TagGroupItems[]> = {};
         results.forEach(([group, data]) => {
-          nextCollections[group] = data;
+          nextCollections[group] = data as TagGroupItems[];
         });
         setCollectionsByGroup(nextCollections);
       }
