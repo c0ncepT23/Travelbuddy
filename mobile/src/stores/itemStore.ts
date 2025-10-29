@@ -24,7 +24,7 @@ interface ItemState {
       status?: ItemStatus;
       tags?: TagFilter[];
     }
-  ) => Promise<void>;
+  ) => Promise<SavedItem[]>;
   fetchTagFacets: (
     tripId: string,
     filters?: {
@@ -45,6 +45,7 @@ interface ItemState {
   searchItems: (tripId: string, query: string) => Promise<void>;
   markAsVisited: (itemId: string, notes?: string) => Promise<void>;
   deleteItem: (itemId: string) => Promise<void>;
+  setItems: (items: SavedItem[]) => void;
   clearItems: () => void;
 }
 
@@ -69,6 +70,7 @@ export const useItemStore = create<ItemState>((set, get) => ({
         params,
       });
       set({ items: response.data.data, isLoading: false });
+      return response.data.data;
     } catch (error) {
       console.error('Fetch items error:', error);
       set({ isLoading: false });
@@ -175,6 +177,10 @@ export const useItemStore = create<ItemState>((set, get) => ({
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to delete item');
     }
+  },
+
+  setItems: (items) => {
+    set({ items });
   },
 
   clearItems: () => {

@@ -12,6 +12,9 @@ import tripRoutes from './routes/trip.routes';
 import chatRoutes from './routes/chat.routes';
 import itemRoutes from './routes/savedItem.routes';
 import locationRoutes from './routes/location.routes';
+import aiCompanionRoutes from './routes/aiCompanion.routes';
+import checkInRoutes from './routes/checkIn.routes';
+import groupMessageRoutes from './routes/groupMessage.routes';
 
 const app: Application = express();
 
@@ -52,6 +55,9 @@ app.use('/api/trips', tripRoutes);        // Trip items and search
 app.use('/api/trips', chatRoutes);       // Chat within trips
 app.use('/api/items', itemRoutes);       // Direct item operations
 app.use('/api/location', locationRoutes); // Location services
+app.use('/api/companion', aiCompanionRoutes); // AI Companion queries
+app.use('/api', checkInRoutes); // Check-ins and trip stories
+app.use('/api', groupMessageRoutes); // Group chat messages
 
 // Error handlers
 app.use(notFoundHandler);

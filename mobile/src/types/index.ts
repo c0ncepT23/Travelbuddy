@@ -95,6 +95,8 @@ export interface SavedItem {
   location_name?: string;
   location_lat?: number;
   location_lng?: number;
+  location_confidence?: 'high' | 'medium' | 'low';
+  location_confidence_score?: number;
   original_source_type: string;
   original_source_url?: string;
   source_title?: string;
@@ -107,6 +109,94 @@ export interface SavedItem {
   primary_tag?: string | null;
   primary_tag_group?: string | null;
   primary_tag_confidence?: number;
+}
+
+// Check-in types
+export interface CheckIn {
+  id: string;
+  user_id: string;
+  trip_group_id: string;
+  saved_item_id: string;
+  checked_in_at: string;
+  checked_out_at?: string;
+  duration_minutes?: number;
+  rating?: number;
+  note?: string;
+  cost?: number;
+  currency?: string;
+  photos?: string[];
+  actual_location_lat?: number;
+  actual_location_lng?: number;
+  weather?: string;
+  with_users?: string[];
+  is_auto_checkin?: boolean;
+  is_visible?: boolean;
+  shared_publicly?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimelineItem extends CheckIn {
+  place_name: string;
+  place_category: string;
+  place_description: string;
+  location_name?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_confidence?: string;
+  username: string;
+}
+
+export interface DayTimeline {
+  date: string;
+  day_number: number;
+  check_ins: TimelineItem[];
+  stats: {
+    total_places: number;
+    total_duration_minutes: number;
+    total_cost: number;
+    avg_rating?: number;
+  };
+}
+
+export interface TripStory {
+  id: string;
+  trip_group_id: string;
+  user_id: string;
+  share_code: string;
+  slug?: string;
+  is_public: boolean;
+  title?: string;
+  description?: string;
+  hero_image_url?: string;
+  cover_photos?: string[];
+  theme_color?: string;
+  show_ratings: boolean;
+  show_photos: boolean;
+  show_costs: boolean;
+  show_notes: boolean;
+  show_companions: boolean;
+  views_count: number;
+  copies_count: number;
+  shares_count: number;
+  last_viewed_at?: string;
+  expires_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TripStats {
+  trip_id: string;
+  trip_name: string;
+  destination: string;
+  total_checkins: number;
+  unique_places: number;
+  days_active: number;
+  avg_rating?: number;
+  total_cost?: number;
+  total_time_minutes?: number;
+  first_checkin?: string;
+  last_checkin?: string;
 }
 
 // API Response Types

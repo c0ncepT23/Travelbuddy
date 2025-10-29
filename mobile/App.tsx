@@ -20,49 +20,32 @@ import CreateTripScreen from './src/screens/Trip/CreateTripScreen';
 import ChatScreen from './src/screens/Chat/ChatScreen';
 import BrowseItemsScreen from './src/screens/Items/BrowseItemsScreen';
 
+// AI Companion
+import CompanionScreen from './src/screens/Companion/CompanionScreen';
+
 // Profile
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 
 const Stack = createStackNavigator();
 
 export default function App() {
-  console.log('🚀 App: Component rendering');
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  console.log('🚀 App: Accessing auth store...');
-  let authStore;
-  try {
-    authStore = useAuthStore();
-    console.log('🚀 App: Auth store accessed', { 
-      isAuthenticated: authStore.isAuthenticated, 
-      isLoading: authStore.isLoading 
-    });
-  } catch (err) {
-    console.error('❌ App: Failed to access auth store:', err);
-    throw err;
-  }
-  
-  const { isAuthenticated, isLoading, loadStoredAuth } = authStore;
+  const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
 
   useEffect(() => {
-    console.log('🚀 App: useEffect running');
     const prepare = async () => {
       try {
-        console.log('🚀 App: Calling loadStoredAuth...');
         await loadStoredAuth();
-        console.log('🚀 App: loadStoredAuth complete');
         setIsReady(true);
-        console.log('✅ App: Ready to render');
       } catch (err) {
         console.error('❌ App initialization error:', err);
-        console.error('❌ Error stack:', err instanceof Error ? err.stack : 'No stack');
         setError(err instanceof Error ? err.message : 'Failed to initialize app');
         setIsReady(true); // Continue to app even if auth loading fails
       }
     };
     prepare();
-  }, []);
+  }, []); // Only run once on mount
 
   if (!isReady || isLoading) {
     return (
@@ -83,9 +66,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <StatusBar style="auto" />
-      <NavigationContainer
-        onReady={() => console.log('✅ Navigation ready')}
-      >
+      <NavigationContainer>
         <Stack.Navigator
           screenOptions={{
             headerStyle: { backgroundColor: '#007AFF' },
@@ -118,9 +99,7 @@ export default function App() {
               <Stack.Screen
                 name="TripDetail"
                 component={TripDetailScreen}
-                options={({ route }: any) => ({
-                  title: route.params?.tripName || 'Trip Details',
-                })}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="CreateTrip"
@@ -131,6 +110,11 @@ export default function App() {
                 name="Chat"
                 component={ChatScreen}
                 options={{ title: 'Travel Agent' }}
+              />
+              <Stack.Screen
+                name="Companion"
+                component={CompanionScreen}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="BrowseItems"

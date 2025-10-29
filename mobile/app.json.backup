@@ -12,7 +12,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#0000FF"
     },
-    "platforms": ["ios", "android"],
+    "platforms": ["ios", "android", "web"],
     "plugins": [
       [
         "expo-location",
@@ -44,12 +44,22 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "RECORD_AUDIO"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAiWhzrvdNb2NKSyzWpvNrhImz72I395Qo"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#6366F1"
+      }
     },
     "extra": {
       "eas": {
         "projectId": "03f5aa21-93d3-46d6-b572-f41aa2eee57a"
-      }
+      },
+      "googleMapsApiKey": "AIzaSyAiWhzrvdNb2NKSyzWpvNrhImz72I395Qo"
     }
   }
 }

@@ -1,0 +1,66 @@
+export default {
+  expo: {
+    name: "Travel Agent",
+    slug: "travel-agent",
+    version: "1.1.0",
+    orientation: "portrait",
+    userInterfaceStyle: "light",
+    assetBundlePatterns: [
+      "**/*"
+    ],
+    splash: {
+      resizeMode: "contain",
+      backgroundColor: "#6366F1"
+    },
+    platforms: ["ios", "android", "web"],
+    plugins: [
+      [
+        "expo-location",
+        {
+          locationAlwaysAndWhenInUsePermission: "Allow Travel Agent to use your location to suggest nearby saved places.",
+          locationAlwaysPermission: "Allow Travel Agent to use your location to suggest nearby saved places.",
+          locationWhenInUsePermission: "Allow Travel Agent to use your location to suggest nearby saved places."
+        }
+      ]
+    ],
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: "com.travelagent.app",
+      infoPlist: {
+        NSLocationWhenInUseUsageDescription: "We need your location to suggest nearby places from your saved list.",
+        NSLocationAlwaysAndWhenInUseUsageDescription: "We need your location to proactively suggest nearby places.",
+        NSCameraUsageDescription: "Allow camera access to take photos of places you want to save.",
+        NSPhotoLibraryUsageDescription: "Allow photo library access to upload images.",
+        NSMicrophoneUsageDescription: "Allow microphone access for voice notes."
+      }
+    },
+    android: {
+      package: "com.travelagent.app",
+      versionCode: 3,
+      permissions: [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO"
+      ],
+      config: {
+        googleMaps: {
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+        }
+      },
+      adaptiveIcon: {
+        foregroundImage: "./assets/icon.png",
+        backgroundColor: "#6366F1"
+      }
+    },
+    extra: {
+      eas: {
+        projectId: "03f5aa21-93d3-46d6-b572-f41aa2eee57a"
+      },
+      googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+    }
+  }
+};
+

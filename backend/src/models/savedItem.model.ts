@@ -17,13 +17,16 @@ export class SavedItemModel {
     locationLng?: number,
     sourceUrl?: string,
     sourceTitle?: string,
-    originalContent?: any
+    originalContent?: any,
+    locationConfidence?: 'high' | 'medium' | 'low',
+    locationConfidenceScore?: number
   ): Promise<SavedItem> {
     const result = await query(
       `INSERT INTO saved_items 
        (trip_group_id, added_by, name, category, description, location_name, 
-        location_lat, location_lng, original_source_type, original_source_url, source_title, original_content)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        location_lat, location_lng, original_source_type, original_source_url, source_title, original_content,
+        location_confidence, location_confidence_score)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         tripGroupId,
@@ -38,6 +41,8 @@ export class SavedItemModel {
         sourceUrl,
         sourceTitle,
         originalContent ? JSON.stringify(originalContent) : null,
+        locationConfidence || 'low',
+        locationConfidenceScore || 0,
       ]
     );
 
@@ -49,7 +54,15 @@ export class SavedItemModel {
    */
   static async findById(id: string): Promise<SavedItem | null> {
     const result = await query('SELECT * FROM saved_items WHERE id = $1', [id]);
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    if (!row) return null;
+    
+    // Convert string lat/lng to numbers
+    return {
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    };
   }
 
   /**
@@ -85,7 +98,13 @@ export class SavedItemModel {
     queryText += ' ORDER BY created_at DESC';
 
     const result = await query(queryText, queryParams);
-    return result.rows;
+    
+    // Convert string lat/lng to numbers
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
   }
 
   /**

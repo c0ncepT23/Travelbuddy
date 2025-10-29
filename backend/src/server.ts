@@ -3,12 +3,16 @@ import app from './app';
 import { config } from './config/env';
 import logger from './config/logger';
 import { pool } from './config/database';
+import { WebSocketService } from './services/websocket.service';
 
 const server = http.createServer(app);
 
-// Initialize Socket.IO (will be configured later)
-// import { Server as SocketServer } from 'socket.io';
-// const io = new SocketServer(server, { cors: { origin: config.cors.origin } });
+// Initialize WebSocket service
+const _websocketService = new WebSocketService(server);
+logger.info('✅ WebSocket service initialized');
+
+// Export for potential use elsewhere
+export { _websocketService as websocketService };
 
 const PORT = config.port;
 
