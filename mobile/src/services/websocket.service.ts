@@ -21,7 +21,7 @@ class WebSocketService {
         return;
       }
 
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://travelbuddy-production-1d2c.up.railway.app';
 
       this.socket = io(API_URL, {
         auth: { token },
