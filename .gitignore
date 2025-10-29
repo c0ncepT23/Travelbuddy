@@ -31,12 +31,14 @@ Thumbs.db
 
 # Testing
 coverage/
+test-*.ts
+test-*.js
 
 # Temporary files
 *.tmp
 *.temp
-test-*.js
 *.ps1
+logs.json
 
 # Mobile
 mobile/android/
