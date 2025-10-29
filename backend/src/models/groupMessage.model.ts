@@ -176,7 +176,7 @@ export class GroupMessageModel {
     `;
     
     const result = await pool.query(query, [tripGroupId]);
-    return result.rows.map(row => row.user_id);
+    return result.rows.map((row: any) => row.user_id);
   }
 
   // Online status
@@ -237,7 +237,7 @@ export class GroupMessageModel {
     `;
     
     const result = await pool.query(query, [userId]);
-    return result.rows.map(row => row.token);
+    return result.rows.map((row: any) => row.token);
   }
 }
 
