@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '../types';
 import pool from '../config/database';
 
 export class NotificationController {
