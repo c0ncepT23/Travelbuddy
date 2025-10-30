@@ -15,6 +15,7 @@ import locationRoutes from './routes/location.routes';
 import aiCompanionRoutes from './routes/aiCompanion.routes';
 import checkInRoutes from './routes/checkIn.routes';
 import groupMessageRoutes from './routes/groupMessage.routes';
+import notificationRoutes from './routes/notification.routes';
 
 const app: Application = express();
 
@@ -58,6 +59,7 @@ app.use('/api/location', locationRoutes); // Location services
 app.use('/api/companion', aiCompanionRoutes); // AI Companion queries
 app.use('/api', checkInRoutes); // Check-ins and trip stories
 app.use('/api', groupMessageRoutes); // Group chat messages
+app.use('/api/notifications', notificationRoutes); // Push notifications
 
 // Error handlers
 app.use(notFoundHandler);

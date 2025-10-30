@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import * as Location from 'expo-location';
 import api from '../config/api';
 import { SavedItem } from '../types';
+import {
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
+  isBackgroundTrackingActive,
+  setActiveTrip,
+} from '../tasks/locationTracking.task';
+import notificationService from '../services/notification.service';
 
 type LocationObject = Location.LocationObject;
 type LocationSubscription = Location.LocationSubscription;
@@ -9,15 +16,21 @@ type LocationSubscription = Location.LocationSubscription;
 interface LocationState {
   location: LocationObject | null;
   hasPermission: boolean;
+  hasBackgroundPermission: boolean;
   isTracking: boolean;
+  isBackgroundTracking: boolean;
   nearbyItems: SavedItem[];
   
   // Actions
   requestPermission: () => Promise<boolean>;
+  requestBackgroundPermission: () => Promise<boolean>;
   startTracking: () => Promise<void>;
   stopTracking: () => void;
+  startBackgroundTracking: (tripId: string) => Promise<void>;
+  stopBackgroundTracking: () => Promise<void>;
   updateLocation: (tripId: string, location: LocationObject) => Promise<void>;
   fetchNearbyItems: (tripId: string, latitude: number, longitude: number) => Promise<void>;
+  initializeNotifications: () => Promise<void>;
 }
 
 let locationSubscription: LocationSubscription | null = null;
@@ -25,7 +38,9 @@ let locationSubscription: LocationSubscription | null = null;
 export const useLocationStore = create<LocationState>((set, get) => ({
   location: null,
   hasPermission: false,
+  hasBackgroundPermission: false,
   isTracking: false,
+  isBackgroundTracking: false,
   nearbyItems: [],
 
   requestPermission: async () => {
@@ -36,6 +51,26 @@ export const useLocationStore = create<LocationState>((set, get) => ({
       return hasPermission;
     } catch (error) {
       console.error('Permission request error:', error);
+      return false;
+    }
+  },
+
+  requestBackgroundPermission: async () => {
+    try {
+      // First need foreground permission
+      const { hasPermission } = get();
+      if (!hasPermission) {
+        const granted = await get().requestPermission();
+        if (!granted) return false;
+      }
+
+      // Then request background
+      const { status } = await Location.requestBackgroundPermissionsAsync();
+      const hasBackgroundPermission = status === 'granted';
+      set({ hasBackgroundPermission });
+      return hasBackgroundPermission;
+    } catch (error) {
+      console.error('Background permission request error:', error);
       return false;
     }
   },
@@ -77,6 +112,45 @@ export const useLocationStore = create<LocationState>((set, get) => ({
     set({ isTracking: false });
   },
 
+  startBackgroundTracking: async (tripId: string) => {
+    try {
+      const { hasBackgroundPermission } = get();
+      
+      if (!hasBackgroundPermission) {
+        const granted = await get().requestBackgroundPermission();
+        if (!granted) {
+          throw new Error('Background location permission denied');
+        }
+      }
+
+      // Set the active trip for background task
+      await setActiveTrip(tripId);
+
+      // Start background location tracking
+      await startBackgroundLocationTracking();
+      
+      // Check if it's actually running
+      const isActive = await isBackgroundTrackingActive();
+      set({ isBackgroundTracking: isActive });
+      
+      console.log('[LocationStore] Background tracking started:', isActive);
+    } catch (error) {
+      console.error('[LocationStore] Start background tracking error:', error);
+      throw error;
+    }
+  },
+
+  stopBackgroundTracking: async () => {
+    try {
+      await stopBackgroundLocationTracking();
+      await setActiveTrip(null);
+      set({ isBackgroundTracking: false });
+      console.log('[LocationStore] Background tracking stopped');
+    } catch (error) {
+      console.error('[LocationStore] Stop background tracking error:', error);
+    }
+  },
+
   updateLocation: async (tripId, location) => {
     try {
       await api.post('/location/update', {
@@ -99,6 +173,15 @@ export const useLocationStore = create<LocationState>((set, get) => ({
     } catch (error) {
       console.error('Fetch nearby items error:', error);
       throw error;
+    }
+  },
+
+  initializeNotifications: async () => {
+    try {
+      await notificationService.initialize();
+      console.log('[LocationStore] Notifications initialized');
+    } catch (error) {
+      console.error('[LocationStore] Notification initialization error:', error);
     }
   },
 }));

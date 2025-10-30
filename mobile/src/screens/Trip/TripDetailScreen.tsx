@@ -52,7 +52,13 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
   const { items, fetchTripItems } = useItemStore();
   const { getMessages, isLoading: chatLoading, sendQuery } = useCompanionStore();
-  const { location } = useLocationStore();
+  const { 
+    location, 
+    initializeNotifications, 
+    startBackgroundTracking, 
+    stopBackgroundTracking,
+    isBackgroundTracking 
+  } = useLocationStore();
   
   // Get trip-specific messages
   const messages = getMessages(tripId);
@@ -148,6 +154,32 @@ export default function TripDetailScreen({ route, navigation }: any) {
     };
 
     loadTripData();
+  }, [tripId]);
+
+  // Initialize notifications and background tracking
+  useEffect(() => {
+    const initializeLocationFeatures = async () => {
+      try {
+        // Initialize push notifications
+        await initializeNotifications();
+        console.log('[TripDetail] Notifications initialized');
+
+        // Start background location tracking for this trip
+        await startBackgroundTracking(tripId);
+        console.log('[TripDetail] Background tracking started');
+      } catch (error) {
+        console.error('[TripDetail] Error initializing location features:', error);
+        // Don't block the app if this fails
+      }
+    };
+
+    initializeLocationFeatures();
+
+    // Cleanup: stop background tracking when leaving this screen
+    return () => {
+      stopBackgroundTracking();
+      console.log('[TripDetail] Background tracking stopped on unmount');
+    };
   }, [tripId]);
 
   // Re-center map when items are updated
