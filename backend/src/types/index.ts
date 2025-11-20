@@ -145,6 +145,8 @@ export interface YouTubeVideoData {
   description: string;
   transcript: string;
   thumbnail_url: string;
+  thumbnail: string;
+  channel: string;
 }
 
 export interface InstagramPostData {
