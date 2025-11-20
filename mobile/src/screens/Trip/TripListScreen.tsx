@@ -5,13 +5,14 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
-  Platform,
+  StatusBar,
 } from 'react-native';
 import { useTripStore } from '../../stores/tripStore';
 import { useAuthStore } from '../../stores/authStore';
 import { format } from 'date-fns';
+import { AnimatedCard } from '../../components/AnimatedCard';
+import { FadeIn } from '../../components/FadeIn';
 
 export default function TripListScreen({ navigation }: any) {
   const { trips, isLoading, fetchTrips } = useTripStore();
@@ -30,11 +31,11 @@ export default function TripListScreen({ navigation }: any) {
       .substring(0, 2);
   };
 
-  const renderTrip = ({ item }: any) => (
-    <TouchableOpacity
+  const renderTrip = ({ item, index }: any) => (
+    <AnimatedCard
       style={styles.chunkyTripCard}
       onPress={() => navigation.navigate('TripDetail', { tripId: item.id, tripName: item.name })}
-      activeOpacity={0.8}
+      delay={index * 100}
     >
       <View style={styles.tripIconContainer}>
         <Text style={styles.tripIconText}>✈️</Text>
@@ -50,13 +51,15 @@ export default function TripListScreen({ navigation }: any) {
         )}
       </View>
       <Text style={styles.arrow}>→</Text>
-    </TouchableOpacity>
+    </AnimatedCard>
   );
 
   return (
     <View style={styles.container}>
-      {/* CHUNKY HEADER */}
-      <View style={styles.header}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      
+      {/* HEADER */}
+      <FadeIn delay={0} style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.greeting}>Hello, {user?.name}! 👋</Text>
           <Text style={styles.subtitle}>Your travel adventures</Text>
@@ -67,7 +70,7 @@ export default function TripListScreen({ navigation }: any) {
         >
           <Text style={styles.profileInitials}>{user ? getInitials(user.name) : '?'}</Text>
         </TouchableOpacity>
-      </View>
+      </FadeIn>
 
       <FlatList
         data={trips}
@@ -78,18 +81,18 @@ export default function TripListScreen({ navigation }: any) {
           <RefreshControl refreshing={isLoading} onRefresh={fetchTrips} />
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
+          <FadeIn delay={300} style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🌍</Text>
             <Text style={styles.emptyText}>No trips yet!</Text>
             <Text style={styles.emptySubtext}>
               Time to start planning your next adventure! ✨
             </Text>
-          </View>
+          </FadeIn>
         }
       />
 
-      {/* CHUNKY CREATE BUTTON */}
-      <View style={styles.buttonContainer}>
+      {/* CREATE BUTTON */}
+      <FadeIn delay={500} style={styles.buttonContainer}>
         <TouchableOpacity
           style={styles.chunkyCreateButton}
           onPress={() => navigation.navigate('CreateTrip')}
@@ -97,7 +100,7 @@ export default function TripListScreen({ navigation }: any) {
         >
           <Text style={styles.createButtonText}>✨ Create Trip</Text>
         </TouchableOpacity>
-      </View>
+      </FadeIn>
     </View>
   );
 }
@@ -108,7 +111,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFBEB', // Cream background
   },
   
-  // CHUNKY HEADER
+  // HEADER
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -118,13 +121,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 4,
     borderBottomColor: '#000',
+    zIndex: 10,
   },
   headerContent: {
     flex: 1,
   },
   greeting: {
     fontSize: 28,
-    fontWeight: '900', // CHUNKY!
+    fontWeight: '900',
     color: '#000',
   },
   subtitle: {
@@ -202,7 +206,7 @@ const styles = StyleSheet.create({
   tripDestination: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E40AF', // Deep Blue (classy!)
+    color: '#1E40AF', // Deep Blue
     marginBottom: 4,
   },
   tripDate: {
@@ -240,7 +244,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
-  // CHUNKY CREATE BUTTON
+  // CREATE BUTTON
   buttonContainer: {
     position: 'absolute',
     bottom: 0,

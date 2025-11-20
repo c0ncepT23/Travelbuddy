@@ -3,6 +3,9 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { SavedItem } from '../types';
 import { GOOGLE_MAPS_API_KEY, CATEGORY_COLORS } from '../config/maps';
 import { createCustomMarkerIcon } from './CustomMarkers';
+import DARK_NEON_MAP_STYLE from '../config/darkNeonMapStyle';
+
+declare var google: any;
 
 // Conditionally import CustomMapMarker only for mobile
 const CustomMapMarker = Platform.OS !== 'web' 
@@ -22,8 +25,8 @@ interface MapViewProps {
 
 export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }) => {
   const mapRef = useRef<HTMLDivElement>(null);
-  const googleMapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
+  const googleMapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && mapRef.current) {
@@ -38,12 +41,10 @@ export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }
     }
   }, [items]);
 
-  // Update map center when region changes
   useEffect(() => {
     if (googleMapRef.current && region) {
       const google = (window as any).google;
       googleMapRef.current.setCenter({ lat: region.latitude, lng: region.longitude });
-      console.log('[MapView] Map center updated to:', region.latitude, region.longitude);
     }
   }, [region.latitude, region.longitude]);
 
@@ -69,54 +70,33 @@ export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      styles: [
-        {
-          featureType: 'poi',
-          elementType: 'labels',
-          stylers: [{ visibility: 'off' }],
-        },
-      ],
+      zoomControl: false,
+      styles: DARK_NEON_MAP_STYLE,
     });
 
     updateMarkers();
   };
 
   const updateMarkers = () => {
-    if (!googleMapRef.current) {
-      console.log('[MapView] No google map ref, skipping marker update');
-      return;
-    }
+    if (!googleMapRef.current) return;
 
     const google = (window as any).google;
-    
-    console.log('[MapView] Updating markers, items count:', items.length);
     
     // Clear existing markers
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
     // Create new markers
-    items.forEach((item, index) => {
-      console.log(`[MapView] Item ${index}:`, {
-        name: item.name,
-        lat: item.location_lat,
-        lng: item.location_lng,
-        category: item.category
-      });
-      
-      if (!item.location_lat || !item.location_lng) {
-        console.log(`[MapView] Item ${index} skipped - missing location`);
-        return;
-      }
+    items.forEach((item) => {
+      if (!item.location_lat || !item.location_lng) return;
 
       const marker = new google.maps.Marker({
         position: { lat: item.location_lat, lng: item.location_lng },
         map: googleMapRef.current,
         title: item.name,
         icon: createCustomMarkerIcon(item.category),
+        animation: google.maps.Animation.DROP,
       });
-
-      console.log(`[MapView] Created marker ${index} at`, { lat: item.location_lat, lng: item.location_lng });
 
       marker.addListener('click', () => {
         if (onMarkerPress) {
@@ -126,8 +106,6 @@ export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }
 
       markersRef.current.push(marker);
     });
-    
-    console.log('[MapView] Total markers created:', markersRef.current.length);
   };
 
   const centerMap = () => {
@@ -149,15 +127,18 @@ export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }
     return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
   }
 
-  // For mobile, we'll use react-native-maps with custom markers
+  // For mobile, use react-native-maps with dark neon style
   const MapViewNative = require('react-native-maps').default;
+  const { PROVIDER_GOOGLE } = require('react-native-maps');
 
   return (
     <MapViewNative
+      provider={PROVIDER_GOOGLE}
       style={styles.map}
       initialRegion={region}
       showsUserLocation
-      showsMyLocationButton
+      showsMyLocationButton={false}
+      customMapStyle={DARK_NEON_MAP_STYLE}
     >
       {items.map((item) => {
         if (!item.location_lat || !item.location_lng) return null;
@@ -179,4 +160,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-

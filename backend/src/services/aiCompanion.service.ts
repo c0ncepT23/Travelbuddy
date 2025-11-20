@@ -128,8 +128,14 @@ export class AICompanionService {
         placesToSave = analysis.places;
         summary = analysis.summary;
         logger.info(`[Companion] Extracted ${placesToSave.length} places from Reddit post`);
+      } else if (contentType === 'instagram') {
+        // Extract MULTIPLE places from Instagram post/reel
+        const analysis = await ContentProcessorService.extractMultiplePlacesFromInstagram(url);
+        placesToSave = analysis.places;
+        summary = analysis.summary;
+        logger.info(`[Companion] Extracted ${placesToSave.length} places from Instagram post`);
       } else {
-        // Single place extraction (Instagram, generic URLs)
+        // Single place extraction (generic URLs)
         const processed = await ContentProcessorService.processUrl(url);
         placesToSave = [{
           ...processed,

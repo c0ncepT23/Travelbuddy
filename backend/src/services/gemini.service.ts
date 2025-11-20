@@ -270,5 +270,97 @@ If no specific places mentioned, return empty places array.`;
       throw new Error(`Failed to analyze Reddit post: ${error.message}`);
     }
   }
+
+  /**
+   * Analyze Instagram post (caption + image) and extract places
+   */
+  static async analyzeInstagramPost(
+    caption: string,
+    imageUrl?: string
+  ): Promise<{
+    summary: string;
+    places: Array<{
+      name: string;
+      category: ItemCategory;
+      description: string;
+      location?: string;
+    }>;
+  }> {
+    try {
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+      // Note: For now we are only analyzing text, but we could add image analysis later
+      // using the multimodal capabilities of Gemini Pro Vision
+      
+      const prompt = `Analyze this Instagram travel post (caption) and extract ALL individual place recommendations.
+
+Caption:
+${caption}
+
+Image URL: ${imageUrl || 'Not available'}
+
+IMPORTANT INSTRUCTIONS:
+1. Identify the specific place/spot being recommended in the caption or hashtags
+2. If the post recommends multiple places (e.g. "Top 5 Cafes in Paris"), extract EACH ONE separately
+3. Look for location details in hashtags (e.g. #tokyofood, #shibuya)
+4. Determine the vibe/category from the emojis and description
+
+Provide:
+1. A brief summary of what this post is about (1-2 sentences)
+2. ALL individual places mentioned
+
+For each place:
+- Name: Exact name of the place/restaurant/hotel
+- Category: Choose ONE from: food, accommodation, place, shopping, activity, tip
+- Description: What makes it special (based on the caption)
+- Location: City, neighborhood, or area (infer from context/hashtags)
+
+RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
+{
+  "summary": "Brief summary of the post",
+  "places": [
+    {
+      "name": "Place Name",
+      "category": "food",
+      "description": "Specific details about this place",
+      "location": "Area, City"
+    }
+  ]
 }
 
+If the caption is short or vague, try to infer as much as possible from hashtags.
+If no specific place is mentioned (just "My trip to Paris"), return empty places array.`;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response;
+      const text = response.text();
+
+      // Remove markdown code blocks if present
+      let cleanText = text.trim();
+      
+      // Sanitize more aggressively
+      cleanText = cleanText.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
+
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Failed to parse response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      logger.info(`Gemini extracted ${parsed.places?.length || 0} places from Instagram post`);
+
+      return {
+        summary: parsed.summary || 'No summary available',
+        places: parsed.places || [],
+      };
+    } catch (error: any) {
+      logger.error('Gemini Instagram analysis error:', error);
+      // Fallback: return empty structure rather than crashing whole pipeline if analysis fails
+      return {
+        summary: caption.substring(0, 100) + '...',
+        places: []
+      };
+    }
+  }
+}

@@ -63,8 +63,11 @@ export class ContentProcessorService {
           break;
 
         case ItemSourceType.INSTAGRAM:
+          console.log('Fetching Instagram post...');
           originalContent = await this.fetchInstagramPost(url);
-          textContent = `Caption: ${originalContent.caption}\nLocation: ${originalContent.location || 'Not specified'}`;
+          console.log('Fetched Instagram content:', JSON.stringify(originalContent));
+          // Prioritize the caption for location extraction
+          textContent = `Instagram Post/Reel\nCaption: ${originalContent.caption}\nLocation: ${originalContent.location || 'Not specified'}`;
           break;
 
         case ItemSourceType.REDDIT:
@@ -78,14 +81,17 @@ export class ContentProcessorService {
           break;
       }
 
+      console.log('Processing content with AI...');
       // Use AI to process and categorize
       const processed = await TravelAgent.processContent(textContent, contentType);
+      console.log('AI processing complete');
 
       return {
         ...processed,
         originalContent,
       };
     } catch (error: any) {
+      console.error('Detailed error in processUrl:', error);
       logger.error('Error processing URL:', error);
       throw new Error(`Failed to process ${contentType}: ${error.message}`);
     }
@@ -102,7 +108,7 @@ export class ContentProcessorService {
 
     try {
       logger.info(`Fetching video info and transcript for ${videoId}...`);
-      
+
       // Initialize Innertube (dynamic import for ESM module)
       const ytModule = await loadYouTubeModule();
       const Innertube = ytModule.Innertube || (ytModule as any).default?.Innertube;
@@ -110,85 +116,35 @@ export class ContentProcessorService {
         throw new Error('Failed to load youtubei.js module (Innertube not found)');
       }
       const youtube = await Innertube.create();
-      
-      // Get video info
-      const videoInfo = await youtube.getInfo(videoId);
-      
-      const title = videoInfo.basic_info.title || 'Untitled Video';
-      const description = videoInfo.basic_info.short_description || '';
-      const thumbnailUrl = videoInfo.basic_info.thumbnail?.[0]?.url || 
-        `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 
-      // NEW: Fetch ACTUAL transcript from video captions
+      const videoInfo = await youtube.getInfo(videoId);
+
       let transcript = '';
       try {
-        logger.info(`Fetching transcript for video ${videoId}...`);
-        
         const transcriptData = await videoInfo.getTranscript();
-        
-        if (transcriptData && transcriptData.transcript) {
-          const segments = transcriptData.transcript.content?.body?.initial_segments;
-          
-          if (segments && segments.length > 0) {
-            // Combine all transcript segments with timestamps
-            transcript = segments
-              .map((segment: any) => {
-                const startMs = segment.start_ms || 0;
-                const timestamp = this.formatTimestamp(startMs);
-                const text = segment.snippet?.text || '';
-                return `[${timestamp}] ${text}`;
-              })
-              .join(' ');
-            
-            logger.info(`✅ Transcript fetched: ${transcript.length} characters`);
-          }
+        if (transcriptData?.transcript?.content?.body?.initial_segments) {
+          transcript = transcriptData.transcript.content.body.initial_segments
+            .map((segment: any) => segment.snippet.text)
+            .join(' ');
         }
-      } catch (transcriptError: any) {
-        logger.warn(`No transcript available for ${videoId}: ${transcriptError.message}`);
-        // Fallback to description if transcript unavailable
-        transcript = description || '';
+      } catch (e) {
+        logger.warn('Could not fetch transcript for video', videoId);
       }
-
-      // If we still don't have content, use title at minimum
-      if (!transcript || transcript.trim().length === 0) {
-        transcript = description || title;
-        logger.warn('Using description/title as transcript fallback');
-      }
-
-      logger.info(`Extracted video: ${title.substring(0, 50)}...`);
-      logger.info(`Description length: ${description.length} characters`);
-      logger.info(`Transcript length: ${transcript.length} characters`);
 
       return {
-        title,
-        description,
+        title: videoInfo.basic_info.title || '',
+        description: videoInfo.basic_info.short_description || '',
         transcript,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: videoInfo.basic_info.thumbnail?.[0]?.url || '',
+        thumbnail: videoInfo.basic_info.thumbnail?.[0]?.url || '',
+        channel: videoInfo.basic_info.channel?.name || '',
       };
-    } catch (error: any) {
+    } catch (error) {
       logger.error('YouTube fetch error:', error);
-      throw new Error(`Failed to fetch YouTube video: ${error.message}`);
+      throw new Error('Failed to fetch YouTube video');
     }
   }
 
-  /**
-   * Format milliseconds to MM:SS timestamp
-   */
-  private static formatTimestamp(milliseconds: number): string {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Fetch Instagram post data
-   */
   private static async fetchInstagramPost(url: string): Promise<InstagramPostData> {
     const postId = extractInstagramPostId(url);
     if (!postId) {
@@ -196,40 +152,88 @@ export class ContentProcessorService {
     }
 
     try {
-      // Note: Instagram requires authentication for API access
-      // For MVP, we'll extract basic data from public pages
+      // Strategy 1: Use the embed URL (often less restricted)
+      const embedUrl = `https://www.instagram.com/p/${postId}/embed/captioned/`;
+      
+      // Strategy 2: Try standard URL with headers
+      // const directUrl = `https://www.instagram.com/p/${postId}/`;
 
-      const response = await axios.get(url, {
+      const response = await axios.get(embedUrl, {
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
       });
 
       const html = response.data;
       const $ = load(html);
 
-      const caption =
-        $('meta[property="og:title"]').attr('content') || 'No caption available';
+      let caption = '';
+      let image = '';
+      let location = '';
 
-      const image = $('meta[property="og:image"]').attr('content') || '';
+      // 1. Try meta description (usually contains caption snippet)
+      // Format: "Likes, Comments - Account (@handle) on Instagram: "Caption text...""
+      const metaDesc = $('meta[name="description"]').attr('content') || ''; // Standard meta
+      
+      // 2. Try the Caption class (Embed specific)
+      const embedCaption = $('.Caption').text() || $('.CaptionUsername').next().text();
+      
+      // 3. Try extracting from script data (window.__additionalDataLoaded)
+      let scriptCaption = '';
+      $('script').each((_, el) => {
+        const content = $(el).html() || '';
+        if (content.includes('window.__additionalDataLoaded')) {
+          try {
+            const match = content.match(/"caption":\s*"([^"]+)"/);
+            if (match && match[1]) {
+              scriptCaption = match[1]
+                .replace(/\\n/g, '\n')
+                .replace(/\\u([\d\w]{4})/gi, (_, grp) => String.fromCharCode(parseInt(grp, 16)));
+            }
+          } catch (e) { }
+        }
+      });
 
-      const location = $('meta[property="og:location"]').attr('content') || '';
+      // Prioritize extraction methods
+      if (scriptCaption && scriptCaption.length > 10) {
+        caption = scriptCaption;
+      } else if (embedCaption && embedCaption.length > 10) {
+        caption = embedCaption;
+      } else if (metaDesc) {
+        // Clean up meta description to get just the caption
+        // Remove "100 Likes, 5 Comments - " prefix and " on Instagram: "
+        const captionMatch = metaDesc.match(/on Instagram: "(.+)"$/);
+        if (captionMatch) {
+          caption = captionMatch[1];
+        } else {
+          caption = metaDesc;
+        }
+      }
+
+      // Clean up caption
+      caption = caption.trim();
+      
+      // Get image
+      image = $('img.EmbeddedMediaImage').attr('src') || '';
 
       return {
-        caption,
+        caption: caption || 'Instagram Post',
         images: image ? [image] : [],
         location,
       };
     } catch (error) {
       logger.error('Instagram fetch error:', error);
-      throw new Error('Failed to fetch Instagram post');
+      return {
+        caption: 'Instagram Post',
+        images: [],
+        location: '',
+      };
     }
   }
 
-  /**
-   * Fetch Reddit post data
-   */
   private static async fetchRedditPost(url: string): Promise<RedditPostData> {
     const postInfo = extractRedditPostInfo(url);
     if (!postInfo) {
@@ -404,13 +408,13 @@ export class ContentProcessorService {
   }> {
     try {
       logger.info('Processing YouTube video metadata...');
-      
+
       // Fetch video metadata (title + description)
       const videoData = await this.fetchYouTubeVideo(url);
-      
+
       logger.info(`Video: ${videoData.title}`);
       logger.info(`Transcript length: ${videoData.transcript.length} characters`);
-      
+
       // Use Gemini to analyze with REAL TRANSCRIPT (not just description!)
       const analysis = await GeminiService.analyzeVideoMetadata(
         videoData.title,
@@ -424,7 +428,7 @@ export class ContentProcessorService {
       // Handle HOW-TO videos differently
       if (analysis.video_type === 'howto') {
         logger.info('How-to video detected - saving as single guide item');
-        
+
         return {
           summary: analysis.summary,
           video_type: 'howto',
@@ -502,13 +506,13 @@ export class ContentProcessorService {
   }> {
     try {
       logger.info('Processing Reddit post...');
-      
+
       // Fetch Reddit post data (title + body + comments)
       const redditData = await this.fetchRedditPost(url);
-      
+
       logger.info(`Reddit: ${redditData.title}`);
       logger.info(`Comments: ${redditData.comments.length}`);
-      
+
       // Use Gemini to analyze post and extract ALL places from comments
       const analysis = await GeminiService.analyzeRedditPost(
         redditData.title,
@@ -555,5 +559,68 @@ export class ContentProcessorService {
       throw new Error('Failed to extract places from Reddit post');
     }
   }
-}
 
+  /**
+   * Extract multiple places from Instagram post/reel using Gemini (NEW!)
+   */
+  static async extractMultiplePlacesFromInstagram(
+    url: string
+  ): Promise<{
+    summary: string;
+    places: Array<ProcessedContent & { originalContent: any }>;
+  }> {
+    try {
+      logger.info('Processing Instagram post...');
+
+      // Fetch Instagram data
+      const instaData = await this.fetchInstagramPost(url);
+
+      logger.info(`Instagram Caption Length: ${instaData.caption.length}`);
+      logger.info(`Instagram Caption Content: "${instaData.caption}"`);
+
+      // Use Gemini to analyze caption and extract places
+      const analysis = await GeminiService.analyzeInstagramPost(
+        instaData.caption,
+        instaData.images[0] // Pass image URL if available (future enhancement: process image)
+      );
+
+      logger.info(`Found ${analysis.places.length} places in Instagram post`);
+
+      if (analysis.places.length === 0) {
+        // No places found, save as single item with summary
+        const processed = await TravelAgent.processContent(
+          `${analysis.summary} (Source: Instagram)`,
+          ItemSourceType.INSTAGRAM
+        );
+
+        return {
+          summary: analysis.summary,
+          places: [
+            {
+              ...processed,
+              originalContent: instaData,
+            },
+          ],
+        };
+      }
+
+      // Process each place found by Gemini
+      const processedPlaces = analysis.places.map((place) => ({
+        name: place.name,
+        category: place.category,
+        description: place.description,
+        location_name: place.location,
+        source_title: 'Instagram Discovery',
+        originalContent: instaData,
+      }));
+
+      return {
+        summary: analysis.summary,
+        places: processedPlaces,
+      };
+    } catch (error: any) {
+      logger.error('Error extracting places from Instagram:', error);
+      throw new Error('Failed to extract places from Instagram post');
+    }
+  }
+}
