@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { SavedItem } from '../types';
+import { MotiView } from 'moti';
 
-// 3D Neon-style marker icons
+// 3D Neon-style marker icons with BREATHING animation
 const MARKER_ICONS_NEON = {
   food: {
     emoji: '🍜',
@@ -61,13 +62,31 @@ export const CustomMapMarker: React.FC<CustomMarkerProps> = ({ item, onPress }) 
       onPress={onPress}
     >
       <View style={styles.markerContainer}>
-        {/* Outer glow ring */}
-        <View style={[styles.glowRing, { backgroundColor: icon.glowColor, opacity: 0.3 }]} />
+        {/* Breathing glow ring */}
+        <MotiView
+          from={{ scale: 1, opacity: 0.3 }}
+          animate={{ scale: 1.2, opacity: 0.1 }}
+          transition={{
+            type: 'timing',
+            duration: 2000,
+            loop: true,
+          }}
+          style={[styles.glowRing, { backgroundColor: icon.glowColor }]}
+        />
         
-        {/* Main marker body */}
-        <View style={[styles.markerBody, { backgroundColor: icon.color }]}>
+        {/* Main marker body with breathing */}
+        <MotiView
+          from={{ scale: 1 }}
+          animate={{ scale: 1.05 }}
+          transition={{
+            type: 'timing',
+            duration: 1500,
+            loop: true,
+          }}
+          style={[styles.markerBody, { backgroundColor: icon.color }]}
+        >
           <Text style={styles.markerEmoji}>{icon.emoji}</Text>
-        </View>
+        </MotiView>
         
         {/* Bottom shadow */}
         <View style={styles.markerShadow} />
@@ -122,15 +141,15 @@ const styles = StyleSheet.create({
   },
   glowRing: {
     position: 'absolute',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    top: 3,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    top: 2,
   },
   markerBody: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
@@ -142,7 +161,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   markerEmoji: {
-    fontSize: 20,
+    fontSize: 22,
   },
   markerShadow: {
     position: 'absolute',

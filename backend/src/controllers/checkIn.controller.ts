@@ -329,21 +329,23 @@ export class CheckInController {
       // Increment view count
       await TripStoryModel.incrementViews(story.id);
 
-      // Get timeline
+      // Get timeline - FILTER BY USER (only show this user's check-ins)
       const timeline = await CheckInModel.getTimelineByDay(story.trip_group_id);
 
-      // Filter based on story settings
+      // Filter to only this user's check-ins and apply story settings
       const filteredTimeline = timeline.map(day => ({
         ...day,
-        check_ins: day.check_ins.map(ci => ({
-          ...ci,
-          rating: story.show_ratings ? ci.rating : undefined,
-          note: story.show_notes ? ci.note : undefined,
-          cost: story.show_costs ? ci.cost : undefined,
-          photos: story.show_photos ? ci.photos : undefined,
-          with_users: story.show_companions ? ci.with_users : undefined,
-        })),
-      }));
+        check_ins: day.check_ins
+          .filter(ci => ci.user_id === story.user_id) // ONLY this user's check-ins
+          .map(ci => ({
+            ...ci,
+            rating: story.show_ratings ? ci.rating : undefined,
+            note: story.show_notes ? ci.note : undefined,
+            cost: story.show_costs ? ci.cost : undefined,
+            photos: story.show_photos ? ci.photos : undefined,
+            with_users: story.show_companions ? ci.with_users : undefined,
+          })),
+      })).filter(day => day.check_ins.length > 0); // Remove empty days
 
       // Get stats
       const stats = await CheckInModel.getTripStats(story.trip_group_id);

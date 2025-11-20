@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useTripStore } from '../../stores/tripStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useXPStore } from '../../stores/xpStore';
 import { format } from 'date-fns';
 import { AnimatedCard } from '../../components/AnimatedCard';
 import { FadeIn } from '../../components/FadeIn';
@@ -17,9 +18,11 @@ import { FadeIn } from '../../components/FadeIn';
 export default function TripListScreen({ navigation }: any) {
   const { trips, isLoading, fetchTrips } = useTripStore();
   const { user } = useAuthStore();
+  const { level, getProgress, getLevelTitle, loadStoredXP } = useXPStore();
 
   useEffect(() => {
     fetchTrips();
+    loadStoredXP();
   }, []);
 
   const getInitials = (name: string) => {
@@ -56,13 +59,15 @@ export default function TripListScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
       
       {/* HEADER */}
       <FadeIn delay={0} style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.greeting}>Hello, {user?.name}! 👋</Text>
-          <Text style={styles.subtitle}>Your travel adventures</Text>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelText}>⭐ {getLevelTitle()}</Text>
+          </View>
         </View>
         <TouchableOpacity 
           style={styles.profileButton}
@@ -108,7 +113,7 @@ export default function TripListScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBEB', // Cream background
+    backgroundColor: '#0F172A', // Dark neon background (consistent!)
   },
   
   // HEADER
@@ -118,9 +123,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#fff',
-    borderBottomWidth: 4,
-    borderBottomColor: '#000',
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(139, 92, 246, 0.3)',
     zIndex: 10,
   },
   headerContent: {
@@ -129,28 +134,35 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#000',
+    color: '#FFFFFF',
   },
-  subtitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginTop: 4,
+  levelBadge: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  levelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   profileButton: {
     width: 48,
     height: 48,
-    backgroundColor: '#3B82F6', // Electric Blue
+    backgroundColor: '#8B5CF6',
     borderRadius: 24,
-    borderWidth: 3,
-    borderColor: '#000',
+    borderWidth: 2,
+    borderColor: 'rgba(167, 139, 250, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   profileInitials: {
     color: '#fff',
@@ -164,29 +176,29 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
 
-  // CHUNKY TRIP CARDS
+  // NEON TRIP CARDS
   chunkyTripCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 4,
-    borderColor: '#000',
+    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 6, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
     elevation: 6,
   },
   tripIconContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#BFDBFE', // Light blue
-    borderWidth: 3,
-    borderColor: '#000',
+    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    borderWidth: 2,
+    borderColor: 'rgba(167, 139, 250, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -201,23 +213,23 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     marginBottom: 4,
-    color: '#000',
+    color: '#FFFFFF',
   },
   tripDestination: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E40AF', // Deep Blue
+    color: '#A78BFA',
     marginBottom: 4,
   },
   tripDate: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
   },
   arrow: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#000',
+    color: '#A78BFA',
   },
 
   // EMPTY STATE
@@ -234,12 +246,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '900',
     marginBottom: 12,
-    color: '#000',
+    color: '#FFFFFF',
   },
   emptySubtext: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#94A3B8',
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -251,23 +263,21 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    backgroundColor: '#FFFBEB',
-    borderTopWidth: 4,
-    borderTopColor: '#000',
+    backgroundColor: '#0F172A',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(139, 92, 246, 0.3)',
   },
   chunkyCreateButton: {
     height: 56,
-    backgroundColor: '#3B82F6', // Electric Blue
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#000',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 8,
   },
   createButtonText: {
     color: '#fff',
