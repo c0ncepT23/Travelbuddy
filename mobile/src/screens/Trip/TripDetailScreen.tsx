@@ -198,9 +198,9 @@ export default function TripDetailScreen({ route, navigation }: any) {
 
       {/* BOTTOM SHEET - SNEAK PEEK */}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.bottomSheet, bottomSheetStyle]}>
+        <Animated.View style={[styles.bottomSheet, bottomSheetStyle]} pointerEvents="box-none">
           {/* Swipe Handle */}
-          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHandle} pointerEvents="auto" />
 
           {/* Sneak Peek (Collapsed) */}
           {!isExpanded && (
@@ -209,6 +209,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
               animate={{ opacity: 1 }}
               transition={{ type: 'timing', duration: 300 }}
               style={styles.sneakPeek}
+              pointerEvents="auto"
             >
               <Text style={styles.sneakPeekTitle}>{items.length} saved spots ✨</Text>
               <View style={styles.sneakPeekStats}>
@@ -244,6 +245,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
               animate={{ opacity: 1 }}
               transition={{ type: 'timing', duration: 300 }}
               style={styles.expandedContent}
+              pointerEvents="auto"
             >
               <Text style={styles.expandedTitle}>Your Places 🗺️</Text>
               <ScrollView style={styles.expandedScroll} showsVerticalScrollIndicator={false}>
