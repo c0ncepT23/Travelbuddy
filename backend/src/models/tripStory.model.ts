@@ -98,8 +98,8 @@ export class TripStoryModel {
     // Generate slug if title provided
     let slug: string | undefined;
     if (data.title) {
-      const userResult = await query('SELECT username FROM users WHERE id = $1', [data.userId]);
-      const username = userResult.rows[0]?.username || 'user';
+      const userResult = await query('SELECT name FROM users WHERE id = $1', [data.userId]);
+      const username = userResult.rows[0]?.name || 'user';
       slug = this.generateSlug(data.title, username);
       
       // Make slug unique
