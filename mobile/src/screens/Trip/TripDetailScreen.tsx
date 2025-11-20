@@ -168,7 +168,11 @@ export default function TripDetailScreen({ route, navigation }: any) {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', delay: 300 }}
         >
-          <TouchableOpacity style={styles.floatingButton}>
+          <TouchableOpacity 
+            style={styles.floatingButton}
+            onPress={() => Alert.alert('Share', 'Share feature coming soon!')}
+            activeOpacity={0.8}
+          >
             <Text style={styles.floatingButtonText}>↗</Text>
           </TouchableOpacity>
         </MotiView>
@@ -180,8 +184,13 @@ export default function TripDetailScreen({ route, navigation }: any) {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', delay: 500, damping: 12 }}
         style={styles.magicButton}
+        pointerEvents="box-none"
       >
-        <TouchableOpacity style={styles.magicButtonInner}>
+        <TouchableOpacity 
+          style={styles.magicButtonInner}
+          onPress={() => Alert.alert('AI Assistant', 'Chat feature coming soon!')}
+          activeOpacity={0.8}
+        >
           <MotiView
             from={{ scale: 1 }}
             animate={{ scale: 1.15 }}
@@ -198,9 +207,9 @@ export default function TripDetailScreen({ route, navigation }: any) {
 
       {/* BOTTOM SHEET - SNEAK PEEK */}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.bottomSheet, bottomSheetStyle]} pointerEvents="box-none">
+        <Animated.View style={[styles.bottomSheet, bottomSheetStyle]}>
           {/* Swipe Handle */}
-          <View style={styles.sheetHandle} pointerEvents="auto" />
+          <View style={styles.sheetHandle} />
 
           {/* Sneak Peek (Collapsed) */}
           {!isExpanded && (
@@ -209,7 +218,6 @@ export default function TripDetailScreen({ route, navigation }: any) {
               animate={{ opacity: 1 }}
               transition={{ type: 'timing', duration: 300 }}
               style={styles.sneakPeek}
-              pointerEvents="auto"
             >
               <Text style={styles.sneakPeekTitle}>{items.length} saved spots ✨</Text>
               <View style={styles.sneakPeekStats}>
@@ -240,22 +248,15 @@ export default function TripDetailScreen({ route, navigation }: any) {
 
           {/* Expanded List */}
           {isExpanded && (
-            <MotiView
-              from={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ type: 'timing', duration: 300 }}
-              style={styles.expandedContent}
-              pointerEvents="auto"
-            >
+            <View style={styles.expandedContent}>
               <Text style={styles.expandedTitle}>Your Places 🗺️</Text>
               <ScrollView style={styles.expandedScroll} showsVerticalScrollIndicator={false}>
                 {items.map((item, index) => (
-                  <MotiView
+                  <TouchableOpacity
                     key={item.id}
-                    from={{ opacity: 0, translateX: -20 }}
-                    animate={{ opacity: 1, translateX: 0 }}
-                    transition={{ type: 'timing', delay: index * 50, duration: 300 }}
                     style={styles.listItem}
+                    onPress={() => Alert.alert(item.name, item.description || 'No description')}
+                    activeOpacity={0.7}
                   >
                     <View style={styles.listItemIconContainer}>
                       <Text style={styles.listItemEmoji}>
@@ -271,10 +272,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
                       <Text style={styles.listItemLocation}>{item.location_name || 'Location unknown'}</Text>
                     </View>
                     <Text style={styles.listItemArrow}>→</Text>
-                  </MotiView>
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
-            </MotiView>
+            </View>
           )}
         </Animated.View>
       </GestureDetector>
@@ -372,7 +373,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: BOTTOM_SHEET_MIN_HEIGHT + 20,
     right: 20,
-    zIndex: 100,
+    zIndex: 1000,
   },
   magicButtonInner: {
     width: 64,
@@ -417,7 +418,6 @@ const styles = StyleSheet.create({
     elevation: 24,
     borderTopWidth: 1,
     borderTopColor: 'rgba(148, 163, 184, 0.2)',
-    zIndex: 10,
   },
   sheetHandle: {
     width: 40,
