@@ -66,7 +66,7 @@ app.use('/api', groupMessageRoutes); // Group chat messages
 app.use('/api/notifications', notificationRoutes); // Push notifications
 
 // Public story web viewer route
-app.get('/story/:shareCode', (req, res) => {
+app.get('/story/:shareCode', (_req, res) => {
   res.sendFile(path.join(__dirname, '../public/story.html'));
 });
 
