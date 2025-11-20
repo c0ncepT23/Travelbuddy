@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
 import { config } from './config/env';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
@@ -37,6 +38,9 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve static files (for web story viewer)
+app.use('/public', express.static(path.join(__dirname, '../public')));
+
 // Rate limiting
 app.use('/api/', apiLimiter);
 
@@ -60,6 +64,11 @@ app.use('/api/companion', aiCompanionRoutes); // AI Companion queries
 app.use('/api', checkInRoutes); // Check-ins and trip stories
 app.use('/api', groupMessageRoutes); // Group chat messages
 app.use('/api/notifications', notificationRoutes); // Push notifications
+
+// Public story web viewer route
+app.get('/story/:shareCode', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/story.html'));
+});
 
 // Error handlers
 app.use(notFoundHandler);
