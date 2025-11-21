@@ -113,6 +113,15 @@ export interface SavedItem {
   status: ItemStatus;
   created_at: Date;
   updated_at: Date;
+  // Google Places enrichment fields
+  google_place_id?: string;
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  formatted_address?: string;
+  area_name?: string;
+  photos_json?: any;
+  opening_hours_json?: any;
 }
 
 export interface ItemVisit {
@@ -138,6 +147,15 @@ export interface ProcessedContent {
   location_lng?: number;
   source_title?: string;
   original_content?: any;
+  // Google Places enrichment fields
+  google_place_id?: string;
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  formatted_address?: string;
+  area_name?: string;
+  photos_json?: any[];
+  opening_hours_json?: any;
 }
 
 export interface YouTubeVideoData {

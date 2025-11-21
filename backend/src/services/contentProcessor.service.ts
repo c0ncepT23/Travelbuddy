@@ -3,6 +3,7 @@ import { load } from 'cheerio';
 import Tesseract from 'tesseract.js';
 import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
+import { GooglePlacesService } from './googlePlaces.service';
 import {
   extractYouTubeVideoId,
   extractInstagramPostId,
@@ -477,6 +478,8 @@ export class ContentProcessorService {
         category: place.category,
         description: place.description,
         location_name: place.location,
+        location_lat: undefined as number | undefined,
+        location_lng: undefined as number | undefined,
         source_title: videoData.title,
         originalContent: {
           ...videoData,
@@ -484,10 +487,43 @@ export class ContentProcessorService {
         },
       }));
 
+      // Enrich places with Google Places API data
+      logger.info(`Enriching ${processedPlaces.length} places with Google Places data...`);
+      const enrichedPlaces = await Promise.all(
+        processedPlaces.map(async (place) => {
+          try {
+            const enriched = await GooglePlacesService.enrichPlace(
+              place.name,
+              place.location_name
+            );
+            if (enriched) {
+              return {
+                ...place,
+                google_place_id: enriched.place_id,
+                rating: enriched.rating,
+                user_ratings_total: enriched.user_ratings_total,
+                price_level: enriched.price_level,
+                formatted_address: enriched.formatted_address,
+                area_name: enriched.area_name,
+                photos_json: enriched.photos,
+                opening_hours_json: enriched.opening_hours,
+                location_lat: enriched.geometry?.location.lat || place.location_lat,
+                location_lng: enriched.geometry?.location.lng || place.location_lng,
+              };
+            }
+            return place;
+          } catch (error) {
+            logger.warn(`Failed to enrich place "${place.name}":`, error);
+            return place;
+          }
+        })
+      );
+      logger.info(`Enrichment complete. Successfully enriched ${enrichedPlaces.filter((p: any) => p.google_place_id).length}/${processedPlaces.length} places`);
+
       return {
         summary: analysis.summary,
         video_type: 'places',
-        places: processedPlaces,
+        places: enrichedPlaces,
       };
     } catch (error: any) {
       logger.error('Error extracting multiple places:', error);
@@ -546,13 +582,48 @@ export class ContentProcessorService {
         category: place.category,
         description: place.description,
         location_name: place.location,
+        location_lat: undefined as number | undefined,
+        location_lng: undefined as number | undefined,
         source_title: `Reddit: ${redditData.title}`,
         originalContent: redditData,
       }));
 
+      // Enrich places with Google Places API data
+      logger.info(`Enriching ${processedPlaces.length} Reddit places with Google Places data...`);
+      const enrichedPlaces = await Promise.all(
+        processedPlaces.map(async (place) => {
+          try {
+            const enriched = await GooglePlacesService.enrichPlace(
+              place.name,
+              place.location_name
+            );
+            if (enriched) {
+              return {
+                ...place,
+                google_place_id: enriched.place_id,
+                rating: enriched.rating,
+                user_ratings_total: enriched.user_ratings_total,
+                price_level: enriched.price_level,
+                formatted_address: enriched.formatted_address,
+                area_name: enriched.area_name,
+                photos_json: enriched.photos,
+                opening_hours_json: enriched.opening_hours,
+                location_lat: enriched.geometry?.location.lat || place.location_lat,
+                location_lng: enriched.geometry?.location.lng || place.location_lng,
+              };
+            }
+            return place;
+          } catch (error) {
+            logger.warn(`Failed to enrich Reddit place "${place.name}":`, error);
+            return place;
+          }
+        })
+      );
+      logger.info(`Reddit enrichment complete. ${enrichedPlaces.filter((p: any) => p.google_place_id).length}/${processedPlaces.length} places enriched`);
+
       return {
         summary: analysis.summary,
-        places: processedPlaces,
+        places: enrichedPlaces,
       };
     } catch (error: any) {
       logger.error('Error extracting places from Reddit:', error);
@@ -610,13 +681,48 @@ export class ContentProcessorService {
         category: place.category,
         description: place.description,
         location_name: place.location,
+        location_lat: undefined as number | undefined,
+        location_lng: undefined as number | undefined,
         source_title: 'Instagram Discovery',
         originalContent: instaData,
       }));
 
+      // Enrich places with Google Places API data
+      logger.info(`Enriching ${processedPlaces.length} Instagram places with Google Places data...`);
+      const enrichedPlaces = await Promise.all(
+        processedPlaces.map(async (place) => {
+          try {
+            const enriched = await GooglePlacesService.enrichPlace(
+              place.name,
+              place.location_name
+            );
+            if (enriched) {
+              return {
+                ...place,
+                google_place_id: enriched.place_id,
+                rating: enriched.rating,
+                user_ratings_total: enriched.user_ratings_total,
+                price_level: enriched.price_level,
+                formatted_address: enriched.formatted_address,
+                area_name: enriched.area_name,
+                photos_json: enriched.photos,
+                opening_hours_json: enriched.opening_hours,
+                location_lat: enriched.geometry?.location.lat || place.location_lat,
+                location_lng: enriched.geometry?.location.lng || place.location_lng,
+              };
+            }
+            return place;
+          } catch (error) {
+            logger.warn(`Failed to enrich Instagram place "${place.name}":`, error);
+            return place;
+          }
+        })
+      );
+      logger.info(`Instagram enrichment complete. ${enrichedPlaces.filter((p: any) => p.google_place_id).length}/${processedPlaces.length} places enriched`);
+
       return {
         summary: analysis.summary,
-        places: processedPlaces,
+        places: enrichedPlaces,
       };
     } catch (error: any) {
       logger.error('Error extracting places from Instagram:', error);

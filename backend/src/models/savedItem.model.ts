@@ -19,14 +19,24 @@ export class SavedItemModel {
     sourceTitle?: string,
     originalContent?: any,
     locationConfidence?: 'high' | 'medium' | 'low',
-    locationConfidenceScore?: number
+    locationConfidenceScore?: number,
+    // Google Places enrichment fields
+    googlePlaceId?: string,
+    rating?: number,
+    userRatingsTotal?: number,
+    priceLevel?: number,
+    formattedAddress?: string,
+    areaName?: string,
+    photosJson?: any[],
+    openingHoursJson?: any
   ): Promise<SavedItem> {
     const result = await query(
       `INSERT INTO saved_items 
        (trip_group_id, added_by, name, category, description, location_name, 
         location_lat, location_lng, original_source_type, original_source_url, source_title, original_content,
-        location_confidence, location_confidence_score)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        location_confidence, location_confidence_score, google_place_id, rating, user_ratings_total, 
+        price_level, formatted_address, area_name, photos_json, opening_hours_json)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
        RETURNING *`,
       [
         tripGroupId,
@@ -43,6 +53,14 @@ export class SavedItemModel {
         originalContent ? JSON.stringify(originalContent) : null,
         locationConfidence || 'low',
         locationConfidenceScore || 0,
+        googlePlaceId,
+        rating,
+        userRatingsTotal,
+        priceLevel,
+        formattedAddress,
+        areaName,
+        photosJson ? JSON.stringify(photosJson) : null,
+        openingHoursJson ? JSON.stringify(openingHoursJson) : null,
       ]
     );
 

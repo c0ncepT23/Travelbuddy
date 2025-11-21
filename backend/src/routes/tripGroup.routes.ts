@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { body, param } from 'express-validator';
 import { TripGroupController } from '../controllers/tripGroup.controller';
+import { ImportLocationsController } from '../controllers/importLocations.controller';
+import { EnrichPlacesController } from '../controllers/enrichPlaces.controller';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 
@@ -75,6 +77,25 @@ router.get(
   '/:id/members',
   validate([param('id').isUUID().withMessage('Invalid trip ID')]),
   TripGroupController.getMembers
+);
+
+// Import locations from YouTube/Reddit/Instagram
+router.post(
+  '/:tripId/import-locations',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+    body('sourceUrl').trim().notEmpty().withMessage('Source URL is required'),
+    body('sourceType').isIn(['youtube', 'reddit', 'instagram']).withMessage('Invalid source type'),
+    body('selectedPlaces').isArray().withMessage('Selected places must be an array'),
+  ]),
+  ImportLocationsController.importLocations
+);
+
+// Enrich existing places with Google Places data
+router.post(
+  '/:tripId/enrich-places',
+  validate([param('tripId').isUUID().withMessage('Invalid trip ID')]),
+  EnrichPlacesController.enrichTripPlaces
 );
 
 // Get invite information

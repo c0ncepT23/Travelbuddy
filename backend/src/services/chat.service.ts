@@ -116,7 +116,7 @@ export class ChatService {
       // Special handling for YouTube videos using Gemini
       if (sourceType === ItemSourceType.YOUTUBE) {
         logger.info(`🎬 Starting YouTube video extraction for: ${url}`);
-                const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
+        const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
         const seenPlaceKeys = new Set<string>();
         const uniquePlaces = analysis.places.filter((place) => {
           const key = ChatService.getPlaceDedupKey(place.name, place.location_name);
@@ -126,11 +126,11 @@ export class ChatService {
           seenPlaceKeys.add(key);
           return true;
         });
-        logger.info(`?o. YouTube extraction complete. Video type: ${analysis.video_type}, Places: ${uniquePlaces.length}`);
+        logger.info(`YouTube extraction complete. Video type: ${analysis.video_type}, Places: ${uniquePlaces.length}`);
         
         // Check if this is a how-to video
         if (analysis.video_type === 'howto') {
-          // How-to video - save as guide/reference
+          // How-to video - save as guide/reference (keep auto-save for how-to)
           await this.sendAgentMessage(
             tripGroupId,
             `📚 This looks like a how-to guide!\n\n${analysis.summary}\n\nI've saved it under "How-To Videos" for reference. These won't show up in your places list, but you can watch them anytime! 🎓`
@@ -150,68 +150,42 @@ export class ChatService {
             undefined,
             url,
             howtoItem.source_title,
-            howtoItem.originalContent
+            howtoItem.originalContent,
+            undefined,
+            undefined,
+            howtoItem.google_place_id,
+            howtoItem.rating,
+            howtoItem.user_ratings_total,
+            howtoItem.price_level,
+            howtoItem.formatted_address,
+            howtoItem.area_name,
+            howtoItem.photos_json,
+            howtoItem.opening_hours_json
           );
 
           logger.info(`How-to video saved: ${howtoItem.name}`);
           return;
         }
 
-        // Regular places video - original flow
-        // Send summary first
+        // Regular places video - NEW: Send pending_import message
+        const videoTitle = analysis.places[0]?.source_title || 'YouTube Video';
+        
         await this.sendAgentMessage(
           tripGroupId,
-          `📺 ${analysis.summary}\n\nFound ${uniquePlaces.length} place(s)! Adding them now...`
+          `📺 ${analysis.summary}\n\nFound ${uniquePlaces.length} place(s)! Tap below to review and import them →`,
+          MessageType.TEXT,
+          {
+            type: 'pending_import',
+            source_url: url,
+            source_type: 'youtube',
+            video_title: videoTitle,
+            summary: analysis.summary,
+            places: uniquePlaces,
+            user_id: userId
+          }
         );
 
-        // Save each place
-        let savedCount = 0;
-        for (const place of uniquePlaces) {
-          // Check for duplicates
-          const duplicates = await SavedItemModel.findDuplicates(
-            tripGroupId,
-            place.name,
-            place.location_name
-          );
-
-          if (duplicates.length > 0) {
-            const duplicateCheck = await TravelAgent.checkDuplicates(
-              place.name,
-              duplicates.map((d) => ({ name: d.name, id: d.id }))
-            );
-
-            if (duplicateCheck.isDuplicate) {
-              continue; // Skip duplicates
-            }
-          }
-
-          // Save the item
-          await SavedItemModel.create(
-            tripGroupId,
-            userId,
-            place.name,
-            place.category,
-            place.description,
-            ItemSourceType.YOUTUBE,
-            place.location_name,
-            undefined,
-            undefined,
-            url,
-            place.source_title,
-            place.originalContent
-          );
-
-          savedCount++;
-        }
-
-        // Send final confirmation
-        const confirmation =
-          savedCount > 0
-            ? `✨ Added ${savedCount} place(s) to your trip! Check them out in your saved items!`
-            : `I watched the video but couldn't find specific places to add. Saved it as a reference! 📝`;
-
-        await this.sendAgentMessage(tripGroupId, confirmation);
-        logger.info(`YouTube video processed: ${savedCount} places saved`);
+        logger.info(`YouTube video processed: ${uniquePlaces.length} places ready for import`);
         return;
       }
 
@@ -219,64 +193,73 @@ export class ChatService {
       if (sourceType === ItemSourceType.REDDIT) {
         const analysis = await ContentProcessorService.extractMultiplePlacesFromReddit(url);
         
-        // Send summary first
-        await this.sendAgentMessage(
-          tripGroupId,
-          `💬 ${analysis.summary}\n\nFound ${analysis.places.length} place(s)! Adding them now...`
-        );
-
-        // Save each place
-        let savedCount = 0;
-        for (const place of analysis.places) {
-          // Check for duplicates
-          const duplicates = await SavedItemModel.findDuplicates(
+        if (analysis.places.length === 0) {
+          // No places found
+          await this.sendAgentMessage(
             tripGroupId,
-            place.name,
-            place.location_name
+            `💬 I read the discussion but couldn't find specific places to add. Saved it as a reference! 📝`
           );
-
-          if (duplicates.length > 0) {
-            const duplicateCheck = await TravelAgent.checkDuplicates(
-              place.name,
-              duplicates.map((d) => ({ name: d.name, id: d.id }))
-            );
-
-            if (duplicateCheck.isDuplicate) {
-              continue; // Skip duplicates
-            }
-          }
-
-          // Save the item
-          await SavedItemModel.create(
-            tripGroupId,
-            userId,
-            place.name,
-            place.category,
-            place.description,
-            ItemSourceType.REDDIT,
-            place.location_name,
-            undefined,
-            undefined,
-            url,
-            place.source_title,
-            place.originalContent
-          );
-
-          savedCount++;
+          return;
         }
 
-        // Send final confirmation
-        const confirmation =
-          savedCount > 0
-            ? `✨ Added ${savedCount} place(s) to your trip! Check them out in your saved items!`
-            : `I read the discussion but couldn't find specific places to add. Saved it as a reference! 📝`;
+        // NEW: Send pending_import message
+        const postTitle = analysis.places[0]?.source_title || 'Reddit Post';
+        
+        await this.sendAgentMessage(
+          tripGroupId,
+          `💬 ${analysis.summary}\n\nFound ${analysis.places.length} place(s)! Tap below to review and import them →`,
+          MessageType.TEXT,
+          {
+            type: 'pending_import',
+            source_url: url,
+            source_type: 'reddit',
+            video_title: postTitle,
+            summary: analysis.summary,
+            places: analysis.places,
+            user_id: userId
+          }
+        );
 
-        await this.sendAgentMessage(tripGroupId, confirmation);
-        logger.info(`Reddit post processed: ${savedCount} places saved`);
+        logger.info(`Reddit post processed: ${analysis.places.length} places ready for import`);
         return;
       }
 
-      // Non-YouTube/Reddit processing (Instagram, web, etc.)
+      // Special handling for Instagram posts
+      if (sourceType === ItemSourceType.INSTAGRAM) {
+        const analysis = await ContentProcessorService.extractMultiplePlacesFromInstagram(url);
+        
+        if (analysis.places.length === 0) {
+          // No places found
+          await this.sendAgentMessage(
+            tripGroupId,
+            `📷 I checked out the post but couldn't find specific places to add. Saved it as a reference! 📝`
+          );
+          return;
+        }
+
+        // NEW: Send pending_import message
+        const postTitle = analysis.places[0]?.source_title || 'Instagram Post';
+        
+        await this.sendAgentMessage(
+          tripGroupId,
+          `📷 ${analysis.summary}\n\nFound ${analysis.places.length} place(s)! Tap below to review and import them →`,
+          MessageType.TEXT,
+          {
+            type: 'pending_import',
+            source_url: url,
+            source_type: 'instagram',
+            video_title: postTitle,
+            summary: analysis.summary,
+            places: analysis.places,
+            user_id: userId
+          }
+        );
+
+        logger.info(`Instagram post processed: ${analysis.places.length} places ready for import`);
+        return;
+      }
+
+      // Non-YouTube/Reddit/Instagram processing (web, etc.)
       const processed = await ContentProcessorService.processUrl(url);
 
       // Check for duplicates
@@ -312,7 +295,17 @@ export class ChatService {
         processed.location_lng,
         url,
         processed.source_title,
-        processed.originalContent
+        processed.originalContent,
+        undefined,
+        undefined,
+        processed.google_place_id,
+        processed.rating,
+        processed.user_ratings_total,
+        processed.price_level,
+        processed.formatted_address,
+        processed.area_name,
+        processed.photos_json,
+        processed.opening_hours_json
       );
 
       // Generate confirmation message
@@ -349,14 +342,16 @@ export class ChatService {
   private static async sendAgentMessage(
     tripGroupId: string,
     content: string,
-    messageType: MessageType = MessageType.TEXT
+    messageType: MessageType = MessageType.TEXT,
+    metadata?: any
   ): Promise<ChatMessage> {
     return await ChatMessageModel.create(
       tripGroupId,
       null,
       MessageSenderType.AGENT,
       messageType,
-      content
+      content,
+      metadata
     );
   }
 
@@ -428,7 +423,17 @@ export class ChatService {
         processed.location_lng,
         imageUrl,
         processed.source_title,
-        processed.originalContent
+        processed.originalContent,
+        undefined,
+        undefined,
+        processed.google_place_id,
+        processed.rating,
+        processed.user_ratings_total,
+        processed.price_level,
+        processed.formatted_address,
+        processed.area_name,
+        processed.photos_json,
+        processed.opening_hours_json
       );
 
       // Generate confirmation

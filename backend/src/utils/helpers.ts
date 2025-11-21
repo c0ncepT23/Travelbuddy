@@ -58,7 +58,7 @@ export const extractYouTubeVideoId = (url: string): string | null => {
  * Extract Instagram post ID from URL
  */
 export const extractInstagramPostId = (url: string): string | null => {
-  const regex = /(?:instagram\.com\/p\/|instagram\.com\/reel\/)([A-Za-z0-9_-]+)/;
+  const regex = /(?:instagram\.com\/(?:p|reel|reels)\/)([A-Za-z0-9_-]+)/;
   const match = url.match(regex);
   return match ? match[1] : null;
 };

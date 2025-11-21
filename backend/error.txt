@@ -1,0 +1,5 @@
+Error Message: Failed to extract places from Instagram post
+Error Stack: Error: Failed to extract places from Instagram post
+    at Function.extractMultiplePlacesFromInstagram (C:\Users\Vamsi\Travelagent\backend\src\services\contentProcessor.service.ts:623:13)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async run (C:\Users\Vamsi\Travelagent\backend\src\test-insta-places.ts:22:24)
