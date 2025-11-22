@@ -206,7 +206,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
-    elevation: 16,
+    elevation: 20,
+    zIndex: 5000,
   },
   dragHandle: {
     width: 36,
