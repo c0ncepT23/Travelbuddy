@@ -62,8 +62,8 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory | 'all'>('all');
   const [showOnlyCheckedIn, setShowOnlyCheckedIn] = useState(false);
   const [showShareStoryModal, setShowShareStoryModal] = useState(false);
-  const [showClusters, setShowClusters] = useState(true);
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const confettiRef = React.useRef<any>(null);
   const [mapRegion, setMapRegion] = useState({
     latitude: 35.6762,
@@ -125,19 +125,21 @@ export default function TripDetailScreen({ route, navigation }: any) {
     HapticFeedback.medium();
     setSelectedCategory(category);
     setDrawerItems(clusterItems);
-    setShowClusters(false); // Switch to individual markers
+    setSelectedPlace(null); // Clear any selected place
+    setIsDrawerOpen(true); // Open drawer with list
   };
 
   const handlePlaceSelectFromDrawer = (item: any) => {
     HapticFeedback.medium();
     setSelectedPlace(item);
+    // Drawer stays open but switches to detail mode
   };
 
   const handleDrawerClose = () => {
     setSelectedPlace(null);
     setDrawerItems([]);
     setSelectedCategory('all');
-    setShowClusters(true); // Return to cluster view
+    setIsDrawerOpen(false); // Close drawer
   };
 
   const handleCheckIn = async (place: any) => {
@@ -325,21 +327,19 @@ export default function TripDetailScreen({ route, navigation }: any) {
       {/* FULL SCREEN MAP (Z-Index 0) */}
       <View style={styles.mapContainer}>
         <MapView
-          items={filterByCategory(items, selectedCategory)}
+          items={items}
           region={mapRegion}
-          showClusters={showClusters}
-          selectedCategory={selectedCategory}
+          selectedPlace={selectedPlace}
           onMarkerPress={(item) => {
             HapticFeedback.medium();
             setSelectedPlace(item);
-            setDrawerItems([item]);
           }}
           onClusterPress={handleClusterPress}
         />
       </View>
 
-      {/* PLACE LIST DRAWER - Replaces old place card */}
-      {(drawerItems.length > 0 || selectedPlace) && (
+      {/* PLACE LIST DRAWER - Only shows when drawer is open */}
+      {isDrawerOpen && (
         <PlaceListDrawer
           items={drawerItems}
           selectedCategory={selectedCategory}

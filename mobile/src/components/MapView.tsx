@@ -26,8 +26,7 @@ interface MapViewProps {
     latitudeDelta: number;
     longitudeDelta: number;
   };
-  showClusters?: boolean;
-  selectedCategory?: ItemCategory | 'all';
+  selectedPlace?: SavedItem | null;
   onMarkerPress?: (item: SavedItem) => void;
   onClusterPress?: (category: ItemCategory, items: SavedItem[]) => void;
 }
@@ -35,8 +34,7 @@ interface MapViewProps {
 export const MapView: React.FC<MapViewProps> = ({ 
   items, 
   region, 
-  showClusters = true,
-  selectedCategory = 'all',
+  selectedPlace = null,
   onMarkerPress,
   onClusterPress,
 }) => {
@@ -146,9 +144,8 @@ export const MapView: React.FC<MapViewProps> = ({
   // For mobile, use react-native-maps
   const MapViewNative = require('react-native-maps').default;
 
-  // Decide whether to show clusters or individual markers
-  const clusters = showClusters && selectedCategory === 'all' ? clusterByCategory(items) : [];
-  const shouldShowClusters = clusters.length > 0 && selectedCategory === 'all';
+  // Always show category clusters
+  const clusters = clusterByCategory(items);
 
   return (
     <MapViewNative
@@ -157,37 +154,31 @@ export const MapView: React.FC<MapViewProps> = ({
       showsUserLocation
       showsMyLocationButton={false}
     >
-      {shouldShowClusters ? (
-        // Show category cluster markers
-        clusters.map((cluster) => (
-          <Marker
-            key={`cluster-${cluster.category}`}
-            coordinate={{
-              latitude: cluster.centerLat,
-              longitude: cluster.centerLng,
-            }}
+      {/* Always show category cluster markers */}
+      {clusters.map((cluster) => (
+        <Marker
+          key={`cluster-${cluster.category}`}
+          coordinate={{
+            latitude: cluster.centerLat,
+            longitude: cluster.centerLng,
+          }}
+          onPress={() => onClusterPress && onClusterPress(cluster.category, cluster.items)}
+        >
+          <CategoryClusterMarker
+            category={cluster.category}
+            count={cluster.count}
             onPress={() => onClusterPress && onClusterPress(cluster.category, cluster.items)}
-          >
-            <CategoryClusterMarker
-              category={cluster.category}
-              count={cluster.count}
-              onPress={() => onClusterPress && onClusterPress(cluster.category, cluster.items)}
-            />
-          </Marker>
-        ))
-      ) : (
-        // Show individual markers
-        items.map((item) => {
-          if (!item.location_lat || !item.location_lng) return null;
+          />
+        </Marker>
+      ))}
 
-          return (
-            <CustomMapMarker
-              key={item.id}
-              item={item}
-              onPress={() => onMarkerPress && onMarkerPress(item)}
-            />
-          );
-        })
+      {/* Show selected place marker on top of clusters */}
+      {selectedPlace && selectedPlace.location_lat && selectedPlace.location_lng && (
+        <CustomMapMarker
+          key={`selected-${selectedPlace.id}`}
+          item={selectedPlace}
+          onPress={() => onMarkerPress && onMarkerPress(selectedPlace)}
+        />
       )}
     </MapViewNative>
   );
