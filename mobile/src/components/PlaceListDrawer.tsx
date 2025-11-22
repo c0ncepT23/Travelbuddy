@@ -26,7 +26,8 @@ interface PlaceListDrawerProps {
   selectedCategory: ItemCategory | 'all';
   selectedPlace: SavedItem | null;
   onPlaceSelect: (item: SavedItem) => void;
-  onClose: () => void;
+  onBackToList: () => void;  // Go back from detail to list
+  onClose: () => void;  // Close drawer completely
   onCheckIn?: (place: SavedItem) => void;
   isPlaceCheckedIn?: (placeId: string) => boolean;
   getUserName?: (userId: string) => string;
@@ -46,6 +47,7 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
   selectedCategory,
   selectedPlace,
   onPlaceSelect,
+  onBackToList,
   onClose,
   onCheckIn,
   isPlaceCheckedIn,
@@ -89,7 +91,7 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
       <Animated.View style={[styles.drawer, { height: DRAWER_MAX_HEIGHT }]}>
         <PlaceDetailCard
           place={selectedPlace}
-          onClose={onClose}
+          onClose={onBackToList}
           onCheckIn={onCheckIn}
           isCheckedIn={isPlaceCheckedIn ? isPlaceCheckedIn(selectedPlace.id) : false}
           addedByName={getUserName ? getUserName(selectedPlace.added_by) : 'Someone'}

@@ -133,13 +133,20 @@ export default function TripDetailScreen({ route, navigation }: any) {
     HapticFeedback.medium();
     setSelectedPlace(item);
     // Drawer stays open but switches to detail mode
+    // Map will show this place's marker on top of clusters
+  };
+
+  const handleBackToList = () => {
+    HapticFeedback.light();
+    setSelectedPlace(null); // Go back to list view
+    // Drawer stays open with the list
   };
 
   const handleDrawerClose = () => {
     setSelectedPlace(null);
     setDrawerItems([]);
     setSelectedCategory('all');
-    setIsDrawerOpen(false); // Close drawer
+    setIsDrawerOpen(false); // Close drawer completely
   };
 
   const handleCheckIn = async (place: any) => {
@@ -345,6 +352,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
           selectedCategory={selectedCategory}
           selectedPlace={selectedPlace}
           onPlaceSelect={handlePlaceSelectFromDrawer}
+          onBackToList={handleBackToList}
           onClose={handleDrawerClose}
           onCheckIn={handleCheckIn}
           isPlaceCheckedIn={(placeId) => isPlaceCheckedIn(tripId, placeId)}
