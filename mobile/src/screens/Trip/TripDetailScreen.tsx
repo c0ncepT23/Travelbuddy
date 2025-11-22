@@ -25,7 +25,6 @@ import { useCheckInStore } from '../../stores/checkInStore';
 import { MapView } from '../../components/MapView';
 import { PlaceDetailCard } from '../../components/PlaceDetailCard';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
-import { filterByCategory } from '../../utils/mapClustering';
 import api from '../../config/api';
 import { ItemCategory } from '../../types';
 import { MotiView } from 'moti';
