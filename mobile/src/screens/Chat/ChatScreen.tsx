@@ -14,6 +14,8 @@ import {
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
 import { format } from 'date-fns';
+import ImportLocationsModal from '../../components/ImportLocationsModal';
+import { ImportModalData } from '../../types';
 
 const extractVideoId = (url: string): string | null => {
   const patterns = [
@@ -46,6 +48,7 @@ export default function ChatScreen({ route, navigation }: any) {
     useChatStore();
   const { user } = useAuthStore();
   const [inputText, setInputText] = useState('');
+  const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -122,6 +125,9 @@ export default function ChatScreen({ route, navigation }: any) {
     // Check if this is a location alert
     const isLocationAlert = item.metadata?.type === 'location_alert';
     
+    // Check if this is a pending import message
+    const isPendingImport = item.metadata?.type === 'pending_import';
+    
     // Detect if message contains URL
     const hasURL = isYouTubeURL(content) || isRedditURL(content);
     
@@ -173,6 +179,58 @@ export default function ChatScreen({ route, navigation }: any) {
           <Text style={styles.locationTimestamp}>
             {format(new Date(item.created_at), 'h:mm a')}
           </Text>
+        </View>
+      );
+    }
+
+    // Render Pending Import Message
+    if (isPendingImport && item.metadata?.places) {
+      const sourceEmoji = item.metadata.source_type === 'youtube' ? '▶️' : 
+                         item.metadata.source_type === 'reddit' ? '💬' : '📷';
+      
+      return (
+        <View style={styles.importMessageContainer}>
+          <View style={styles.importMessage}>
+            <Text style={styles.agentBadge}>🤖 Agent</Text>
+            
+            {/* Source Card */}
+            <View style={styles.importSourceCard}>
+              <Text style={styles.importSourceEmoji}>{sourceEmoji}</Text>
+              <View style={styles.importSourceInfo}>
+                <Text style={styles.importSourceLabel}>
+                  {(item.metadata.source_type || '').toUpperCase()}
+                </Text>
+                <Text style={styles.importSourceTitle} numberOfLines={2}>
+                  {item.metadata.video_title || 'Content'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Message Content */}
+            <Text style={styles.importMessageText}>{content}</Text>
+
+            {/* Review Button */}
+            <TouchableOpacity
+              style={styles.reviewButton}
+              onPress={() => {
+                setImportModalData({
+                  visible: true,
+                  sourceUrl: item.metadata.source_url,
+                  sourceType: item.metadata.source_type,
+                  sourceTitle: item.metadata.video_title,
+                  summary: item.metadata.summary,
+                  places: item.metadata.places,
+                  tripId,
+                });
+              }}
+            >
+              <Text style={styles.reviewButtonText}>Review Locations →</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.timestamp}>
+              {format(new Date(item.created_at), 'h:mm a')}
+            </Text>
+          </View>
         </View>
       );
     }
@@ -278,6 +336,24 @@ export default function ChatScreen({ route, navigation }: any) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Import Locations Modal */}
+      {importModalData && (
+        <ImportLocationsModal
+          visible={importModalData.visible}
+          onClose={() => setImportModalData(null)}
+          sourceUrl={importModalData.sourceUrl}
+          sourceType={importModalData.sourceType}
+          sourceTitle={importModalData.sourceTitle}
+          summary={importModalData.summary}
+          places={importModalData.places}
+          tripId={importModalData.tripId}
+          onImportComplete={(count) => {
+            setImportModalData(null);
+            // Success feedback is shown via agent message
+          }}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -568,5 +644,69 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 4,
     textAlign: 'center',
+  },
+
+  // ========== PENDING IMPORT MESSAGE STYLES ==========
+  importMessageContainer: {
+    marginBottom: 12,
+    width: '85%',
+    alignSelf: 'flex-start',
+  },
+  importMessage: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
+    padding: 12,
+  },
+  importSourceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  importSourceEmoji: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  importSourceInfo: {
+    flex: 1,
+  },
+  importSourceLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#666',
+    marginBottom: 2,
+  },
+  importSourceTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#000',
+  },
+  importMessageText: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#000',
+    marginBottom: 12,
+  },
+  reviewButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reviewButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

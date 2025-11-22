@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import api from '../config/api';
-import { Message } from '../types';
+import { Message, PendingImportPlace } from '../types';
+
+interface ImportLocationsPayload {
+  sourceUrl: string;
+  sourceType: 'youtube' | 'reddit' | 'instagram';
+  sourceTitle: string;
+  selectedPlaces: PendingImportPlace[];
+}
 
 interface ChatState {
   messages: Message[];
@@ -11,6 +18,7 @@ interface ChatState {
   fetchMessages: (tripId: string) => Promise<void>;
   sendMessage: (tripId: string, content: string) => Promise<void>;
   uploadImage: (tripId: string, imageUri: string) => Promise<void>;
+  importLocations: (tripId: string, payload: ImportLocationsPayload) => Promise<number>;
   clearMessages: () => void;
 }
 
@@ -84,6 +92,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error: any) {
       set({ isSending: false });
       throw new Error(error.response?.data?.error || 'Failed to upload image');
+    }
+  },
+
+  importLocations: async (tripId, payload) => {
+    try {
+      const response = await api.post<{
+        data: { savedCount: number; totalSelected: number; savedItems: any[] };
+      }>(`/trips/${tripId}/import-locations`, payload);
+
+      // Refresh messages to show agent confirmation
+      await get().fetchMessages(tripId);
+
+      return response.data.data.savedCount;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to import locations');
     }
   },
 

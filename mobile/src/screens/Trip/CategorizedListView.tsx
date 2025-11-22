@@ -56,7 +56,7 @@ export const CategorizedListView: React.FC<CategorizedListViewProps> = ({
 
   // Categorize and filter items
   const sections = useMemo(() => {
-    const filtered = items.filter(item => 
+    const filtered = items.filter(item =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.location_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -116,7 +116,7 @@ export const CategorizedListView: React.FC<CategorizedListViewProps> = ({
         <View style={[styles.itemIcon, { backgroundColor: CATEGORY_COLORS[item.category] + '20' }]}>
           <Text style={styles.itemEmoji}>{CATEGORY_EMOJIS[item.category]}</Text>
         </View>
-        
+
         <View style={styles.itemDetails}>
           <View style={styles.itemHeader}>
             <Text style={styles.itemName} numberOfLines={1}>
@@ -128,8 +128,8 @@ export const CategorizedListView: React.FC<CategorizedListViewProps> = ({
                 <View style={[
                   styles.confidenceBadge,
                   item.location_confidence === 'high' ? styles.confidenceHigh :
-                  item.location_confidence === 'medium' ? styles.confidenceMedium :
-                  styles.confidenceLow
+                    item.location_confidence === 'medium' ? styles.confidenceMedium :
+                      styles.confidenceLow
                 ]}>
                   <Text style={styles.confidenceDot}>●</Text>
                 </View>
@@ -141,27 +141,27 @@ export const CategorizedListView: React.FC<CategorizedListViewProps> = ({
               )}
             </View>
           </View>
-          
+
           <Text style={styles.itemLocation} numberOfLines={1}>
             📍 {item.location_name || 'Location not specified'}
           </Text>
-          
+
           {item.description && (
             <Text style={styles.itemDescription} numberOfLines={2}>
               {item.description}
             </Text>
           )}
-          
+
           <View style={styles.itemActions}>
             <CheckInButton item={item} />
-            
+
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: CATEGORY_COLORS[item.category] }]}
               onPress={() => openNavigation(item)}
             >
               <Text style={styles.actionButtonText}>Navigate</Text>
             </TouchableOpacity>
-            
+
             {item.original_source_url && (
               <TouchableOpacity
                 style={styles.youtubeButton}
@@ -187,7 +187,7 @@ export const CategorizedListView: React.FC<CategorizedListViewProps> = ({
   const renderSectionHeader = ({ section }: { section: CategorySection }) => {
     const category = Object.entries(CATEGORY_NAMES).find(([_, name]) => name === section.title)?.[0] || '';
     const isCollapsed = collapsedSections.has(category);
-    
+
     return (
       <TouchableOpacity
         style={[styles.sectionHeader, { borderLeftColor: section.color }]}
@@ -267,52 +267,55 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     padding: 16,
+    paddingTop: 24,
     backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
   },
   searchInput: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    fontSize: 16,
     color: '#111827',
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: 'transparent',
   },
   clearButton: {
     position: 'absolute',
-    right: 24,
+    right: 28,
     top: '50%',
-    marginTop: -10,
+    marginTop: -6,
   },
   clearButtonText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: '#9CA3AF',
   },
   statsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   statsText: {
     fontSize: 13,
     color: '#6B7280',
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
+    paddingTop: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'white',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginTop: 8,
-    borderLeftWidth: 4,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginTop: 16,
   },
   sectionHeaderContent: {
     flexDirection: 'row',
@@ -320,56 +323,56 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionEmoji: {
-    fontSize: 20,
-    marginRight: 8,
+    fontSize: 24,
+    marginRight: 12,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
     flex: 1,
   },
   countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   countText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
   },
   collapseIcon: {
     fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 8,
+    color: '#9CA3AF',
+    marginLeft: 12,
   },
   itemCard: {
     backgroundColor: 'white',
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginVertical: 8,
-    borderRadius: 16,
+    borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: '#F8F9FA',
+    borderColor: '#F3F4F6',
   },
   itemContent: {
     flexDirection: 'row',
-    padding: 12,
+    padding: 16,
   },
   itemIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   itemEmoji: {
-    fontSize: 24,
+    fontSize: 28,
   },
   itemDetails: {
     flex: 1,
@@ -378,13 +381,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
     flex: 1,
+    marginRight: 8,
   },
   itemBadges: {
     flexDirection: 'row',
@@ -392,15 +396,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   confidenceBadge: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   confidenceDot: {
-    fontSize: 8,
-    lineHeight: 12,
+    display: 'none',
   },
   confidenceHigh: {
     backgroundColor: '#10B981',
@@ -414,49 +415,47 @@ const styles = StyleSheet.create({
   priceIndicator: {
     fontSize: 14,
     color: '#6B7280',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   itemLocation: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6B7280',
-    marginBottom: 4,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   itemDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#4B5563',
-    lineHeight: 18,
-    marginBottom: 8,
+    lineHeight: 20,
+    marginBottom: 16,
   },
   itemActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   actionButtonText: {
     color: 'white',
     fontSize: 13,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    backgroundColor: '#F3F4F6',
-  },
-  secondaryButtonText: {
-    color: '#111827',
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   youtubeButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     backgroundColor: '#FF0000',
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: 'auto', // Push to right
   },
   youtubeIcon: {
     fontSize: 14,
@@ -475,14 +474,15 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#111827',
     marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 22,
   },
 });
 

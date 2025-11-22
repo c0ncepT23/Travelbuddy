@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import { SavedItem } from '../types';
+import { SavedItem, ItemCategory } from '../types';
 import { GOOGLE_MAPS_API_KEY, CATEGORY_COLORS } from '../config/maps';
 import { createCustomMarkerIcon } from './CustomMarkers';
+import { CategoryClusterMarker } from './CategoryClusterMarker';
+import { clusterByCategory, CategoryCluster } from '../utils/mapClustering';
 import DARK_NEON_MAP_STYLE from '../config/darkNeonMapStyle';
 
 declare var google: any;
@@ -10,6 +12,10 @@ declare var google: any;
 // Conditionally import CustomMapMarker only for mobile
 const CustomMapMarker = Platform.OS !== 'web' 
   ? require('./CustomMarkers').CustomMapMarker 
+  : null;
+
+const Marker = Platform.OS !== 'web'
+  ? require('react-native-maps').Marker
   : null;
 
 interface MapViewProps {
@@ -20,10 +26,20 @@ interface MapViewProps {
     latitudeDelta: number;
     longitudeDelta: number;
   };
+  showClusters?: boolean;
+  selectedCategory?: ItemCategory | 'all';
   onMarkerPress?: (item: SavedItem) => void;
+  onClusterPress?: (category: ItemCategory, items: SavedItem[]) => void;
 }
 
-export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }) => {
+export const MapView: React.FC<MapViewProps> = ({ 
+  items, 
+  region, 
+  showClusters = true,
+  selectedCategory = 'all',
+  onMarkerPress,
+  onClusterPress,
+}) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -127,30 +143,52 @@ export const MapView: React.FC<MapViewProps> = ({ items, region, onMarkerPress }
     return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
   }
 
-  // For mobile, use react-native-maps with dark neon style
+  // For mobile, use react-native-maps
   const MapViewNative = require('react-native-maps').default;
-  const { PROVIDER_GOOGLE } = require('react-native-maps');
+
+  // Decide whether to show clusters or individual markers
+  const clusters = showClusters && selectedCategory === 'all' ? clusterByCategory(items) : [];
+  const shouldShowClusters = clusters.length > 0 && selectedCategory === 'all';
 
   return (
     <MapViewNative
-      provider={PROVIDER_GOOGLE}
       style={styles.map}
       initialRegion={region}
       showsUserLocation
       showsMyLocationButton={false}
-      customMapStyle={DARK_NEON_MAP_STYLE}
     >
-      {items.map((item) => {
-        if (!item.location_lat || !item.location_lng) return null;
+      {shouldShowClusters ? (
+        // Show category cluster markers
+        clusters.map((cluster) => (
+          <Marker
+            key={`cluster-${cluster.category}`}
+            coordinate={{
+              latitude: cluster.centerLat,
+              longitude: cluster.centerLng,
+            }}
+            onPress={() => onClusterPress && onClusterPress(cluster.category, cluster.items)}
+          >
+            <CategoryClusterMarker
+              category={cluster.category}
+              count={cluster.count}
+              onPress={() => onClusterPress && onClusterPress(cluster.category, cluster.items)}
+            />
+          </Marker>
+        ))
+      ) : (
+        // Show individual markers
+        items.map((item) => {
+          if (!item.location_lat || !item.location_lng) return null;
 
-        return (
-          <CustomMapMarker
-            key={item.id}
-            item={item}
-            onPress={() => onMarkerPress && onMarkerPress(item)}
-          />
-        );
-      })}
+          return (
+            <CustomMapMarker
+              key={item.id}
+              item={item}
+              onPress={() => onMarkerPress && onMarkerPress(item)}
+            />
+          );
+        })
+      )}
     </MapViewNative>
   );
 };

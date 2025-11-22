@@ -23,7 +23,11 @@ import { useCompanionStore } from '../../stores/companionStore';
 import { useXPStore, XP_REWARDS } from '../../stores/xpStore';
 import { useCheckInStore } from '../../stores/checkInStore';
 import { MapView } from '../../components/MapView';
+import { PlaceDetailCard } from '../../components/PlaceDetailCard';
+import { PlaceListDrawer } from '../../components/PlaceListDrawer';
+import { filterByCategory } from '../../utils/mapClustering';
 import api from '../../config/api';
+import { ItemCategory } from '../../types';
 import { MotiView } from 'moti';
 import { HapticFeedback } from '../../utils/haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -55,9 +59,11 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [showChatModal, setShowChatModal] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any>(null);
   const [chatInput, setChatInput] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<ItemCategory | 'all'>('all');
   const [showOnlyCheckedIn, setShowOnlyCheckedIn] = useState(false);
   const [showShareStoryModal, setShowShareStoryModal] = useState(false);
+  const [showClusters, setShowClusters] = useState(true);
+  const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const confettiRef = React.useRef<any>(null);
   const [mapRegion, setMapRegion] = useState({
     latitude: 35.6762,
@@ -113,6 +119,25 @@ export default function TripDetailScreen({ route, navigation }: any) {
     } else {
       Alert.alert('No Location', 'This place doesn\'t have coordinates yet.');
     }
+  };
+
+  const handleClusterPress = (category: ItemCategory, clusterItems: any[]) => {
+    HapticFeedback.medium();
+    setSelectedCategory(category);
+    setDrawerItems(clusterItems);
+    setShowClusters(false); // Switch to individual markers
+  };
+
+  const handlePlaceSelectFromDrawer = (item: any) => {
+    HapticFeedback.medium();
+    setSelectedPlace(item);
+  };
+
+  const handleDrawerClose = () => {
+    setSelectedPlace(null);
+    setDrawerItems([]);
+    setSelectedCategory('all');
+    setShowClusters(true); // Return to cluster view
   };
 
   const handleCheckIn = async (place: any) => {
@@ -300,72 +325,31 @@ export default function TripDetailScreen({ route, navigation }: any) {
       {/* FULL SCREEN MAP (Z-Index 0) */}
       <View style={styles.mapContainer}>
         <MapView
-          items={items}
+          items={filterByCategory(items, selectedCategory)}
           region={mapRegion}
+          showClusters={showClusters}
+          selectedCategory={selectedCategory}
           onMarkerPress={(item) => {
             HapticFeedback.medium();
             setSelectedPlace(item);
+            setDrawerItems([item]);
           }}
+          onClusterPress={handleClusterPress}
         />
       </View>
 
-      {/* SELECTED PLACE CARD */}
-      {selectedPlace && (
-        <MotiView
-          from={{ opacity: 0, translateY: 50 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          exit={{ opacity: 0, translateY: 50 }}
-          transition={{ type: 'spring', damping: 20 }}
-          style={styles.placeCard}
-        >
-          <TouchableOpacity
-            style={styles.closeCardBtn}
-            onPress={() => setSelectedPlace(null)}
-          >
-            <Text style={styles.closeCardText}>✕</Text>
-          </TouchableOpacity>
-          
-          <Text style={styles.placeCardEmoji}>
-            {selectedPlace.category === 'food' ? '🍜' : 
-             selectedPlace.category === 'place' ? '📍' :
-             selectedPlace.category === 'shopping' ? '🛍️' :
-             selectedPlace.category === 'activity' ? '🎯' :
-             selectedPlace.category === 'accommodation' ? '🏨' : '💡'}
-          </Text>
-          <Text style={styles.placeCardName}>{selectedPlace.name}</Text>
-          <Text style={styles.placeCardLocation}>{selectedPlace.location_name}</Text>
-          <Text style={styles.placeCardAddedBy}>
-            Added by {getUserName(selectedPlace.added_by)}
-          </Text>
-          <Text style={styles.placeCardDescription} numberOfLines={3}>
-            {selectedPlace.description}
-          </Text>
-          
-          <View style={styles.placeCardActions}>
-            {isPlaceCheckedIn(tripId, selectedPlace.id) ? (
-              <View style={styles.checkedInBadge}>
-                <Text style={styles.checkedInBadgeText}>✓ Checked In</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.checkInButton}
-                onPress={() => handleCheckIn(selectedPlace)}
-              >
-                <Text style={styles.checkInButtonText}>✓ Check In</Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity
-              style={styles.navigateButton}
-              onPress={() => {
-                HapticFeedback.heavy();
-                openInGoogleMaps(selectedPlace);
-              }}
-            >
-              <Text style={styles.navigateButtonText}>📍 Navigate</Text>
-            </TouchableOpacity>
-          </View>
-        </MotiView>
+      {/* PLACE LIST DRAWER - Replaces old place card */}
+      {(drawerItems.length > 0 || selectedPlace) && (
+        <PlaceListDrawer
+          items={drawerItems}
+          selectedCategory={selectedCategory}
+          selectedPlace={selectedPlace}
+          onPlaceSelect={handlePlaceSelectFromDrawer}
+          onClose={handleDrawerClose}
+          onCheckIn={handleCheckIn}
+          isPlaceCheckedIn={(placeId) => isPlaceCheckedIn(tripId, placeId)}
+          getUserName={getUserName}
+        />
       )}
 
       {/* FLOATING TOP CONTROLS (Z-Index 10) */}
@@ -872,7 +856,6 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     backgroundColor: 'rgba(15, 23, 42, 0.85)',
-    backdropFilter: 'blur(10px)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -893,7 +876,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 24,
     backgroundColor: 'rgba(15, 23, 42, 0.85)',
-    backdropFilter: 'blur(10px)',
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.2)',
     shadowColor: '#000',
@@ -976,7 +958,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'rgba(15, 23, 42, 0.95)',
-    backdropFilter: 'blur(20px)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     shadowColor: '#000',
@@ -1150,21 +1131,12 @@ const styles = StyleSheet.create({
   },
 
   // Place Card (when marker clicked)
-  placeCard: {
+  placeCardContainer: {
     position: 'absolute',
-    bottom: BOTTOM_SHEET_MIN_HEIGHT + 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.2)',
+    bottom: BOTTOM_SHEET_MIN_HEIGHT,
+    left: 0,
+    right: 0,
+    height: screenHeight * 0.6,
     zIndex: 500,
   },
   closeCardBtn: {

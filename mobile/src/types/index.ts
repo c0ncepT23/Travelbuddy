@@ -40,10 +40,47 @@ export interface Message {
   sender_type: 'user' | 'agent';
   message_type: 'text' | 'link' | 'photo' | 'voice' | 'system';
   content: string;
-  metadata?: any;
+  metadata?: MessageMetadata;
   created_at: string;
   sender_name?: string;
   sender_avatar?: string;
+}
+
+// Message Metadata Types
+export interface MessageMetadata {
+  type?: 'pending_import' | 'location_alert' | string;
+  source_url?: string;
+  source_type?: 'youtube' | 'reddit' | 'instagram';
+  video_title?: string;
+  summary?: string;
+  places?: PendingImportPlace[];
+  user_id?: string;
+  location?: string;
+  [key: string]: any;
+}
+
+// Pending Import Types
+export interface PendingImportPlace {
+  name: string;
+  category: ItemCategory;
+  description: string;
+  location_name?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_confidence?: 'high' | 'medium' | 'low';
+  location_confidence_score?: number;
+  source_title?: string;
+  originalContent?: any;
+}
+
+export interface ImportModalData {
+  visible: boolean;
+  sourceUrl: string;
+  sourceType: 'youtube' | 'reddit' | 'instagram';
+  sourceTitle: string;
+  summary?: string;
+  places: PendingImportPlace[];
+  tripId: string;
 }
 
 // Saved Item Types
@@ -109,6 +146,15 @@ export interface SavedItem {
   primary_tag?: string | null;
   primary_tag_group?: string | null;
   primary_tag_confidence?: number;
+  // Google Places enrichment fields
+  google_place_id?: string;
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  formatted_address?: string;
+  area_name?: string;
+  photos_json?: any;
+  opening_hours_json?: any;
 }
 
 // Check-in types
