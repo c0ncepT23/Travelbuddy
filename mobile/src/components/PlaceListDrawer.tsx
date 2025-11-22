@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,13 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
 import { SavedItem, ItemCategory } from '../types';
 import { PlaceDetailCard } from './PlaceDetailCard';
 import { StarRating } from './StarRating';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const DRAWER_MIN_HEIGHT = 140;
-const DRAWER_MAX_HEIGHT = SCREEN_HEIGHT * 0.75;
+const DRAWER_LIST_HEIGHT = SCREEN_HEIGHT * 0.5; // 50% for list view
+const DRAWER_DETAIL_HEIGHT = SCREEN_HEIGHT * 0.75; // 75% for detail view
 
 interface PlaceListDrawerProps {
   items: SavedItem[];
@@ -53,11 +48,8 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
   isPlaceCheckedIn,
   getUserName,
 }) => {
-  const drawerHeight = useSharedValue(DRAWER_MIN_HEIGHT);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    height: drawerHeight.value,
-  }));
+  // Use fixed heights instead of animated
+  const drawerHeight = selectedPlace ? DRAWER_DETAIL_HEIGHT : DRAWER_LIST_HEIGHT;
 
   // Group items by area if available
   const groupedByArea = items.reduce((acc, item) => {
@@ -88,7 +80,7 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
   // If a place is selected, show detail card
   if (selectedPlace) {
     return (
-      <Animated.View style={[styles.drawer, { height: DRAWER_MAX_HEIGHT }]}>
+      <View style={[styles.drawer, { height: drawerHeight }]}>
         <PlaceDetailCard
           place={selectedPlace}
           onClose={onBackToList}
@@ -96,13 +88,13 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
           isCheckedIn={isPlaceCheckedIn ? isPlaceCheckedIn(selectedPlace.id) : false}
           addedByName={getUserName ? getUserName(selectedPlace.added_by) : 'Someone'}
         />
-      </Animated.View>
+      </View>
     );
   }
 
   // Otherwise, show list of places
   return (
-    <Animated.View style={[styles.drawer, animatedStyle]}>
+    <View style={[styles.drawer, { height: drawerHeight }]}>
       {/* Drag Handle */}
       <View style={styles.dragHandle} />
 
@@ -189,7 +181,7 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
           </View>
         ))}
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 };
 
