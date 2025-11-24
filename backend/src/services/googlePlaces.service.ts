@@ -141,21 +141,32 @@ export class GooglePlacesService {
   static async enrichPlace(name: string, locationHint?: string): Promise<Partial<GooglePlaceDetails> & { area_name?: string } | null> {
     try {
       const query = locationHint ? `${name} ${locationHint}` : name;
+      logger.info(`[GooglePlaces] Searching for: "${query}"`);
+      
       const placeId = await this.searchPlace(query);
       
-      if (!placeId) return null;
+      if (!placeId) {
+        logger.warn(`[GooglePlaces] No place ID found for "${query}"`);
+        return null;
+      }
+
+      logger.info(`[GooglePlaces] Found place ID: ${placeId}`);
 
       const details = await this.getPlaceDetails(placeId);
-      if (!details) return null;
+      if (!details) {
+        logger.warn(`[GooglePlaces] No details found for place ID: ${placeId}`);
+        return null;
+      }
 
       const areaName = this.identifyArea(details.address_components);
+      logger.info(`[GooglePlaces] Enrichment success! Rating: ${details.rating}, Area: ${areaName}`);
 
       return {
         ...details,
         area_name: areaName || undefined,
       };
-    } catch (error) {
-      logger.error('Error enriching place:', error);
+    } catch (error: any) {
+      logger.error('[GooglePlaces] Enrichment error:', error.message);
       return null;
     }
   }

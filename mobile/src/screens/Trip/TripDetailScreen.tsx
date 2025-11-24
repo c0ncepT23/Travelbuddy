@@ -22,7 +22,7 @@ import { useLocationStore } from '../../stores/locationStore';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useXPStore, XP_REWARDS } from '../../stores/xpStore';
 import { useCheckInStore } from '../../stores/checkInStore';
-import { MapView } from '../../components/MapView';
+import { MapView, MapViewRef } from '../../components/MapView';
 import { PlaceDetailCard } from '../../components/PlaceDetailCard';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
 import api from '../../config/api';
@@ -64,6 +64,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const confettiRef = React.useRef<any>(null);
+  const mapRef = React.useRef<MapViewRef>(null);
   const [mapRegion, setMapRegion] = useState({
     latitude: 35.6762,
     longitude: 139.6503,
@@ -132,7 +133,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
     HapticFeedback.medium();
     setSelectedPlace(item);
     // Drawer stays open but switches to detail mode
-    // Map will show this place's marker on top of clusters
+    // Animate map to show the selected place
+    if (item.location_lat && item.location_lng && mapRef.current) {
+      mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
+    }
   };
 
   const handleBackToList = () => {
@@ -333,12 +337,17 @@ export default function TripDetailScreen({ route, navigation }: any) {
       {/* FULL SCREEN MAP (Z-Index 0) */}
       <View style={styles.mapContainer}>
         <MapView
+          ref={mapRef}
           items={items}
           region={mapRegion}
           selectedPlace={selectedPlace}
           onMarkerPress={(item) => {
             HapticFeedback.medium();
             setSelectedPlace(item);
+            // Animate to place
+            if (item.location_lat && item.location_lng && mapRef.current) {
+              mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
+            }
           }}
           onClusterPress={handleClusterPress}
         />

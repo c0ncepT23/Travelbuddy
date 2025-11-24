@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SavedItem, ItemCategory } from '../types';
 import { GOOGLE_MAPS_API_KEY, CATEGORY_COLORS } from '../config/maps';
@@ -31,19 +31,41 @@ interface MapViewProps {
   onClusterPress?: (category: ItemCategory, items: SavedItem[]) => void;
 }
 
-export const MapView: React.FC<MapViewProps> = ({ 
+export interface MapViewRef {
+  animateToRegion: (latitude: number, longitude: number, zoom?: number) => void;
+}
+
+export const MapView = forwardRef<MapViewRef, MapViewProps>(({ 
   items, 
   region, 
   selectedPlace = null,
   onMarkerPress,
   onClusterPress,
-}) => {
-  const mapRef = useRef<HTMLDivElement>(null);
+}, ref) => {
+  const webMapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
+  const nativeMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
 
+  // Expose animateToRegion method to parent
+  useImperativeHandle(ref, () => ({
+    animateToRegion: (latitude: number, longitude: number, zoom = 0.01) => {
+      if (Platform.OS === 'web' && googleMapRef.current) {
+        googleMapRef.current.panTo({ lat: latitude, lng: longitude });
+        googleMapRef.current.setZoom(15);
+      } else if (nativeMapRef.current) {
+        nativeMapRef.current.animateToRegion({
+          latitude,
+          longitude,
+          latitudeDelta: zoom,
+          longitudeDelta: zoom,
+        }, 500);
+      }
+    },
+  }));
+
   useEffect(() => {
-    if (Platform.OS === 'web' && mapRef.current) {
+    if (Platform.OS === 'web' && webMapRef.current) {
       loadGoogleMapsScript();
     }
   }, []);
@@ -75,10 +97,10 @@ export const MapView: React.FC<MapViewProps> = ({
   };
 
   const initializeMap = () => {
-    if (!mapRef.current || googleMapRef.current) return;
+    if (!webMapRef.current || googleMapRef.current) return;
 
     const google = (window as any).google;
-    googleMapRef.current = new google.maps.Map(mapRef.current, {
+    googleMapRef.current = new google.maps.Map(webMapRef.current, {
       center: { lat: region.latitude, lng: region.longitude },
       zoom: 13,
       mapTypeControl: false,
@@ -138,7 +160,7 @@ export const MapView: React.FC<MapViewProps> = ({
   };
 
   if (Platform.OS === 'web') {
-    return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
+    return <div ref={webMapRef} style={{ width: '100%', height: '100%' }} />;
   }
 
   // For mobile, use react-native-maps
@@ -149,6 +171,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   return (
     <MapViewNative
+      ref={nativeMapRef}
       style={styles.map}
       initialRegion={region}
       showsUserLocation
@@ -182,7 +205,7 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
     </MapViewNative>
   );
-};
+});
 
 const styles = StyleSheet.create({
   map: {

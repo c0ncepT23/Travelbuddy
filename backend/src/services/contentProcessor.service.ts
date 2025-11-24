@@ -488,15 +488,17 @@ export class ContentProcessorService {
       }));
 
       // Enrich places with Google Places API data
-      logger.info(`Enriching ${processedPlaces.length} places with Google Places data...`);
+      logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} YouTube places...`);
       const enrichedPlaces = await Promise.all(
-        processedPlaces.map(async (place) => {
+        processedPlaces.map(async (place, index) => {
           try {
+            logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
             const enriched = await GooglePlacesService.enrichPlace(
               place.name,
               place.location_name
             );
             if (enriched) {
+              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Photos=${enriched.photos?.length || 0}`);
               return {
                 ...place,
                 google_place_id: enriched.place_id,
@@ -510,15 +512,18 @@ export class ContentProcessorService {
                 location_lat: enriched.geometry?.location.lat || place.location_lat,
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
               };
+            } else {
+              logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
             }
             return place;
-          } catch (error) {
-            logger.warn(`Failed to enrich place "${place.name}":`, error);
+          } catch (error: any) {
+            logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
             return place;
           }
         })
       );
-      logger.info(`Enrichment complete. Successfully enriched ${enrichedPlaces.filter((p: any) => p.google_place_id).length}/${processedPlaces.length} places`);
+      const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;
+      logger.info(`🎉 [ENRICH] Complete! ${enrichedCount}/${processedPlaces.length} places enriched with Google data`);
 
       return {
         summary: analysis.summary,
@@ -589,15 +594,17 @@ export class ContentProcessorService {
       }));
 
       // Enrich places with Google Places API data
-      logger.info(`Enriching ${processedPlaces.length} Reddit places with Google Places data...`);
+      logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} Reddit places...`);
       const enrichedPlaces = await Promise.all(
-        processedPlaces.map(async (place) => {
+        processedPlaces.map(async (place, index) => {
           try {
+            logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
             const enriched = await GooglePlacesService.enrichPlace(
               place.name,
               place.location_name
             );
             if (enriched) {
+              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}`);
               return {
                 ...place,
                 google_place_id: enriched.place_id,
@@ -611,15 +618,18 @@ export class ContentProcessorService {
                 location_lat: enriched.geometry?.location.lat || place.location_lat,
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
               };
+            } else {
+              logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
             }
             return place;
-          } catch (error) {
-            logger.warn(`Failed to enrich Reddit place "${place.name}":`, error);
+          } catch (error: any) {
+            logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
             return place;
           }
         })
       );
-      logger.info(`Reddit enrichment complete. ${enrichedPlaces.filter((p: any) => p.google_place_id).length}/${processedPlaces.length} places enriched`);
+      const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;
+      logger.info(`🎉 [ENRICH] Complete! ${enrichedCount}/${processedPlaces.length} Reddit places enriched`);
 
       return {
         summary: analysis.summary,
@@ -688,15 +698,17 @@ export class ContentProcessorService {
       }));
 
       // Enrich places with Google Places API data
-      logger.info(`Enriching ${processedPlaces.length} Instagram places with Google Places data...`);
+      logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} Instagram places...`);
       const enrichedPlaces = await Promise.all(
-        processedPlaces.map(async (place) => {
+        processedPlaces.map(async (place, index) => {
           try {
+            logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
             const enriched = await GooglePlacesService.enrichPlace(
               place.name,
               place.location_name
             );
             if (enriched) {
+              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}`);
               return {
                 ...place,
                 google_place_id: enriched.place_id,
@@ -710,15 +722,18 @@ export class ContentProcessorService {
                 location_lat: enriched.geometry?.location.lat || place.location_lat,
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
               };
+            } else {
+              logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
             }
             return place;
-          } catch (error) {
-            logger.warn(`Failed to enrich Instagram place "${place.name}":`, error);
+          } catch (error: any) {
+            logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
             return place;
           }
         })
       );
-      logger.info(`Instagram enrichment complete. ${enrichedPlaces.filter((p: any) => p.google_place_id).length}/${processedPlaces.length} places enriched`);
+      const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;
+      logger.info(`🎉 [ENRICH] Complete! ${enrichedCount}/${processedPlaces.length} Instagram places enriched`);
 
       return {
         summary: analysis.summary,

@@ -69,8 +69,26 @@ export const useItemStore = create<ItemState>((set, get) => ({
       const response = await api.get<{ data: SavedItem[] }>(`/trips/${tripId}/items`, {
         params,
       });
-      set({ items: response.data.data, isLoading: false });
-      return response.data.data;
+      
+      // Log enrichment data
+      const items = response.data.data;
+      console.log(`[ItemStore] Fetched ${items.length} items`);
+      const enriched = items.filter(i => i.google_place_id);
+      console.log(`[ItemStore] ${enriched.length} items have Google enrichment`);
+      if (items.length > 0) {
+        const sample = items[0];
+        console.log(`[ItemStore] Sample item fields:`, {
+          name: sample.name,
+          hasRating: !!sample.rating,
+          rating: sample.rating,
+          hasArea: !!sample.area_name,
+          area: sample.area_name,
+          hasPhotos: !!sample.photos_json,
+        });
+      }
+      
+      set({ items, isLoading: false });
+      return items;
     } catch (error) {
       console.error('Fetch items error:', error);
       set({ isLoading: false });
