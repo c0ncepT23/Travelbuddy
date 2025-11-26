@@ -4,6 +4,7 @@ import { SavedItemModel } from '../models/savedItem.model';
 import { UserModel } from '../models/user.model';
 import { TravelAgent } from '../agents/travelAgent';
 import { ContentProcessorService } from '../services/contentProcessor.service';
+import { MessageIntentService } from './messageIntent.service';
 import {
   ChatMessage,
   MessageSenderType,
@@ -17,6 +18,7 @@ import logger from '../config/logger';
 export class ChatService {
   /**
    * Send a message in a trip chat
+   * Uses smart intent detection to decide if AI should respond
    */
   static async sendMessage(
     userId: string,
@@ -32,39 +34,61 @@ export class ChatService {
         throw new Error('Access denied');
       }
 
-      // Save user message
+      // Get user info for context
+      const user = await UserModel.findById(userId);
+      const senderName = user?.name || 'User';
+
+      // Save user message with sender name in metadata
       const userMessage = await ChatMessageModel.create(
         tripGroupId,
         userId,
         MessageSenderType.USER,
         messageType,
         content,
-        metadata
+        { ...metadata, sender_name: senderName }
       );
 
-      // Check if message contains a URL for processing
-      logger.info(`📥 Received message content: "${content}"`);
-      const urls = extractUrls(content);
-      logger.info(`🔗 Extracted URLs: ${JSON.stringify(urls)}`);
-      if (urls.length > 0) {
-        logger.info(`✅ URL detected, processing: ${urls[0]}`);
-        // Process first URL asynchronously
-        this.processUrlMessage(userId, tripGroupId, urls[0]);
-        
-        // Send immediate response
-        const processingMessage = await this.sendAgentMessage(
-          tripGroupId,
-          'Processing your link... 🔄',
-          MessageType.SYSTEM
-        );
+      // === SMART INTENT CLASSIFICATION ===
+      logger.info(`📥 Received message from ${senderName}: "${content}"`);
+      
+      const intentResult = await MessageIntentService.classifyIntent(content, senderName);
+      logger.info(`🧠 Intent: ${intentResult.intent} (${intentResult.confidence}) - ${intentResult.reason}`);
 
-        return { userMessage, agentResponse: processingMessage };
+      // Handle based on intent
+      switch (intentResult.intent) {
+        case 'PROCESS_LINK': {
+          // Extract and process URL
+          const urls = MessageIntentService.extractUrls(content);
+          if (urls.length > 0) {
+            logger.info(`✅ Processing URL: ${urls[0]}`);
+            this.processUrlMessage(userId, tripGroupId, urls[0]);
+            
+            const processingMessage = await this.sendAgentMessage(
+              tripGroupId,
+              `Processing ${senderName}'s link... 🔄`,
+              MessageType.SYSTEM
+            );
+            return { userMessage, agentResponse: processingMessage };
+          }
+          break;
+        }
+
+        case 'AI_QUERY': {
+          // User is asking AI something - generate response
+          logger.info(`🤖 AI responding to query from ${senderName}`);
+          const agentResponse = await this.generateAgentResponse(userId, tripGroupId, content);
+          return { userMessage, agentResponse };
+        }
+
+        case 'MEMBER_CHAT':
+        default: {
+          // Members chatting with each other - AI stays silent
+          logger.info(`💬 Member chat detected - AI staying silent`);
+          return { userMessage, agentResponse: undefined };
+        }
       }
 
-      // Generate agent response
-      const agentResponse = await this.generateAgentResponse(userId, tripGroupId, content);
-
-      return { userMessage, agentResponse };
+      return { userMessage };
     } catch (error: any) {
       logger.error('Send message error:', error);
       throw error;

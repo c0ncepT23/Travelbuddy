@@ -5,7 +5,7 @@ import { GOOGLE_MAPS_API_KEY, CATEGORY_COLORS } from '../config/maps';
 import { createCustomMarkerIcon } from './CustomMarkers';
 import { CategoryClusterMarker } from './CategoryClusterMarker';
 import { clusterByCategory, CategoryCluster } from '../utils/mapClustering';
-import DARK_NEON_MAP_STYLE from '../config/darkNeonMapStyle';
+import NEOPOP_MAP_STYLE from '../config/neopopMapStyle';
 
 declare var google: any;
 
@@ -107,7 +107,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
       streetViewControl: false,
       fullscreenControl: false,
       zoomControl: false,
-      styles: DARK_NEON_MAP_STYLE,
+      styles: NEOPOP_MAP_STYLE,
     });
 
     updateMarkers();

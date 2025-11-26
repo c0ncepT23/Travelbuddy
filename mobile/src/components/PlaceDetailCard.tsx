@@ -7,9 +7,12 @@ import {
   ScrollView,
   Linking,
   Image,
+  Dimensions,
 } from 'react-native';
 import { SavedItem, ItemCategory } from '../types';
-import { StarRating } from './StarRating';
+import theme from '../config/theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface PlaceDetailCardProps {
   place: SavedItem;
@@ -17,6 +20,8 @@ interface PlaceDetailCardProps {
   onCheckIn?: (place: SavedItem) => void;
   isCheckedIn?: boolean;
   addedByName?: string;
+  onToggleFavorite?: (place: SavedItem) => void;
+  onToggleMustVisit?: (place: SavedItem) => void;
 }
 
 const CATEGORY_EMOJIS: Record<ItemCategory, string> = {
@@ -37,14 +42,14 @@ const CATEGORY_LABELS: Record<ItemCategory, string> = {
   [ItemCategory.TIP]: 'Tip',
 };
 
-const SOURCE_EMOJIS: Record<string, string> = {
-  youtube: '▶️',
-  reddit: '💬',
-  instagram: '📷',
-  url: '🔗',
-  photo: '📷',
-  voice: '🎤',
-  text: '📝',
+const SOURCE_ICONS: Record<string, { icon: string; color: string }> = {
+  youtube: { icon: '▶️', color: '#FF0000' },
+  reddit: { icon: '💬', color: '#FF4500' },
+  instagram: { icon: '📷', color: '#E1306C' },
+  url: { icon: '🔗', color: '#6B7280' },
+  photo: { icon: '📷', color: '#6B7280' },
+  voice: { icon: '🎤', color: '#6B7280' },
+  text: { icon: '📝', color: '#6B7280' },
 };
 
 export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
@@ -53,6 +58,8 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
   onCheckIn,
   isCheckedIn = false,
   addedByName = 'Someone',
+  onToggleFavorite,
+  onToggleMustVisit,
 }) => {
   const openInGoogleMaps = () => {
     if (place.location_lat && place.location_lng) {
@@ -69,7 +76,7 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
         : JSON.parse(place.photos_json);
       
       return photos
-        .slice(0, 3)
+        .slice(0, 5)
         .map((photo: any) => 
           `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=AIzaSyAiWhzrvdNb2NKSyzWpvNrhImz72I395Qo`
         );
@@ -78,68 +85,116 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
     }
   };
 
+  const renderStars = (rating: number | string | undefined) => {
+    const numericRating = typeof rating === 'number' ? rating : parseFloat(String(rating)) || 0;
+    const stars = [];
+    const fullStars = Math.floor(numericRating);
+    const hasHalfStar = numericRating % 1 >= 0.5;
+    
+    for (let i = 0; i < 5; i++) {
+      if (i < fullStars) {
+        stars.push(<Text key={i} style={styles.starFull}>★</Text>);
+      } else if (i === fullStars && hasHalfStar) {
+        stars.push(<Text key={i} style={styles.starFull}>★</Text>);
+      } else {
+        stars.push(<Text key={i} style={styles.starEmpty}>★</Text>);
+      }
+    }
+    return stars;
+  };
+
   const photos = getPhotos();
+  const sourceInfo = SOURCE_ICONS[place.original_source_type] || SOURCE_ICONS.url;
 
   return (
     <View style={styles.container}>
-      {/* Close Button */}
-      <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-        <Text style={styles.closeButtonText}>✕</Text>
-      </TouchableOpacity>
+      {/* Header Row with Close and Favorite buttons */}
+      <View style={styles.headerRow}>
+        {onToggleFavorite && (
+          <TouchableOpacity 
+            style={styles.favoriteButton}
+            onPress={() => onToggleFavorite(place)}
+          >
+            <Text style={styles.favoriteIcon}>
+              {place.is_favorite ? '❤️' : '🤍'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        <View style={styles.headerSpacer} />
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Place Name */}
         <Text style={styles.placeName}>{place.name}</Text>
-
-        {/* Rating Row */}
-        {place.rating && place.rating > 0 && (
-          <View style={styles.ratingRow}>
-            <StarRating 
-              rating={place.rating} 
-              reviewCount={place.user_ratings_total}
-              size="medium"
-            />
+        
+        {/* Must-Visit Badge */}
+        {place.is_must_visit && (
+          <View style={styles.mustVisitBadge}>
+            <Text style={styles.mustVisitIcon}>🎯</Text>
+            <Text style={styles.mustVisitText}>Must Visit</Text>
           </View>
         )}
+
+        {/* Rating Row - PROMINENT like reference */}
+        {place.rating ? (
+          <View style={styles.ratingRow}>
+            <Text style={styles.ratingNumber}>
+              {(typeof place.rating === 'number' ? place.rating : parseFloat(String(place.rating)) || 0).toFixed(1)}
+            </Text>
+            <View style={styles.starsRow}>
+              {renderStars(place.rating)}
+            </View>
+            {place.user_ratings_total && Number(place.user_ratings_total) > 0 && (
+              <Text style={styles.reviewCount}>({place.user_ratings_total})</Text>
+            )}
+          </View>
+        ) : null}
 
         {/* Tags Row */}
         <View style={styles.tagsRow}>
           {/* Category Tag */}
           <View style={styles.tag}>
-            <Text style={styles.tagEmoji}>{CATEGORY_EMOJIS[place.category]}</Text>
+            <Text style={styles.tagIcon}>{CATEGORY_EMOJIS[place.category]}</Text>
             <Text style={styles.tagText}>{CATEGORY_LABELS[place.category]}</Text>
           </View>
 
           {/* Source Tag */}
           {place.original_source_type && (
             <View style={[styles.tag, styles.sourceTag]}>
-              <Text style={styles.tagEmoji}>
-                {SOURCE_EMOJIS[place.original_source_type] || '🔗'}
-              </Text>
+              <Text style={styles.tagIcon}>{sourceInfo.icon}</Text>
               <Text style={styles.tagText}>
-                Saved from {place.original_source_type}
+                You saved this place 1x ↗
               </Text>
             </View>
           )}
         </View>
 
-        {/* Photos */}
-        {photos.length > 0 && (
-          <ScrollView 
-            horizontal 
-            style={styles.photosScroll}
-            showsHorizontalScrollIndicator={false}
-          >
-            {photos.map((photoUrl, index) => (
-              <Image 
-                key={index}
-                source={{ uri: photoUrl }}
-                style={styles.photo}
-                resizeMode="cover"
-              />
-            ))}
-          </ScrollView>
-        )}
+        {/* Photos Gallery - Like reference with placeholder if no photos */}
+        <View style={styles.photoSection}>
+          {photos.length > 0 ? (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photosContainer}
+            >
+              {photos.map((photoUrl, index) => (
+                <Image 
+                  key={index}
+                  source={{ uri: photoUrl }}
+                  style={styles.photo}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.photoPlaceholder}>
+              <Text style={styles.photoPlaceholderEmoji}>{CATEGORY_EMOJIS[place.category]}</Text>
+            </View>
+          )}
+        </View>
 
         {/* Location & Address */}
         {place.formatted_address && (
@@ -158,20 +213,32 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
         <Text style={styles.addedBy}>Added by {addedByName}</Text>
       </ScrollView>
 
-      {/* Action Buttons */}
+      {/* Action Buttons - Matching reference design */}
       <View style={styles.actionBar}>
-        {/* Saved Button */}
-        <TouchableOpacity style={styles.savedButton}>
-          <Text style={styles.savedIcon}>📌</Text>
-          <Text style={styles.savedText}>Saved</Text>
-        </TouchableOpacity>
+        {/* Must Visit Toggle Button */}
+        {onToggleMustVisit ? (
+          <TouchableOpacity 
+            style={[styles.savedButton, place.is_must_visit && styles.mustVisitActiveButton]}
+            onPress={() => onToggleMustVisit(place)}
+          >
+            <Text style={styles.savedIcon}>{place.is_must_visit ? '🎯' : '📌'}</Text>
+            <Text style={[styles.savedText, place.is_must_visit && styles.mustVisitActiveText]}>
+              {place.is_must_visit ? 'Must Visit' : 'Mark Priority'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.savedButton}>
+            <Text style={styles.savedIcon}>🔖</Text>
+            <Text style={styles.savedText}>Saved</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Direction Button */}
         <TouchableOpacity 
           style={styles.directionButton}
           onPress={openInGoogleMaps}
         >
-          <Text style={styles.directionIcon}>🧭</Text>
+          <Text style={styles.directionIcon}>↗</Text>
           <Text style={styles.directionText}>Direction</Text>
         </TouchableOpacity>
       </View>
@@ -200,47 +267,120 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    backgroundColor: theme.colors.surface,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderColor: theme.colors.borderDark,
+  },
+  // Header row with favorite and close buttons
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  headerSpacer: {
+    flex: 1,
   },
   closeButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F2F2F7',
+    width: 36,
+    height: 36,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
   },
   closeButtonText: {
     fontSize: 18,
-    color: '#8E8E93',
+    color: theme.colors.textSecondary,
     fontWeight: '600',
+  },
+  // Favorite button
+  favoriteButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  favoriteIcon: {
+    fontSize: 22,
   },
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
   },
+  
+  // Place Name - Large and bold NeoPOP style
   placeName: {
-    fontSize: 24,
+    fontSize: 26,
+    fontWeight: '900',
+    color: theme.colors.textPrimary,
+    marginBottom: 8,
+    lineHeight: 32,
+    letterSpacing: -0.5,
+  },
+  
+  // Must Visit Badge
+  mustVisitBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.categoryColors.activity.bg,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.success,
+    marginBottom: 12,
+  },
+  mustVisitIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  mustVisitText: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#000',
-    marginBottom: 12,
-    paddingRight: 40,
+    color: theme.colors.success,
   },
+  
+  // Rating Row - NeoPOP style
   ratingRow: {
-    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
   },
+  ratingNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginRight: 8,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  starFull: {
+    fontSize: 18,
+    color: theme.colors.secondary,
+  },
+  starEmpty: {
+    fontSize: 18,
+    color: theme.colors.border,
+  },
+  reviewCount: {
+    fontSize: 15,
+    color: theme.colors.textSecondary,
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  
+  // Tags Row - NeoPOP style
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -249,57 +389,87 @@ const styles = StyleSheet.create({
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: theme.colors.backgroundAlt,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    marginRight: 10,
     marginBottom: 8,
   },
   sourceTag: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: theme.categoryColors.shopping.bg,
+    borderColor: theme.colors.borderDark,
   },
-  tagEmoji: {
+  tagIcon: {
     fontSize: 14,
-    marginRight: 4,
+    marginRight: 6,
   },
   tagText: {
     fontSize: 13,
-    color: '#000',
-    fontWeight: '600',
+    color: theme.colors.textPrimary,
+    fontWeight: '700',
   },
-  photosScroll: {
+  
+  // Photo Section - NeoPOP style
+  photoSection: {
     marginBottom: 16,
   },
+  photosContainer: {
+    gap: 10,
+  },
   photo: {
-    width: 200,
-    height: 150,
-    borderRadius: 12,
-    marginRight: 12,
+    width: SCREEN_WIDTH * 0.55,
+    height: 180,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    marginRight: 10,
   },
+  photoPlaceholder: {
+    height: 140,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoPlaceholderEmoji: {
+    fontSize: 48,
+    opacity: 0.3,
+  },
+  
+  // Address
   address: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  description: {
     fontSize: 15,
-    color: '#000',
+    color: theme.colors.textSecondary,
+    marginBottom: 12,
     lineHeight: 22,
+    fontWeight: '500',
+  },
+  
+  // Description
+  description: {
+    fontSize: 16,
+    color: theme.colors.textPrimary,
+    lineHeight: 24,
     marginBottom: 12,
   },
+  
+  // Added By
   addedBy: {
-    fontSize: 13,
-    color: '#8E8E93',
+    fontSize: 14,
+    color: theme.colors.textTertiary,
     marginBottom: 20,
+    fontWeight: '600',
   },
+  
+  // Action Buttons - NeoPOP style
   actionBar: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
+    borderTopWidth: 2,
+    borderTopColor: theme.colors.border,
     gap: 12,
   },
   savedButton: {
@@ -307,64 +477,78 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFD60A',
+    backgroundColor: theme.colors.secondary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
+  },
+  mustVisitActiveButton: {
+    backgroundColor: theme.colors.success,
+    borderColor: theme.colors.borderDark,
   },
   savedIcon: {
     fontSize: 18,
-    marginRight: 6,
+    marginRight: 8,
   },
   savedText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+  },
+  mustVisitActiveText: {
+    color: theme.colors.textInverse,
   },
   directionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: theme.colors.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
   },
   directionIcon: {
     fontSize: 18,
-    marginRight: 6,
+    marginRight: 8,
+    color: theme.colors.textInverse,
   },
   directionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.textInverse,
   },
+  
+  // Check-in - NeoPOP style
   checkInContainer: {
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
   checkInButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: theme.colors.success,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
+    ...theme.shadows.neopop.md,
   },
   checkInButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
+    fontSize: 17,
+    fontWeight: '900',
+    color: theme.colors.textInverse,
   },
   checkedInBadge: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: theme.categoryColors.activity.bg,
     paddingVertical: 16,
-    borderRadius: 12,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#34C759',
+    borderWidth: 3,
+    borderColor: theme.colors.success,
   },
   checkedInText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#34C759',
+    fontSize: 17,
+    fontWeight: '900',
+    color: theme.colors.success,
   },
 });
-

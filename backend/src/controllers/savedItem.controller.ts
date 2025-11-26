@@ -209,5 +209,59 @@ export class SavedItemController {
       });
     }
   }
+
+  /**
+   * Toggle favorite status
+   */
+  static async toggleFavorite(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { id } = req.params;
+      const item = await SavedItemService.toggleFavorite(req.user.id, id);
+
+      res.status(200).json({
+        success: true,
+        data: item,
+        message: item.is_favorite ? 'Added to favorites' : 'Removed from favorites',
+      });
+    } catch (error: any) {
+      logger.error('Toggle favorite error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to toggle favorite',
+      });
+    }
+  }
+
+  /**
+   * Toggle must-visit status
+   */
+  static async toggleMustVisit(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { id } = req.params;
+      const item = await SavedItemService.toggleMustVisit(req.user.id, id);
+
+      res.status(200).json({
+        success: true,
+        data: item,
+        message: item.is_must_visit ? 'Marked as must-visit' : 'Removed must-visit status',
+      });
+    } catch (error: any) {
+      logger.error('Toggle must-visit error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to toggle must-visit',
+      });
+    }
+  }
 }
 

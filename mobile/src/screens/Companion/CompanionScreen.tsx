@@ -17,7 +17,8 @@ import { format } from 'date-fns';
 
 export default function CompanionScreen({ route, navigation }: any) {
   const { tripId } = route.params;
-  const { messages, isLoading, sendQuery, clearMessages } = useCompanionStore();
+  const { isLoading, sendQuery, clearMessages, getMessages, addMessage } = useCompanionStore();
+  const messages = getMessages(tripId);
   const { location } = useLocationStore();
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
@@ -32,7 +33,7 @@ export default function CompanionScreen({ route, navigation }: any) {
         timestamp: new Date(),
       };
       
-      useCompanionStore.getState().addMessage(welcomeMessage);
+      addMessage(tripId, welcomeMessage);
     }
   }, [tripId, messages.length]);
 
@@ -166,7 +167,7 @@ export default function CompanionScreen({ route, navigation }: any) {
           <Text style={styles.headerSubtitle}>Ask me anything about your saved places</Text>
         </View>
         {messages.length > 1 && (
-          <TouchableOpacity onPress={clearMessages} style={styles.clearButton}>
+          <TouchableOpacity onPress={() => clearMessages(tripId)} style={styles.clearButton}>
             <Text style={styles.clearButtonText}>🗑️</Text>
           </TouchableOpacity>
         )}

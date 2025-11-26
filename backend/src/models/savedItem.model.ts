@@ -171,6 +171,16 @@ export class SavedItemModel {
       values.push(updates.location_lng);
     }
 
+    if (updates.is_favorite !== undefined) {
+      fields.push(`is_favorite = $${paramCount++}`);
+      values.push(updates.is_favorite);
+    }
+
+    if (updates.is_must_visit !== undefined) {
+      fields.push(`is_must_visit = $${paramCount++}`);
+      values.push(updates.is_must_visit);
+    }
+
     if (fields.length === 0) {
       return null;
     }

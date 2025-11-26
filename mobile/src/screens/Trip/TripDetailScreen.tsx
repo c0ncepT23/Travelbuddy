@@ -25,6 +25,7 @@ import { useCheckInStore } from '../../stores/checkInStore';
 import { MapView, MapViewRef } from '../../components/MapView';
 import { PlaceDetailCard } from '../../components/PlaceDetailCard';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
+import { EnhancedCheckInModal } from '../../components/EnhancedCheckInModal';
 import api from '../../config/api';
 import { ItemCategory } from '../../types';
 import { MotiView } from 'moti';
@@ -38,6 +39,7 @@ import Animated, {
   withSpring,
   runOnJS,
 } from 'react-native-reanimated';
+import theme from '../../config/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const BOTTOM_SHEET_MIN_HEIGHT = 140;
@@ -46,7 +48,7 @@ const BOTTOM_SHEET_MAX_HEIGHT = screenHeight * 0.75;
 export default function TripDetailScreen({ route, navigation }: any) {
   const { tripId } = route.params;
   const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
-  const { items, fetchTripItems } = useItemStore();
+  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem } = useItemStore();
   const { sendQuery, getMessages, isLoading: chatLoading } = useCompanionStore();
   const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking, location } = useLocationStore();
   const { addXP, level, getProgress, getLevelTitle } = useXPStore();
@@ -58,9 +60,11 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [showChatModal, setShowChatModal] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any>(null);
   const [chatInput, setChatInput] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<ItemCategory | 'all'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'food' | 'accommodation' | 'place' | 'shopping' | 'activity' | 'tip'>('all');
   const [showOnlyCheckedIn, setShowOnlyCheckedIn] = useState(false);
   const [showShareStoryModal, setShowShareStoryModal] = useState(false);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [checkInPlace, setCheckInPlace] = useState<any>(null);
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const confettiRef = React.useRef<any>(null);
@@ -153,35 +157,100 @@ export default function TripDetailScreen({ route, navigation }: any) {
   };
 
   const handleCheckIn = async (place: any) => {
-    try {
-      HapticFeedback.success();
-      
-      const response = await api.post(`/trips/${tripId}/checkin`, {
-        savedItemId: place.id,
-        rating: 5,
-        note: 'Checked in!',
-      });
-      
-      if (response.data.success) {
-        // Award XP for visiting
-        addXP(XP_REWARDS.VISIT_PLACE);
-        
-        // Show confetti
-        if (confettiRef.current) {
-          confettiRef.current.start();
-        }
-        
-        // Refresh items and check-ins to update status
-        await fetchTripItems(tripId, {});
-        await refreshCheckIns(tripId);
-        
-        Alert.alert('🎉 Checked In!', `You earned +${XP_REWARDS.VISIT_PLACE} XP!`);
-        setSelectedPlace(null);
-      }
-    } catch (error: any) {
-      console.error('Check-in error:', error);
-      Alert.alert('Error', 'Failed to check in. Please try again.');
+    // Open the enhanced check-in modal
+    setCheckInPlace(place);
+    setShowCheckInModal(true);
+  };
+
+  const handleCheckInComplete = async (checkIn: any) => {
+    // Show confetti
+    if (confettiRef.current) {
+      confettiRef.current.start();
     }
+    
+    // Refresh items and check-ins to update status
+    await fetchTripItems(tripId, {});
+    await refreshCheckIns(tripId);
+    
+    // Close the drawer detail view if it was showing this place
+    if (selectedPlace?.id === checkInPlace?.id) {
+      setSelectedPlace(null);
+    }
+    
+    // Reset check-in modal state
+    setCheckInPlace(null);
+    setShowCheckInModal(false);
+  };
+
+  const handleToggleFavorite = async (place: any) => {
+    try {
+      HapticFeedback.light();
+      const updatedPlace = await toggleFavorite(place.id);
+      
+      // Update selected place if it's currently showing
+      if (selectedPlace?.id === place.id) {
+        setSelectedPlace(updatedPlace);
+      }
+      
+      // Update drawer items
+      setDrawerItems(prev => prev.map(item => 
+        item.id === place.id ? { ...item, is_favorite: updatedPlace.is_favorite } : item
+      ));
+    } catch (error: any) {
+      console.error('Toggle favorite error:', error);
+      Alert.alert('Error', 'Failed to update favorite status.');
+    }
+  };
+
+  const handleToggleMustVisit = async (place: any) => {
+    try {
+      HapticFeedback.medium();
+      const updatedPlace = await toggleMustVisit(place.id);
+      
+      // Update selected place if it's currently showing
+      if (selectedPlace?.id === place.id) {
+        setSelectedPlace(updatedPlace);
+      }
+      
+      // Update drawer items
+      setDrawerItems(prev => prev.map(item => 
+        item.id === place.id ? { ...item, is_must_visit: updatedPlace.is_must_visit } : item
+      ));
+    } catch (error: any) {
+      console.error('Toggle must-visit error:', error);
+      Alert.alert('Error', 'Failed to update must-visit status.');
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    Alert.alert(
+      'Remove Place',
+      'Are you sure you want to remove this place from the trip?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              HapticFeedback.medium();
+              await deleteItem(itemId);
+              
+              // Update drawer items
+              setDrawerItems(prev => prev.filter(item => item.id !== itemId));
+              
+              // Close detail card if it's showing the deleted item
+              if (selectedPlace?.id === itemId) {
+                setSelectedPlace(null);
+              }
+            } catch (error: any) {
+              console.error('Delete item error:', error);
+              Alert.alert('Error', 'Failed to remove place. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
 
@@ -324,7 +393,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
   if (isLoading || !currentTrip) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#A78BFA" />
+        <View style={styles.loadingBox}>
+          <Text style={styles.loadingEmoji}>✈️</Text>
+        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading your adventure...</Text>
       </View>
     );
@@ -332,7 +404,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
       {/* FULL SCREEN MAP (Z-Index 0) */}
       <View style={styles.mapContainer}>
@@ -365,6 +437,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
           onCheckIn={handleCheckIn}
           isPlaceCheckedIn={(placeId) => isPlaceCheckedIn(tripId, placeId)}
           getUserName={getUserName}
+          onToggleFavorite={handleToggleFavorite}
+          onToggleMustVisit={handleToggleMustVisit}
+          onDeleteItem={handleDeleteItem}
+          userLocation={location ? { latitude: location.coords.latitude, longitude: location.coords.longitude } : null}
         />
       )}
 
@@ -387,8 +463,14 @@ export default function TripDetailScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </MotiView>
 
-        {/* Trip Name Pill */}
-        <View>
+        {/* Trip Name Pill with Members */}
+        <TouchableOpacity 
+          onPress={() => {
+            HapticFeedback.medium();
+            navigation.navigate('GroupChat', { tripId });
+          }}
+          activeOpacity={0.9}
+        >
           <MotiView
             from={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -397,6 +479,32 @@ export default function TripDetailScreen({ route, navigation }: any) {
           >
             <Text style={styles.tripPillText}>{currentTrip.name}</Text>
             <Text style={styles.tripPillSubtext}>📍 {currentTrip.destination}</Text>
+            
+            {/* Member Avatars Row */}
+            <View style={styles.memberAvatarsRow}>
+              {currentTripMembers?.slice(0, 4).map((member, index) => (
+                <View 
+                  key={member.id}
+                  style={[
+                    styles.memberAvatarMini,
+                    { 
+                      marginLeft: index > 0 ? -8 : 0,
+                      backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EC4899'][index % 4],
+                      zIndex: 10 - index,
+                    }
+                  ]}
+                >
+                  <Text style={styles.memberAvatarMiniText}>
+                    {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                  </Text>
+                </View>
+              ))}
+              {(currentTripMembers?.length || 0) > 4 && (
+                <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
+                  <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 4}</Text>
+                </View>
+              )}
+            </View>
           </MotiView>
           
           {/* XP Badge */}
@@ -408,7 +516,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
           >
             <Text style={styles.xpBadgeText}>⭐ Lv.{level}</Text>
           </MotiView>
-        </View>
+        </TouchableOpacity>
 
         {/* Share Button */}
         <MotiView
@@ -440,7 +548,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
         </MotiView>
       </View>
 
-      {/* MAGIC AI BUTTON (FAB) */}
+      {/* GROUP CHAT BUTTON (FAB) */}
       <MotiView
         from={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -452,7 +560,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
           style={styles.magicButtonInner}
           onPress={() => {
             HapticFeedback.heavy();
-            setShowChatModal(true);
+            navigation.navigate('GroupChat', { tripId });
           }}
           activeOpacity={0.8}
         >
@@ -464,9 +572,9 @@ export default function TripDetailScreen({ route, navigation }: any) {
               duration: 2000,
               loop: true,
             }}
-            style={[styles.magicGlow, { backgroundColor: '#A78BFA' }]}
+            style={[styles.magicGlow, { backgroundColor: theme.colors.primary }]}
           />
-          <Text style={styles.magicButtonText}>✨</Text>
+          <Text style={styles.magicButtonText}>💬</Text>
         </TouchableOpacity>
       </MotiView>
 
@@ -734,6 +842,17 @@ export default function TripDetailScreen({ route, navigation }: any) {
         fadeOut={true}
       />
 
+      {/* ENHANCED CHECK-IN MODAL */}
+      <EnhancedCheckInModal
+        visible={showCheckInModal}
+        place={checkInPlace}
+        onClose={() => {
+          setShowCheckInModal(false);
+          setCheckInPlace(null);
+        }}
+        onCheckInComplete={handleCheckInComplete}
+      />
+
       {/* SHARE MY STORY MODAL */}
       {showShareStoryModal && (
         <View style={styles.shareStoryOverlay}>
@@ -835,19 +954,33 @@ export default function TripDetailScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: theme.colors.background,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingBox: {
+    width: 80,
+    height: 80,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    ...theme.shadows.neopop.md,
+  },
+  loadingEmoji: {
+    fontSize: 40,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#94A3B8',
-    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
   },
   
   // Map
@@ -856,7 +989,7 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   
-  // Top Floating Controls
+  // Top Floating Controls - NeoPOP Style
   topControls: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 40,
@@ -870,47 +1003,37 @@ const styles = StyleSheet.create({
   floatingButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    ...theme.shadows.neopop.sm,
   },
   floatingButtonText: {
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontWeight: '600',
+    fontSize: 22,
+    color: theme.colors.textPrimary,
+    fontWeight: '800',
   },
   tripPill: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingVertical: 12,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
     maxWidth: screenWidth * 0.5,
+    ...theme.shadows.neopop.sm,
   },
   tripPillText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
     textAlign: 'center',
   },
   tripPillSubtext: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
     marginTop: 2,
   },
@@ -918,25 +1041,54 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#10B981',
+    backgroundColor: theme.colors.success,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
     borderWidth: 2,
-    borderColor: 'rgba(15, 23, 42, 0.9)',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
-    elevation: 8,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
   },
   xpBadgeText: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: theme.colors.textInverse,
   },
 
-  // Magic AI Button
+  // Member Avatars in Header
+  memberAvatarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  memberAvatarMini: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberAvatarMiniText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: theme.colors.textInverse,
+  },
+  memberCountMini: {
+    backgroundColor: theme.colors.textSecondary,
+    marginLeft: -8,
+  },
+  memberCountMiniText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: theme.colors.textInverse,
+  },
+
+  // Magic AI Button - NeoPOP Style
   magicButton: {
     position: 'absolute',
     bottom: BOTTOM_SHEET_MIN_HEIGHT + 20,
@@ -946,43 +1098,37 @@ const styles = StyleSheet.create({
   magicButtonInner: {
     width: 64,
     height: 64,
-    borderRadius: 32,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: theme.colors.primary,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    elevation: 12,
+    ...theme.shadows.neopop.lg,
   },
   magicGlow: {
     position: 'absolute',
     width: 70,
     height: 70,
-    borderRadius: 35,
     opacity: 0.4,
   },
   magicButtonText: {
     fontSize: 28,
   },
 
-  // Bottom Sheet
+  // Bottom Sheet - NeoPOP Style
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 24,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.soft.lg,
   },
   sheetHandleArea: {
     paddingVertical: 16,
@@ -990,13 +1136,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sheetHandle: {
-    width: 40,
-    height: 5,
-    backgroundColor: '#475569',
+    width: 48,
+    height: 6,
+    backgroundColor: theme.colors.borderMedium,
     borderRadius: 3,
   },
   
-  // Sneak Peek
+  // Sneak Peek - NeoPOP Style
   sneakPeek: {
     paddingVertical: 8,
     paddingHorizontal: 24,
@@ -1004,7 +1150,7 @@ const styles = StyleSheet.create({
   sneakPeekTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
     marginBottom: 16,
     letterSpacing: -0.5,
   },
@@ -1016,22 +1162,23 @@ const styles = StyleSheet.create({
   statBadge: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
   },
   statBadgeText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
   },
   swipeHint: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
+    color: theme.colors.textSecondary,
     marginTop: 12,
     textAlign: 'center',
   },
 
-  // Expanded List
+  // Expanded List - NeoPOP Style
   expandedContent: {
     height: BOTTOM_SHEET_MAX_HEIGHT - 50,
     paddingHorizontal: 4,
@@ -1046,21 +1193,21 @@ const styles = StyleSheet.create({
   expandedTitle: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
     letterSpacing: -0.5,
   },
   shareStoryButton: {
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    backgroundColor: theme.colors.secondary,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(167, 139, 250, 0.5)',
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
   },
   shareStoryButtonText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#A78BFA',
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
   },
   chipScrollView: {
     marginBottom: 16,
@@ -1071,25 +1218,27 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   filterChip: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: 'rgba(148, 163, 184, 0.2)',
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
     marginRight: 10,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
   filterChipActive: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.borderDark,
   },
   filterChipText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: theme.colors.textSecondary,
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverse,
   },
   flatListContent: {
     paddingBottom: 40,
@@ -1101,29 +1250,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: 'rgba(30, 41, 59, 0.6)',
-    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
     borderWidth: 2,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
   },
   listItemIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    width: 48,
+    height: 48,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
-    borderWidth: 2,
-    borderColor: 'rgba(167, 139, 250, 0.4)',
   },
   listItemEmoji: {
-    fontSize: 28,
+    fontSize: 24,
   },
   listItemInfo: {
     flex: 1,
@@ -1131,19 +1274,19 @@ const styles = StyleSheet.create({
   listItemName: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 6,
+    color: theme.colors.textPrimary,
+    marginBottom: 4,
     letterSpacing: -0.3,
   },
   listItemLocation: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: theme.colors.textSecondary,
     fontWeight: '600',
   },
   listItemArrow: {
-    fontSize: 22,
-    color: '#A78BFA',
-    fontWeight: '700',
+    fontSize: 20,
+    color: theme.colors.primary,
+    fontWeight: '800',
   },
 
   // Place Card (when marker clicked)
@@ -1206,51 +1349,54 @@ const styles = StyleSheet.create({
   },
   checkInButton: {
     flex: 1,
-    backgroundColor: '#10B981',
+    backgroundColor: theme.colors.success,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
+    ...theme.shadows.neopop.sm,
   },
   checkInButtonText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: theme.colors.textInverse,
   },
   checkedInBadge: {
     flex: 1,
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: theme.categoryColors?.activity?.bg || '#ECFDF5',
     paddingVertical: 12,
-    borderRadius: 12,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: theme.colors.success,
   },
   checkedInBadgeText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#10B981',
+    fontWeight: '800',
+    color: theme.colors.success,
   },
   navigateButton: {
     flex: 1,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: theme.colors.primary,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
+    ...theme.shadows.neopop.sm,
   },
   navigateButtonText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: theme.colors.textInverse,
   },
 
-  // Chat Modal
+  // Chat Modal - NeoPOP Style
   chatModalOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     zIndex: 2000,
   },
   chatModalKeyboard: {
@@ -1258,110 +1404,118 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   chatModal: {
-    backgroundColor: 'rgba(15, 23, 42, 0.98)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: theme.colors.surface,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderColor: theme.colors.borderDark,
     height: screenHeight * 0.75,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.3)',
   },
   chatModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(148, 163, 184, 0.2)',
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.backgroundAlt,
   },
   chatModalTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
   },
   closeButtonText: {
     fontSize: 28,
-    color: '#94A3B8',
+    color: theme.colors.textSecondary,
   },
   chatMessages: {
     flex: 1,
     padding: 16,
+    backgroundColor: theme.colors.background,
   },
   chatBubble: {
     marginBottom: 12,
     padding: 12,
-    borderRadius: 16,
     maxWidth: '80%',
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#8B5CF6',
+    backgroundColor: theme.colors.primary,
+    ...theme.shadows.neopop.sm,
   },
   aiBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(148, 163, 184, 0.2)',
+    backgroundColor: theme.colors.backgroundAlt,
   },
   chatBubbleText: {
     fontSize: 15,
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
     lineHeight: 20,
   },
   userBubbleText: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverse,
   },
   chatInputContainer: {
     flexDirection: 'row',
     padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+    borderTopWidth: 2,
+    borderTopColor: theme.colors.border,
     alignItems: 'flex-end',
+    backgroundColor: theme.colors.surface,
   },
   chatTextInput: {
     flex: 1,
-    backgroundColor: 'rgba(148, 163, 184, 0.2)',
-    borderRadius: 20,
+    backgroundColor: theme.colors.background,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
     paddingHorizontal: 16,
     paddingVertical: 10,
     marginRight: 8,
     fontSize: 15,
-    color: '#FFFFFF',
+    color: theme.colors.textPrimary,
     maxHeight: 100,
   },
   chatSendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#8B5CF6',
+    width: 48,
+    height: 48,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
+    ...theme.shadows.neopop.sm,
   },
   chatSendButtonDisabled: {
     opacity: 0.5,
   },
   chatSendButtonText: {
     fontSize: 20,
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: theme.colors.textInverse,
+    fontWeight: '800',
   },
 
-  // Share Story Modal
+  // Share Story Modal - NeoPOP Style
   shareStoryOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 3000,
   },
   shareStoryModal: {
-    backgroundColor: 'rgba(15, 23, 42, 0.98)',
-    borderRadius: 24,
+    backgroundColor: theme.colors.surface,
     padding: 24,
     width: screenWidth * 0.9,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.3)',
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.lg,
   },
   shareStoryHeader: {
     flexDirection: 'row',
@@ -1371,12 +1525,12 @@ const styles = StyleSheet.create({
   },
   shareStoryTitle: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontWeight: '900',
+    color: theme.colors.textPrimary,
   },
   shareStoryInfo: {
     fontSize: 15,
-    color: '#CBD5E1',
+    color: theme.colors.textSecondary,
     lineHeight: 22,
     marginBottom: 24,
     textAlign: 'center',
@@ -1392,29 +1546,31 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 32,
     fontWeight: '900',
-    color: '#8B5CF6',
+    color: theme.colors.primary,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#94A3B8',
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
   },
   createStoryButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: theme.colors.primary,
     paddingVertical: 16,
-    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
     marginBottom: 12,
+    ...theme.shadows.neopop.md,
   },
   createStoryButtonText: {
     fontSize: 17,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontWeight: '900',
+    color: theme.colors.textInverse,
   },
   shareStoryHint: {
     fontSize: 13,
-    color: '#64748B',
+    color: theme.colors.textTertiary,
     textAlign: 'center',
     fontStyle: 'italic',
   },

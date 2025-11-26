@@ -14,13 +14,16 @@ export const StarRating: React.FC<StarRatingProps> = ({
   size = 'medium',
   showReviewCount = true,
 }) => {
+  // Ensure rating is a valid number
+  const numericRating = typeof rating === 'number' ? rating : parseFloat(String(rating)) || 0;
+  
   const starSize = size === 'small' ? 12 : size === 'large' ? 20 : 16;
   const fontSize = size === 'small' ? 12 : size === 'large' ? 18 : 14;
 
   const renderStars = () => {
     const stars = [];
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
+    const fullStars = Math.floor(numericRating);
+    const hasHalfStar = numericRating % 1 >= 0.5;
     const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
 
     // Full stars
@@ -44,7 +47,7 @@ export const StarRating: React.FC<StarRatingProps> = ({
   return (
     <View style={styles.container}>
       <Text style={[styles.ratingText, { fontSize }]}>
-        {rating.toFixed(1)}
+        {numericRating.toFixed(1)}
       </Text>
       <View style={styles.starsContainer}>
         {renderStars()}

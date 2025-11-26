@@ -1,7 +1,11 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { GroupMessageModel } from '../models/groupMessage.model';
+import { PushNotificationService } from './pushNotification.service';
+import { UserModel } from '../models/user.model';
+import { TripGroupModel } from '../models/tripGroup.model';
 import jwt from 'jsonwebtoken';
+import logger from '../config/logger';
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -49,7 +53,7 @@ export class WebSocketService {
 
   private setupEventHandlers() {
     this.io.on('connection', (socket: AuthenticatedSocket) => {
-      console.log(`User connected: ${socket.userId} (${socket.userEmail})`);
+      logger.info(`[WebSocket] User connected: ${socket.userId} (${socket.userEmail})`);
 
       // Join trip rooms
       socket.on('join_trip', async (tripId: string) => {
@@ -77,9 +81,9 @@ export class WebSocketService {
           const onlineUsers = await GroupMessageModel.getOnlineUsers(parseInt(tripId));
           socket.emit('online_users', onlineUsers);
           
-          console.log(`User ${socket.userId} joined trip ${tripId}`);
+          logger.info(`[WebSocket] User ${socket.userId} joined trip ${tripId}`);
         } catch (error) {
-          console.error('Error joining trip:', error);
+          logger.error('[WebSocket] Error joining trip:', error);
         }
       });
 
@@ -104,9 +108,9 @@ export class WebSocketService {
             email: socket.userEmail
           });
           
-          console.log(`User ${socket.userId} left trip ${tripId}`);
+          logger.info(`[WebSocket] User ${socket.userId} left trip ${tripId}`);
         } catch (error) {
-          console.error('Error leaving trip:', error);
+          logger.error('[WebSocket] Error leaving trip:', error);
         }
       });
 
@@ -147,9 +151,29 @@ export class WebSocketService {
             email: socket.userEmail
           });
           
-          console.log(`Message sent by ${socket.userId} in trip ${tripId}`);
+          // Send push notification to offline members
+          try {
+            const [user, trip] = await Promise.all([
+              UserModel.findById(socket.userId.toString()),
+              TripGroupModel.findById(tripId),
+            ]);
+            
+            if (user && trip) {
+              await PushNotificationService.notifyNewMessage(
+                parseInt(tripId),
+                socket.userId,
+                user.name || socket.userEmail || 'Someone',
+                trip.name,
+                content
+              );
+            }
+          } catch (pushError) {
+            logger.error('[WebSocket] Push notification error:', pushError);
+          }
+          
+          logger.info(`Message sent by ${socket.userId} in trip ${tripId}`);
         } catch (error) {
-          console.error('Error sending message:', error);
+          logger.error('Error sending message:', error);
           socket.emit('message_error', { error: 'Failed to send message' });
         }
       });
@@ -168,7 +192,7 @@ export class WebSocketService {
             email: socket.userEmail
           });
         } catch (error) {
-          console.error('Error setting typing:', error);
+          logger.error('[WebSocket] Error setting typing:', error);
         }
       });
 
@@ -185,7 +209,7 @@ export class WebSocketService {
             email: socket.userEmail
           });
         } catch (error) {
-          console.error('Error removing typing:', error);
+          logger.error('[WebSocket] Error removing typing:', error);
         }
       });
 
@@ -209,7 +233,7 @@ export class WebSocketService {
             tripId
           });
         } catch (error) {
-          console.error('Error marking as read:', error);
+          logger.error('[WebSocket] Error marking as read:', error);
         }
       });
 
@@ -217,7 +241,7 @@ export class WebSocketService {
       socket.on('disconnect', async () => {
         if (!socket.userId) return;
         
-        console.log(`User disconnected: ${socket.userId}`);
+        logger.info(`[WebSocket] User disconnected: ${socket.userId}`);
         
         try {
           // Get all trips the user was in and update status
@@ -239,7 +263,7 @@ export class WebSocketService {
             }
           }
         } catch (error) {
-          console.error('Error handling disconnect:', error);
+          logger.error('[WebSocket] Error handling disconnect:', error);
         }
       });
     });
@@ -252,18 +276,9 @@ export class WebSocketService {
     data?: any;
   }) {
     try {
-      const tokens = await GroupMessageModel.getUserTokens(userId);
-      
-      // TODO: Integrate with actual push notification service (FCM, APNs)
-      console.log(`Would send push notification to user ${userId}:`, notification);
-      console.log(`Tokens:`, tokens);
-      
-      // For now, just log. In production, integrate with:
-      // - Firebase Cloud Messaging for Android/iOS
-      // - Apple Push Notification service for iOS
-      // - Web Push for browsers
+      await PushNotificationService.sendToUser(userId, notification);
     } catch (error) {
-      console.error('Error sending push notification:', error);
+      logger.error('Error sending push notification:', error);
     }
   }
 

@@ -47,8 +47,24 @@ router.put(
     body('category').optional().isIn(Object.values(ItemCategory)),
     body('description').optional().trim().notEmpty(),
     body('status').optional().isIn(['saved', 'visited']),
+    body('is_favorite').optional().isBoolean(),
+    body('is_must_visit').optional().isBoolean(),
   ]),
   SavedItemController.update
+);
+
+// Toggle favorite status
+router.patch(
+  '/:id/favorite',
+  validate([param('id').isUUID().withMessage('Invalid item ID')]),
+  SavedItemController.toggleFavorite
+);
+
+// Toggle must-visit status
+router.patch(
+  '/:id/must-visit',
+  validate([param('id').isUUID().withMessage('Invalid item ID')]),
+  SavedItemController.toggleMustVisit
 );
 
 // Delete item

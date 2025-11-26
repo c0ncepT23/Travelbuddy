@@ -1,13 +1,16 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, Text, Alert } from 'react-native';
 import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 import { useAuthStore } from './src/stores/authStore';
 import { useTripStore } from './src/stores/tripStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { pushNotificationService } from './src/services/pushNotification.service';
+import theme from './src/config/theme';
 
 // Auth Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -21,6 +24,7 @@ import JoinTripScreen from './src/screens/Trip/JoinTripScreen';
 
 // Chat & Items
 import ChatScreen from './src/screens/Chat/ChatScreen';
+import GroupChatScreen from './src/screens/Chat/GroupChatScreen';
 import BrowseItemsScreen from './src/screens/Items/BrowseItemsScreen';
 
 // AI Companion
@@ -59,6 +63,50 @@ export default function App() {
     };
     prepare();
   }, []);
+
+  // Initialize push notifications when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const initPushNotifications = async () => {
+        try {
+          const token = await pushNotificationService.initialize();
+          if (token) {
+            console.log('[App] Push notifications initialized');
+          }
+          
+          // Set up notification listeners
+          pushNotificationService.setupListeners(
+            // When notification received while app is open
+            (notification) => {
+              console.log('[App] Notification received:', notification.request.content.title);
+            },
+            // When user taps on notification
+            (response) => {
+              const data = response.notification.request.content.data;
+              console.log('[App] Notification tapped:', data);
+              
+              // Navigate based on notification data
+              if (data?.tripId && navigationRef.current) {
+                if (data.screen === 'GroupChat') {
+                  navigationRef.current.navigate('GroupChat', { tripId: data.tripId });
+                } else if (data.screen === 'TripDetail') {
+                  navigationRef.current.navigate('TripDetail', { tripId: data.tripId });
+                }
+              }
+            }
+          );
+        } catch (error) {
+          console.error('[App] Push notification init error:', error);
+        }
+      };
+      
+      initPushNotifications();
+      
+      return () => {
+        pushNotificationService.removeListeners();
+      };
+    }
+  }, [isAuthenticated]);
 
   // Handle deep links
   useEffect(() => {
@@ -101,12 +149,29 @@ export default function App() {
 
   if (!isReady || isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' }}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <View style={{
+          width: 80,
+          height: 80,
+          backgroundColor: theme.colors.primary,
+          borderWidth: 3,
+          borderColor: theme.colors.borderDark,
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginBottom: 24,
+          shadowColor: '#000',
+          shadowOffset: { width: 4, height: 4 },
+          shadowOpacity: 1,
+          shadowRadius: 0,
+          elevation: 4,
+        }}>
+          <Text style={{ fontSize: 40 }}>✈️</Text>
+        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         {error && (
           <View style={{ marginTop: 20, padding: 20 }}>
-            <Text style={{ color: '#F87171', textAlign: 'center' }}>{error}</Text>
-            <Text style={{ color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>
+            <Text style={{ color: theme.colors.error, textAlign: 'center', fontWeight: '700' }}>{error}</Text>
+            <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', marginTop: 10 }}>
               Continuing to app...
             </Text>
           </View>
@@ -117,13 +182,23 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <NavigationContainer ref={navigationRef} linking={linking}>
         <Stack.Navigator
           screenOptions={{
-            headerStyle: { backgroundColor: '#0F172A' },
-            headerTintColor: '#fff',
-            headerTitleStyle: { fontWeight: 'bold' },
+            headerStyle: { 
+              backgroundColor: theme.colors.background,
+              elevation: 0,
+              shadowOpacity: 0,
+              borderBottomWidth: 2,
+              borderBottomColor: theme.colors.border,
+            },
+            headerTintColor: theme.colors.textPrimary,
+            headerTitleStyle: { 
+              fontWeight: '700',
+              fontSize: 18,
+              color: theme.colors.textPrimary,
+            },
           }}
         >
           {!isAuthenticated ? (
@@ -169,6 +244,11 @@ export default function App() {
                 options={{ title: 'Travel Agent' }}
               />
               <Stack.Screen
+                name="GroupChat"
+                component={GroupChatScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
                 name="Companion"
                 component={CompanionScreen}
                 options={{ headerShown: false }}
@@ -183,8 +263,6 @@ export default function App() {
                 component={ProfileScreen}
                 options={{ 
                   title: 'Profile',
-                  headerStyle: { backgroundColor: '#0F172A' },
-                  headerTintColor: '#fff',
                 }}
               />
             </>

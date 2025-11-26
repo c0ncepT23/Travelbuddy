@@ -155,6 +155,9 @@ export interface SavedItem {
   area_name?: string;
   photos_json?: any;
   opening_hours_json?: any;
+  // User preference fields
+  is_favorite?: boolean;
+  is_must_visit?: boolean;
 }
 
 // Check-in types

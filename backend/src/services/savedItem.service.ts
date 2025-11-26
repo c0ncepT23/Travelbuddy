@@ -265,5 +265,69 @@ export class SavedItemService {
       return [];
     }
   }
+
+  /**
+   * Toggle favorite status for an item
+   */
+  static async toggleFavorite(userId: string, itemId: string): Promise<SavedItem> {
+    try {
+      const item = await SavedItemModel.findById(itemId);
+      if (!item) {
+        throw new Error('Item not found');
+      }
+
+      // Verify user is member of trip
+      const isMember = await TripGroupModel.isMember(item.trip_group_id, userId);
+      if (!isMember) {
+        throw new Error('Access denied');
+      }
+
+      const updatedItem = await SavedItemModel.update(itemId, {
+        is_favorite: !item.is_favorite,
+      });
+
+      if (!updatedItem) {
+        throw new Error('Failed to toggle favorite');
+      }
+
+      logger.info(`Item ${itemId} favorite toggled to ${updatedItem.is_favorite} by user ${userId}`);
+      return updatedItem;
+    } catch (error: any) {
+      logger.error('Error toggling favorite:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Toggle must-visit status for an item
+   */
+  static async toggleMustVisit(userId: string, itemId: string): Promise<SavedItem> {
+    try {
+      const item = await SavedItemModel.findById(itemId);
+      if (!item) {
+        throw new Error('Item not found');
+      }
+
+      // Verify user is member of trip
+      const isMember = await TripGroupModel.isMember(item.trip_group_id, userId);
+      if (!isMember) {
+        throw new Error('Access denied');
+      }
+
+      const updatedItem = await SavedItemModel.update(itemId, {
+        is_must_visit: !item.is_must_visit,
+      });
+
+      if (!updatedItem) {
+        throw new Error('Failed to toggle must-visit');
+      }
+
+      logger.info(`Item ${itemId} must-visit toggled to ${updatedItem.is_must_visit} by user ${userId}`);
+      return updatedItem;
+    } catch (error: any) {
+      logger.error('Error toggling must-visit:', error);
+      throw error;
+    }
+  }
 }
 

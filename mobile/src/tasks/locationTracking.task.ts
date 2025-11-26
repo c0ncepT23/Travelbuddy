@@ -8,6 +8,11 @@ const LOCATION_TASK_NAME = 'background-location-task';
 const NEARBY_RADIUS = 500; // 500 meters
 const NOTIFICATION_COOLDOWN = 3600000; // 1 hour in milliseconds
 
+// Define the location task data type
+interface LocationTaskData {
+  locations: Location.LocationObject[];
+}
+
 // Track when we last notified for each place to avoid spam
 const notificationHistory: Map<string, number> = new Map();
 
@@ -50,7 +55,7 @@ function shouldNotify(itemId: string): boolean {
  */
 TaskManager.defineTask(
   LOCATION_TASK_NAME,
-  async ({ data, error }: TaskManager.TaskManagerTaskBody<Location.LocationTaskEventData>) => {
+  async ({ data, error }: TaskManager.TaskManagerTaskBody<LocationTaskData>) => {
     if (error) {
       console.error('[BackgroundLocation] Task error:', error);
       return;

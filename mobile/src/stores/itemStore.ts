@@ -45,6 +45,8 @@ interface ItemState {
   searchItems: (tripId: string, query: string) => Promise<void>;
   markAsVisited: (itemId: string, notes?: string) => Promise<void>;
   deleteItem: (itemId: string) => Promise<void>;
+  toggleFavorite: (itemId: string) => Promise<SavedItem>;
+  toggleMustVisit: (itemId: string) => Promise<SavedItem>;
   setItems: (items: SavedItem[]) => void;
   clearItems: () => void;
 }
@@ -194,6 +196,50 @@ export const useItemStore = create<ItemState>((set, get) => ({
       }));
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to delete item');
+    }
+  },
+
+  toggleFavorite: async (itemId) => {
+    try {
+      const response = await api.patch<{ data: SavedItem }>(`/items/${itemId}/favorite`);
+      const updatedItem = response.data.data;
+      
+      // Update local state
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === itemId ? { ...item, is_favorite: updatedItem.is_favorite } : item
+        ),
+        currentItem:
+          state.currentItem?.id === itemId
+            ? { ...state.currentItem, is_favorite: updatedItem.is_favorite }
+            : state.currentItem,
+      }));
+      
+      return updatedItem;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to toggle favorite');
+    }
+  },
+
+  toggleMustVisit: async (itemId) => {
+    try {
+      const response = await api.patch<{ data: SavedItem }>(`/items/${itemId}/must-visit`);
+      const updatedItem = response.data.data;
+      
+      // Update local state
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === itemId ? { ...item, is_must_visit: updatedItem.is_must_visit } : item
+        ),
+        currentItem:
+          state.currentItem?.id === itemId
+            ? { ...state.currentItem, is_must_visit: updatedItem.is_must_visit }
+            : state.currentItem,
+      }));
+      
+      return updatedItem;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to toggle must-visit');
     }
   },
 
