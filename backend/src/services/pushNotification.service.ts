@@ -173,7 +173,7 @@ export class PushNotificationService {
           body: JSON.stringify(batch),
         });
 
-        const data = await response.json();
+        const data = await response.json() as { data?: ExpoPushTicket[] };
         
         if (data.data) {
           tickets.push(...data.data);

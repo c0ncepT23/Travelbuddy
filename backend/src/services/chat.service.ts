@@ -12,7 +12,8 @@ import {
   AgentContext,
   ItemSourceType,
 } from '../types';
-import { extractUrls } from '../utils/helpers';
+// extractUrls imported but used by ContentProcessorService
+// import { extractUrls } from '../utils/helpers';
 import logger from '../config/logger';
 
 export class ChatService {
