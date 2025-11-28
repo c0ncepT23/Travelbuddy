@@ -125,6 +125,7 @@ export interface SavedItem {
   // User preference fields
   is_favorite?: boolean;
   is_must_visit?: boolean;
+  user_notes?: string;  // Personal notes about this place
   // Day planner fields
   planned_day?: number | null;  // Day number (1 = Day 1, null = Unassigned)
   day_order?: number;           // Order within the day

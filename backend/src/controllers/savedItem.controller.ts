@@ -265,6 +265,35 @@ export class SavedItemController {
   }
 
   /**
+   * Update user notes for an item
+   */
+  static async updateNotes(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      const item = await SavedItemService.updateNotes(req.user.id, id, notes);
+
+      res.status(200).json({
+        success: true,
+        data: item,
+        message: 'Notes updated successfully',
+      });
+    } catch (error: any) {
+      logger.error('Update notes error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to update notes',
+      });
+    }
+  }
+
+  /**
    * Get items grouped by day for day planner view
    */
   static async getItemsByDay(req: AuthRequest, res: Response): Promise<void> {

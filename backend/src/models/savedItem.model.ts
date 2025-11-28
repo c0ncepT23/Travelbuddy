@@ -191,6 +191,11 @@ export class SavedItemModel {
       values.push(updates.day_order);
     }
 
+    if (updates.user_notes !== undefined) {
+      fields.push(`user_notes = $${paramCount++}`);
+      values.push(updates.user_notes);
+    }
+
     if (fields.length === 0) {
       return null;
     }

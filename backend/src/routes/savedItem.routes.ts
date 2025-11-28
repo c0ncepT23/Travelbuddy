@@ -84,6 +84,16 @@ router.patch(
   SavedItemController.assignToDay
 );
 
+// Update user notes
+router.patch(
+  '/:id/notes',
+  validate([
+    param('id').isUUID().withMessage('Invalid item ID'),
+    body('notes').isString().withMessage('Notes must be a string'),
+  ]),
+  SavedItemController.updateNotes
+);
+
 // Delete item
 router.delete(
   '/:id',

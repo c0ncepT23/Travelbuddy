@@ -49,7 +49,7 @@ const BOTTOM_SHEET_MAX_HEIGHT = screenHeight * 0.75;
 export default function TripDetailScreen({ route, navigation }: any) {
   const { tripId } = route.params;
   const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
-  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, fetchItemsByDay } = useItemStore();
+  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, fetchItemsByDay, updateNotes } = useItemStore();
   const { sendQuery, getMessages, isLoading: chatLoading } = useCompanionStore();
   const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking, location } = useLocationStore();
   const { addXP, level, getProgress, getLevelTitle } = useXPStore();
@@ -69,6 +69,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'map' | 'planner'>('map');
+  const [mapDisplayMode, setMapDisplayMode] = useState<'markers' | 'heatmap' | 'photos'>('markers');
   const confettiRef = React.useRef<any>(null);
   const mapRef = React.useRef<MapViewRef>(null);
   const [mapRegion, setMapRegion] = useState({
@@ -221,6 +222,25 @@ export default function TripDetailScreen({ route, navigation }: any) {
     } catch (error: any) {
       console.error('Toggle must-visit error:', error);
       Alert.alert('Error', 'Failed to update must-visit status.');
+    }
+  };
+
+  const handleUpdateNotes = async (place: any, notes: string) => {
+    try {
+      const updatedPlace = await updateNotes(place.id, notes);
+      
+      // Update selected place if it's currently showing
+      if (selectedPlace?.id === place.id) {
+        setSelectedPlace(updatedPlace);
+      }
+      
+      // Update drawer items
+      setDrawerItems(prev => prev.map(item => 
+        item.id === place.id ? { ...item, user_notes: updatedPlace.user_notes } : item
+      ));
+    } catch (error: any) {
+      console.error('Update notes error:', error);
+      Alert.alert('Error', 'Failed to update notes.');
     }
   };
 
@@ -452,6 +472,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
               items={items}
               region={mapRegion}
               selectedPlace={selectedPlace}
+              displayMode={mapDisplayMode}
               onMarkerPress={(item) => {
                 HapticFeedback.medium();
                 setSelectedPlace(item);
@@ -462,6 +483,28 @@ export default function TripDetailScreen({ route, navigation }: any) {
               }}
               onClusterPress={handleClusterPress}
             />
+            
+            {/* Map Display Mode Toggle */}
+            <View style={styles.mapModeToggle}>
+              <TouchableOpacity
+                style={[styles.mapModeButton, mapDisplayMode === 'markers' && styles.mapModeButtonActive]}
+                onPress={() => setMapDisplayMode('markers')}
+              >
+                <Text style={[styles.mapModeIcon, mapDisplayMode === 'markers' && styles.mapModeIconActive]}>📍</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mapModeButton, mapDisplayMode === 'heatmap' && styles.mapModeButtonActive]}
+                onPress={() => setMapDisplayMode('heatmap')}
+              >
+                <Text style={[styles.mapModeIcon, mapDisplayMode === 'heatmap' && styles.mapModeIconActive]}>🔥</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mapModeButton, mapDisplayMode === 'photos' && styles.mapModeButtonActive]}
+                onPress={() => setMapDisplayMode('photos')}
+              >
+                <Text style={[styles.mapModeIcon, mapDisplayMode === 'photos' && styles.mapModeIconActive]}>📷</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* PLACE LIST DRAWER - Only shows when drawer is open */}
@@ -479,6 +522,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
               onToggleFavorite={handleToggleFavorite}
               onToggleMustVisit={handleToggleMustVisit}
               onDeleteItem={handleDeleteItem}
+              onUpdateNotes={handleUpdateNotes}
               userLocation={location ? { latitude: location.coords.latitude, longitude: location.coords.longitude } : null}
               trip={currentTrip}
               onAssignToDay={handleAssignToDay}
@@ -1122,6 +1166,37 @@ const styles = StyleSheet.create({
   mapContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
+  },
+  
+  // Map Display Mode Toggle
+  mapModeToggle: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: '50%',
+    marginLeft: -72, // Half of total width (3 buttons * 48px / 2)
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
+    zIndex: 100,
+  },
+  mapModeButton: {
+    width: 48,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 2,
+    borderRightColor: theme.colors.border,
+  },
+  mapModeButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  mapModeIcon: {
+    fontSize: 20,
+  },
+  mapModeIconActive: {
+    // The icon will look the same but on primary background
   },
   
   // Top Floating Controls - NeoPOP Style

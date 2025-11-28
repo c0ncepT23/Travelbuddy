@@ -49,6 +49,7 @@ interface ItemState {
   deleteItem: (itemId: string) => Promise<void>;
   toggleFavorite: (itemId: string) => Promise<SavedItem>;
   toggleMustVisit: (itemId: string) => Promise<SavedItem>;
+  updateNotes: (itemId: string, notes: string) => Promise<SavedItem>;
   // Day planner actions
   fetchItemsByDay: (tripId: string) => Promise<DayGroup[]>;
   assignItemToDay: (itemId: string, day: number | null) => Promise<SavedItem>;
@@ -247,6 +248,28 @@ export const useItemStore = create<ItemState>((set, get) => ({
       return updatedItem;
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to toggle must-visit');
+    }
+  },
+
+  updateNotes: async (itemId, notes) => {
+    try {
+      const response = await api.patch<{ data: SavedItem }>(`/items/${itemId}/notes`, { notes });
+      const updatedItem = response.data.data;
+      
+      // Update local state
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === itemId ? { ...item, user_notes: updatedItem.user_notes } : item
+        ),
+        currentItem:
+          state.currentItem?.id === itemId
+            ? { ...state.currentItem, user_notes: updatedItem.user_notes }
+            : state.currentItem,
+      }));
+      
+      return updatedItem;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to update notes');
     }
   },
 

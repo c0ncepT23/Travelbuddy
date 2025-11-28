@@ -9,9 +9,13 @@ import {
   Image,
   Dimensions,
   Modal,
+  Share,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { SavedItem, ItemCategory, Trip } from '../types';
 import theme from '../config/theme';
+import { HapticFeedback } from '../utils/haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,6 +30,8 @@ interface PlaceDetailCardProps {
   // Day planner props
   trip?: Trip;
   onAssignToDay?: (place: SavedItem, day: number | null) => void;
+  // Notes
+  onUpdateNotes?: (place: SavedItem, notes: string) => void;
 }
 
 // Generate trip days from start_date to end_date
@@ -101,9 +107,42 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
   onToggleMustVisit,
   trip,
   onAssignToDay,
+  onUpdateNotes,
 }) => {
   const [showDayPicker, setShowDayPicker] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [notesText, setNotesText] = useState(place.user_notes || '');
   const tripDays = generateTripDays(trip);
+
+  // Share place function
+  const handleShare = async () => {
+    try {
+      HapticFeedback.light();
+      const message = `${CATEGORY_EMOJIS[place.category]} ${place.name}\n${
+        place.rating ? `⭐ ${Number(place.rating).toFixed(1)}` : ''
+      }${place.formatted_address ? ` | ${place.formatted_address}` : place.location_name ? ` | ${place.location_name}` : ''}\n${
+        place.description ? `\n${place.description}\n` : ''
+      }\n📍 ${place.location_lat && place.location_lng 
+        ? `https://www.google.com/maps/search/?api=1&query=${place.location_lat},${place.location_lng}`
+        : 'Location not available'}`;
+
+      await Share.share({
+        message,
+        title: place.name,
+      });
+    } catch (error) {
+      console.error('Share error:', error);
+    }
+  };
+
+  // Save notes function
+  const handleSaveNotes = () => {
+    if (onUpdateNotes) {
+      onUpdateNotes(place, notesText);
+    }
+    setShowNotesModal(false);
+    HapticFeedback.light();
+  };
 
   const openInGoogleMaps = () => {
     if (place.location_lat && place.location_lng) {
@@ -152,7 +191,7 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Header Row with Close and Favorite buttons */}
+      {/* Header Row with Close, Favorite, and Share buttons */}
       <View style={styles.headerRow}>
         {onToggleFavorite && (
           <TouchableOpacity 
@@ -164,6 +203,13 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
             </Text>
           </TouchableOpacity>
         )}
+        {/* Share Button */}
+        <TouchableOpacity 
+          style={styles.shareButton}
+          onPress={handleShare}
+        >
+          <Text style={styles.shareIcon}>📤</Text>
+        </TouchableOpacity>
         <View style={styles.headerSpacer} />
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
           <Text style={styles.closeButtonText}>✕</Text>
@@ -253,6 +299,23 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
           <Text style={styles.description}>{place.description}</Text>
         )}
 
+        {/* Personal Notes Section */}
+        <TouchableOpacity 
+          style={styles.notesSection}
+          onPress={() => setShowNotesModal(true)}
+        >
+          <View style={styles.notesSectionHeader}>
+            <Text style={styles.notesSectionIcon}>📝</Text>
+            <Text style={styles.notesSectionTitle}>Your Notes</Text>
+            <Text style={styles.notesSectionEdit}>Edit →</Text>
+          </View>
+          {place.user_notes ? (
+            <Text style={styles.notesText} numberOfLines={3}>{place.user_notes}</Text>
+          ) : (
+            <Text style={styles.notesPlaceholder}>Tap to add personal notes...</Text>
+          )}
+        </TouchableOpacity>
+
         {/* Assign to Day Button */}
         {onAssignToDay && (
           <TouchableOpacity
@@ -337,6 +400,62 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Notes Modal */}
+      <Modal
+        visible={showNotesModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNotesModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowNotesModal(false)}
+        >
+          <View style={styles.notesModal} onStartShouldSetResponder={() => true}>
+            <View style={styles.notesModalHeader}>
+              <Text style={styles.notesModalTitle}>📝 Your Notes</Text>
+              <TouchableOpacity onPress={() => setShowNotesModal(false)}>
+                <Text style={styles.notesModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TextInput
+              style={styles.notesInput}
+              value={notesText}
+              onChangeText={setNotesText}
+              placeholder="Add your personal notes about this place..."
+              placeholderTextColor={theme.colors.textTertiary}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+            />
+            
+            <Text style={styles.notesHint}>
+              💡 Tip: Add reminders like "Ask for extra garlic" or "Bob recommended this!"
+            </Text>
+            
+            <View style={styles.notesModalActions}>
+              <TouchableOpacity
+                style={styles.notesCancelButton}
+                onPress={() => {
+                  setNotesText(place.user_notes || '');
+                  setShowNotesModal(false);
+                }}
+              >
+                <Text style={styles.notesCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.notesSaveButton}
+                onPress={handleSaveNotes}
+              >
+                <Text style={styles.notesSaveText}>Save Notes</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -787,5 +906,135 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
     fontWeight: '800',
     marginLeft: 10,
+  },
+  // Share Button
+  shareButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  shareIcon: {
+    fontSize: 20,
+  },
+  // Notes Section
+  notesSection: {
+    backgroundColor: theme.colors.backgroundAlt,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+  },
+  notesSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notesSectionIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  notesSectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    flex: 1,
+  },
+  notesSectionEdit: {
+    fontSize: 12,
+    color: theme.colors.primary,
+    fontWeight: '700',
+  },
+  notesText: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+  },
+  notesPlaceholder: {
+    fontSize: 14,
+    color: theme.colors.textTertiary,
+    fontStyle: 'italic',
+  },
+  // Notes Modal
+  notesModal: {
+    width: SCREEN_WIDTH * 0.9,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.lg,
+  },
+  notesModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.backgroundAlt,
+  },
+  notesModalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: theme.colors.textPrimary,
+  },
+  notesModalClose: {
+    fontSize: 22,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+  },
+  notesInput: {
+    margin: 16,
+    padding: 14,
+    fontSize: 15,
+    lineHeight: 22,
+    color: theme.colors.textPrimary,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    minHeight: 120,
+  },
+  notesHint: {
+    fontSize: 12,
+    color: theme.colors.textTertiary,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  notesModalActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  notesCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.backgroundAlt,
+  },
+  notesCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  notesSaveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.primary,
+    ...theme.shadows.neopop.sm,
+  },
+  notesSaveText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.textInverse,
   },
 });

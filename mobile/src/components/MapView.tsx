@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Image, Text } from 'react-native';
 import { SavedItem, ItemCategory } from '../types';
 import { GOOGLE_MAPS_API_KEY, CATEGORY_COLORS } from '../config/maps';
 import { createCustomMarkerIcon } from './CustomMarkers';
@@ -18,6 +18,17 @@ const Marker = Platform.OS !== 'web'
   ? require('react-native-maps').Marker
   : null;
 
+const Heatmap = Platform.OS !== 'web'
+  ? require('react-native-maps').Heatmap
+  : null;
+
+const Circle = Platform.OS !== 'web'
+  ? require('react-native-maps').Circle
+  : null;
+
+// Map display mode options
+export type MapDisplayMode = 'markers' | 'heatmap' | 'photos';
+
 interface MapViewProps {
   items: SavedItem[];
   region: {
@@ -29,11 +40,37 @@ interface MapViewProps {
   selectedPlace?: SavedItem | null;
   onMarkerPress?: (item: SavedItem) => void;
   onClusterPress?: (category: ItemCategory, items: SavedItem[]) => void;
+  displayMode?: MapDisplayMode;
 }
 
 export interface MapViewRef {
   animateToRegion: (latitude: number, longitude: number, zoom?: number) => void;
 }
+
+// Helper to get photo URL from place
+const getPlacePhotoUrl = (item: SavedItem): string | null => {
+  if (!item.photos_json) return null;
+  try {
+    const photos = Array.isArray(item.photos_json) 
+      ? item.photos_json 
+      : JSON.parse(item.photos_json);
+    if (photos.length > 0 && photos[0].photo_reference) {
+      return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=80&photoreference=${photos[0].photo_reference}&key=${GOOGLE_MAPS_API_KEY}`;
+    }
+  } catch {}
+  return null;
+};
+
+// Generate heat map data with weights based on concentration
+const generateHeatMapData = (items: SavedItem[]) => {
+  return items
+    .filter(item => item.location_lat && item.location_lng)
+    .map(item => ({
+      latitude: item.location_lat!,
+      longitude: item.location_lng!,
+      weight: 1,
+    }));
+};
 
 export const MapView = forwardRef<MapViewRef, MapViewProps>(({ 
   items, 
@@ -41,6 +78,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
   selectedPlace = null,
   onMarkerPress,
   onClusterPress,
+  displayMode = 'markers',
 }, ref) => {
   const webMapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
@@ -168,6 +206,9 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
   // Always show category clusters
   const clusters = clusterByCategory(items);
+  
+  // Heat map data
+  const heatMapData = generateHeatMapData(items);
 
   return (
     <MapViewNative
@@ -177,8 +218,70 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
       showsUserLocation
       showsMyLocationButton={false}
     >
-      {/* Always show category cluster markers */}
-      {clusters.map((cluster) => (
+      {/* Heat Map Mode */}
+      {displayMode === 'heatmap' && heatMapData.length > 0 && Heatmap && (
+        <Heatmap
+          points={heatMapData}
+          radius={40}
+          opacity={0.7}
+          gradient={{
+            colors: ['#FFEB3B', '#FF9800', '#F44336', '#9C27B0'],
+            startPoints: [0.1, 0.3, 0.6, 1],
+            colorMapSize: 256,
+          }}
+        />
+      )}
+      
+      {/* Heat Map Mode - Show circles as fallback/visual enhancement */}
+      {displayMode === 'heatmap' && Circle && items.map((item) => {
+        if (!item.location_lat || !item.location_lng) return null;
+        return (
+          <Circle
+            key={`heat-${item.id}`}
+            center={{
+              latitude: item.location_lat,
+              longitude: item.location_lng,
+            }}
+            radius={150}
+            strokeColor="rgba(244, 67, 54, 0.5)"
+            fillColor="rgba(244, 67, 54, 0.3)"
+          />
+        );
+      })}
+
+      {/* Photo Overlay Mode - Show photos as markers */}
+      {displayMode === 'photos' && items.map((item) => {
+        if (!item.location_lat || !item.location_lng) return null;
+        const photoUrl = getPlacePhotoUrl(item);
+        
+        return (
+          <Marker
+            key={`photo-${item.id}`}
+            coordinate={{
+              latitude: item.location_lat,
+              longitude: item.location_lng,
+            }}
+            onPress={() => onMarkerPress && onMarkerPress(item)}
+          >
+            <View style={styles.photoMarker}>
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.photoMarkerImage} />
+              ) : (
+                <View style={styles.photoMarkerPlaceholder}>
+                  <Text style={styles.photoMarkerEmoji}>
+                    {item.category === 'food' ? '🍽️' : 
+                     item.category === 'place' ? '📍' : 
+                     item.category === 'shopping' ? '🛍️' : '✨'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Marker>
+        );
+      })}
+
+      {/* Standard Marker Mode - Show category cluster markers */}
+      {displayMode === 'markers' && clusters.map((cluster) => (
         <Marker
           key={`cluster-${cluster.category}`}
           coordinate={{
@@ -195,7 +298,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
         </Marker>
       ))}
 
-      {/* Show selected place marker on top of clusters */}
+      {/* Show selected place marker on top of clusters (all modes) */}
       {selectedPlace && selectedPlace.location_lat && selectedPlace.location_lng && (
         <CustomMapMarker
           key={`selected-${selectedPlace.id}`}
@@ -210,5 +313,35 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
 const styles = StyleSheet.create({
   map: {
     flex: 1,
+  },
+  // Photo marker styles
+  photoMarker: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  photoMarkerImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
+  },
+  photoMarkerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#E5E7EB',
+  },
+  photoMarkerEmoji: {
+    fontSize: 24,
   },
 });

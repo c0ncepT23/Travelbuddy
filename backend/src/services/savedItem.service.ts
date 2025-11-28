@@ -331,6 +331,38 @@ export class SavedItemService {
   }
 
   /**
+   * Update user notes for an item
+   */
+  static async updateNotes(userId: string, itemId: string, notes: string): Promise<SavedItem> {
+    try {
+      const item = await SavedItemModel.findById(itemId);
+      if (!item) {
+        throw new Error('Item not found');
+      }
+
+      // Verify user is member of trip
+      const isMember = await TripGroupModel.isMember(item.trip_group_id, userId);
+      if (!isMember) {
+        throw new Error('Access denied');
+      }
+
+      const updatedItem = await SavedItemModel.update(itemId, {
+        user_notes: notes,
+      });
+
+      if (!updatedItem) {
+        throw new Error('Failed to update notes');
+      }
+
+      logger.info(`Item ${itemId} notes updated by user ${userId}`);
+      return updatedItem;
+    } catch (error: any) {
+      logger.error('Error updating notes:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get items grouped by day for day planner view
    */
   static async getItemsByDay(
