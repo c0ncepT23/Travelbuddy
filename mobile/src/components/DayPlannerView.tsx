@@ -253,6 +253,9 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
                   <Text style={styles.ratingText}>⭐ {Number(item.rating).toFixed(1)}</Text>
                 )}
               </View>
+              {item.area_name && (
+                <Text style={styles.placeArea}>📍 {item.area_name}</Text>
+              )}
             </View>
 
             {/* Directions Button */}
@@ -444,7 +447,10 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
                     )}
                     <View style={styles.addPlaceItemInfo}>
                       <Text style={styles.addPlaceItemName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={styles.addPlaceItemCategory}>{getCategoryLabel(item.category)}</Text>
+                      <Text style={styles.addPlaceItemCategory}>
+                        {getCategoryLabel(item.category)}
+                        {item.area_name ? ` in ${item.area_name}` : ''}
+                      </Text>
                     </View>
                     <View style={styles.addPlaceItemAction}>
                       <Text style={styles.addPlaceItemActionText}>+ Add</Text>
@@ -650,6 +656,11 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 12,
     color: '#64748B',
+  },
+  placeArea: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 4,
   },
   directionsButton: {
     backgroundColor: theme.colors.primary,
