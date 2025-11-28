@@ -202,101 +202,6 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
     }
   };
 
-  // Route Optimization - Nearest neighbor algorithm
-  const optimizeRoute = async () => {
-    if (currentDayItems.length < 2) {
-      Alert.alert('Not Enough Places', 'Add at least 2 places to optimize the route.');
-      return;
-    }
-
-    HapticFeedback.medium();
-
-    // Simple nearest neighbor algorithm
-    const itemsWithCoords = currentDayItems.filter(
-      item => item.location_lat && item.location_lng
-    );
-
-    if (itemsWithCoords.length < 2) {
-      Alert.alert('Missing Locations', 'Not enough places have coordinates for optimization.');
-      return;
-    }
-
-    // Calculate distance between two points
-    const distance = (a: SavedItem, b: SavedItem): number => {
-      if (!a.location_lat || !a.location_lng || !b.location_lat || !b.location_lng) return Infinity;
-      const R = 6371; // Earth's radius in km
-      const dLat = (b.location_lat - a.location_lat) * Math.PI / 180;
-      const dLng = (b.location_lng - a.location_lng) * Math.PI / 180;
-      const lat1 = a.location_lat * Math.PI / 180;
-      const lat2 = b.location_lat * Math.PI / 180;
-      const x = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1) * Math.cos(lat2) *
-                Math.sin(dLng/2) * Math.sin(dLng/2);
-      const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-      return R * c;
-    };
-
-    // Nearest neighbor algorithm
-    const optimized: SavedItem[] = [];
-    const remaining = [...itemsWithCoords];
-    
-    // Start from first item
-    optimized.push(remaining.shift()!);
-    
-    while (remaining.length > 0) {
-      const current = optimized[optimized.length - 1];
-      let nearestIdx = 0;
-      let nearestDist = Infinity;
-      
-      for (let i = 0; i < remaining.length; i++) {
-        const dist = distance(current, remaining[i]);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestIdx = i;
-        }
-      }
-      
-      optimized.push(remaining.splice(nearestIdx, 1)[0]);
-    }
-
-    // Calculate time saved (rough estimate)
-    let originalDist = 0;
-    let optimizedDist = 0;
-    
-    for (let i = 0; i < itemsWithCoords.length - 1; i++) {
-      originalDist += distance(currentDayItems[i], currentDayItems[i + 1]);
-      optimizedDist += distance(optimized[i], optimized[i + 1]);
-    }
-    
-    const savedKm = Math.max(0, originalDist - optimizedDist);
-    const savedMinutes = Math.round((savedKm / 5) * 60); // Assuming 5km/h walking
-
-    // Show confirmation dialog
-    Alert.alert(
-      '🗺️ Route Optimized!',
-      savedMinutes > 0 
-        ? `Reordered ${optimized.length} places to minimize travel.\n\nEstimated savings: ~${savedMinutes} min walking time!`
-        : `Reordered ${optimized.length} places for optimal route.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Apply', 
-          onPress: async () => {
-            try {
-              const itemIds = optimized.map(item => item.id);
-              await reorderItemsInDay(tripId, selectedDay, itemIds);
-              await fetchItemsByDay(tripId);
-              HapticFeedback.success();
-            } catch (error) {
-              console.error('Failed to apply optimized route:', error);
-              Alert.alert('Error', 'Failed to apply optimized route');
-            }
-          }
-        },
-      ]
-    );
-  };
-
   const renderPlaceCard = ({ item, drag, isActive, getIndex }: RenderItemParams<SavedItem>) => {
     const index = getIndex() ?? 0;
     const nextItem = currentDayItems[index + 1];
@@ -453,25 +358,13 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
 
       {/* Selected Day Header */}
       <View style={styles.dayHeader}>
-        <View style={styles.dayHeaderContent}>
-          <Text style={styles.dayHeaderTitle}>
-            {selectedDay ? `Day ${selectedDay}` : 'Unassigned Places'}
-          </Text>
-          <Text style={styles.dayHeaderSubtitle}>
-            {currentDayItems.length} {currentDayItems.length === 1 ? 'place' : 'places'}
-            {selectedDay && tripDays[selectedDay - 1] && ` • ${formatDate(tripDays[selectedDay - 1].date)}`}
-          </Text>
-        </View>
-        {/* Route Optimization Button */}
-        {selectedDay !== null && currentDayItems.length >= 2 && (
-          <TouchableOpacity
-            style={styles.optimizeButton}
-            onPress={optimizeRoute}
-          >
-            <Text style={styles.optimizeIcon}>🗺️</Text>
-            <Text style={styles.optimizeText}>Optimize</Text>
-          </TouchableOpacity>
-        )}
+        <Text style={styles.dayHeaderTitle}>
+          {selectedDay ? `Day ${selectedDay}` : 'Unassigned Places'}
+        </Text>
+        <Text style={styles.dayHeaderSubtitle}>
+          {currentDayItems.length} {currentDayItems.length === 1 ? 'place' : 'places'}
+          {selectedDay && tripDays[selectedDay - 1] && ` • ${formatDate(tripDays[selectedDay - 1].date)}`}
+        </Text>
       </View>
 
       {/* Places List */}
@@ -666,17 +559,11 @@ const styles = StyleSheet.create({
 
   // Day Header
   dayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-  },
-  dayHeaderContent: {
-    flex: 1,
   },
   dayHeaderTitle: {
     fontSize: 22,
@@ -687,23 +574,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     marginTop: 4,
-  },
-  optimizeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  optimizeIcon: {
-    fontSize: 16,
-  },
-  optimizeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
 
   // Place Card

@@ -484,25 +484,25 @@ export default function TripDetailScreen({ route, navigation }: any) {
               onClusterPress={handleClusterPress}
             />
             
-            {/* Map Display Mode Toggle */}
+            {/* Map Display Mode Toggle - Bottom left of map */}
             <View style={styles.mapModeToggle}>
               <TouchableOpacity
                 style={[styles.mapModeButton, mapDisplayMode === 'markers' && styles.mapModeButtonActive]}
                 onPress={() => setMapDisplayMode('markers')}
               >
-                <Text style={[styles.mapModeIcon, mapDisplayMode === 'markers' && styles.mapModeIconActive]}>📍</Text>
+                <Text style={styles.mapModeIcon}>📍</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.mapModeButton, mapDisplayMode === 'heatmap' && styles.mapModeButtonActive]}
                 onPress={() => setMapDisplayMode('heatmap')}
               >
-                <Text style={[styles.mapModeIcon, mapDisplayMode === 'heatmap' && styles.mapModeIconActive]}>🔥</Text>
+                <Text style={styles.mapModeIcon}>🔥</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.mapModeButton, mapDisplayMode === 'photos' && styles.mapModeButtonActive]}
                 onPress={() => setMapDisplayMode('photos')}
               >
-                <Text style={[styles.mapModeIcon, mapDisplayMode === 'photos' && styles.mapModeIconActive]}>📷</Text>
+                <Text style={styles.mapModeIcon}>📷</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -723,8 +723,8 @@ export default function TripDetailScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* GROUP CHAT BUTTON (FAB) - Only in map view */}
-      {viewMode === 'map' && (
+      {/* GROUP CHAT BUTTON (FAB) - Only in map view, hidden when expanded */}
+      {viewMode === 'map' && !isExpanded && (
         <MotiView
           from={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -1168,12 +1168,11 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   
-  // Map Display Mode Toggle
+  // Map Display Mode Toggle - Bottom left above sheet
   mapModeToggle: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: '50%',
-    marginLeft: -72, // Half of total width (3 buttons * 48px / 2)
+    bottom: BOTTOM_SHEET_MIN_HEIGHT + 20,
+    left: 16,
     flexDirection: 'row',
     backgroundColor: theme.colors.surface,
     borderWidth: 3,
@@ -1182,8 +1181,8 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   mapModeButton: {
-    width: 48,
-    height: 44,
+    width: 44,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 2,
@@ -1193,10 +1192,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   mapModeIcon: {
-    fontSize: 20,
-  },
-  mapModeIconActive: {
-    // The icon will look the same but on primary background
+    fontSize: 18,
   },
   
   // Top Floating Controls - NeoPOP Style
