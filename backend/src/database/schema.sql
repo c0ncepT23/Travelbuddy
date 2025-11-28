@@ -89,7 +89,13 @@ CREATE TABLE IF NOT EXISTS saved_items (
     opening_hours_json JSONB DEFAULT '{}'::jsonb,
     location_confidence VARCHAR(20) DEFAULT 'low',
     location_confidence_score DECIMAL(5, 4) DEFAULT 0,
-    source_title VARCHAR(500)
+    source_title VARCHAR(500),
+    -- User preference fields
+    is_favorite BOOLEAN DEFAULT FALSE,
+    is_must_visit BOOLEAN DEFAULT FALSE,
+    -- Day planner fields
+    planned_day INTEGER,
+    day_order INTEGER DEFAULT 0
 );
 
 CREATE INDEX idx_saved_items_trip_group ON saved_items(trip_group_id);
@@ -98,6 +104,10 @@ CREATE INDEX idx_saved_items_status ON saved_items(status);
 CREATE INDEX idx_saved_items_location ON saved_items(location_lat, location_lng);
 CREATE INDEX idx_saved_items_area_name ON saved_items(area_name);
 CREATE INDEX idx_saved_items_google_place_id ON saved_items(google_place_id);
+CREATE INDEX idx_saved_items_is_favorite ON saved_items(is_favorite) WHERE is_favorite = TRUE;
+CREATE INDEX idx_saved_items_is_must_visit ON saved_items(is_must_visit) WHERE is_must_visit = TRUE;
+CREATE INDEX idx_saved_items_planned_day ON saved_items(trip_group_id, planned_day);
+CREATE INDEX idx_saved_items_day_order ON saved_items(trip_group_id, planned_day, day_order);
 
 -- Item Visits Table
 CREATE TABLE IF NOT EXISTS item_visits (

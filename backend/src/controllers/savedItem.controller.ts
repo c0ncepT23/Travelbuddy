@@ -263,5 +263,118 @@ export class SavedItemController {
       });
     }
   }
+
+  /**
+   * Get items grouped by day for day planner view
+   */
+  static async getItemsByDay(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { tripId } = req.params;
+      const groupedItems = await SavedItemService.getItemsByDay(req.user.id, tripId);
+
+      res.status(200).json({
+        success: true,
+        data: groupedItems,
+      });
+    } catch (error: any) {
+      logger.error('Get items by day error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to fetch items by day',
+      });
+    }
+  }
+
+  /**
+   * Assign item to a specific day
+   */
+  static async assignToDay(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { id } = req.params;
+      const { day } = req.body;
+
+      // day can be null (unassign) or a positive integer
+      const dayNumber = day === null ? null : parseInt(day, 10);
+      
+      if (day !== null && (isNaN(dayNumber!) || dayNumber! < 1)) {
+        res.status(400).json({
+          success: false,
+          error: 'Day must be null or a positive integer',
+        });
+        return;
+      }
+
+      const item = await SavedItemService.assignItemToDay(req.user.id, id, dayNumber);
+
+      res.status(200).json({
+        success: true,
+        data: item,
+        message: dayNumber === null ? 'Item unassigned from day' : `Item assigned to Day ${dayNumber}`,
+      });
+    } catch (error: any) {
+      logger.error('Assign to day error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to assign item to day',
+      });
+    }
+  }
+
+  /**
+   * Reorder items within a day (for drag-drop)
+   */
+  static async reorderInDay(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { tripId } = req.params;
+      const { day, itemIds } = req.body;
+
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: 'itemIds must be a non-empty array',
+        });
+        return;
+      }
+
+      // day can be null (unassigned section) or a positive integer
+      const dayNumber = day === null ? null : parseInt(day, 10);
+      
+      if (day !== null && (isNaN(dayNumber!) || dayNumber! < 1)) {
+        res.status(400).json({
+          success: false,
+          error: 'Day must be null or a positive integer',
+        });
+        return;
+      }
+
+      await SavedItemService.reorderItemsInDay(req.user.id, tripId, dayNumber, itemIds);
+
+      res.status(200).json({
+        success: true,
+        message: 'Items reordered successfully',
+      });
+    } catch (error: any) {
+      logger.error('Reorder items error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to reorder items',
+      });
+    }
+  }
 }
 

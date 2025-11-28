@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   Linking,
   Image,
   Dimensions,
+  Modal,
 } from 'react-native';
-import { SavedItem, ItemCategory } from '../types';
+import { SavedItem, ItemCategory, Trip } from '../types';
 import theme from '../config/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -22,7 +23,45 @@ interface PlaceDetailCardProps {
   addedByName?: string;
   onToggleFavorite?: (place: SavedItem) => void;
   onToggleMustVisit?: (place: SavedItem) => void;
+  // Day planner props
+  trip?: Trip;
+  onAssignToDay?: (place: SavedItem, day: number | null) => void;
 }
+
+// Generate trip days from start_date to end_date
+const generateTripDays = (trip: Trip | undefined): { dayNumber: number; date: Date }[] => {
+  const days: { dayNumber: number; date: Date }[] = [];
+  
+  if (trip?.start_date && trip?.end_date) {
+    const startDate = new Date(trip.start_date);
+    const endDate = new Date(trip.end_date);
+    
+    let currentDate = new Date(startDate);
+    let dayNumber = 1;
+    
+    while (currentDate <= endDate) {
+      days.push({ dayNumber, date: new Date(currentDate) });
+      currentDate.setDate(currentDate.getDate() + 1);
+      dayNumber++;
+    }
+  } else {
+    // If no dates set, create 7 default days
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() + i);
+      days.push({ dayNumber: i + 1, date });
+    }
+  }
+  
+  return days;
+};
+
+// Format date for display
+const formatDate = (date: Date): string => {
+  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  return date.toLocaleDateString('en-US', options);
+};
 
 const CATEGORY_EMOJIS: Record<ItemCategory, string> = {
   [ItemCategory.FOOD]: '🍽️',
@@ -60,7 +99,12 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
   addedByName = 'Someone',
   onToggleFavorite,
   onToggleMustVisit,
+  trip,
+  onAssignToDay,
 }) => {
+  const [showDayPicker, setShowDayPicker] = useState(false);
+  const tripDays = generateTripDays(trip);
+
   const openInGoogleMaps = () => {
     if (place.location_lat && place.location_lng) {
       const url = `https://www.google.com/maps/search/?api=1&query=${place.location_lat},${place.location_lng}`;
@@ -209,9 +253,93 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
           <Text style={styles.description}>{place.description}</Text>
         )}
 
+        {/* Assign to Day Button */}
+        {onAssignToDay && (
+          <TouchableOpacity
+            style={styles.assignDayButton}
+            onPress={() => setShowDayPicker(true)}
+          >
+            <Text style={styles.assignDayIcon}>📅</Text>
+            <View style={styles.assignDayTextContainer}>
+              <Text style={styles.assignDayLabel}>
+                {place.planned_day ? `Day ${place.planned_day}` : 'Not scheduled'}
+              </Text>
+              <Text style={styles.assignDayHint}>Tap to assign to a day</Text>
+            </View>
+            <Text style={styles.assignDayArrow}>▼</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Added By */}
         <Text style={styles.addedBy}>Added by {addedByName}</Text>
       </ScrollView>
+
+      {/* Day Picker Modal */}
+      <Modal
+        visible={showDayPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDayPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDayPicker(false)}
+        >
+          <View style={styles.dayPickerModal}>
+            <View style={styles.dayPickerHeader}>
+              <Text style={styles.dayPickerTitle}>📅 Assign to Day</Text>
+              <TouchableOpacity onPress={() => setShowDayPicker(false)}>
+                <Text style={styles.dayPickerClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.dayPickerList}>
+              {/* Unassign Option */}
+              <TouchableOpacity
+                style={[
+                  styles.dayPickerItem,
+                  place.planned_day === null && styles.dayPickerItemActive,
+                ]}
+                onPress={() => {
+                  onAssignToDay?.(place, null);
+                  setShowDayPicker(false);
+                }}
+              >
+                <Text style={styles.dayPickerItemIcon}>📦</Text>
+                <Text style={styles.dayPickerItemText}>Unassigned</Text>
+                {place.planned_day === null && (
+                  <Text style={styles.dayPickerItemCheck}>✓</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Day Options */}
+              {tripDays.map(({ dayNumber, date }) => (
+                <TouchableOpacity
+                  key={dayNumber}
+                  style={[
+                    styles.dayPickerItem,
+                    place.planned_day === dayNumber && styles.dayPickerItemActive,
+                  ]}
+                  onPress={() => {
+                    onAssignToDay?.(place, dayNumber);
+                    setShowDayPicker(false);
+                  }}
+                >
+                  <Text style={styles.dayPickerItemIcon}>📅</Text>
+                  <View style={styles.dayPickerItemTextContainer}>
+                    <Text style={styles.dayPickerItemText}>Day {dayNumber}</Text>
+                    <Text style={styles.dayPickerItemDate}>{formatDate(date)}</Text>
+                  </View>
+                  {place.planned_day === dayNumber && (
+                    <Text style={styles.dayPickerItemCheck}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Action Buttons - Matching reference design */}
       <View style={styles.actionBar}>
@@ -550,5 +678,114 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
     color: theme.colors.success,
+  },
+  
+  // Assign to Day Button
+  assignDayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.backgroundAlt,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.sm,
+  },
+  assignDayIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  assignDayTextContainer: {
+    flex: 1,
+  },
+  assignDayLabel: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+  },
+  assignDayHint: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  assignDayArrow: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginLeft: 8,
+  },
+  
+  // Day Picker Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayPickerModal: {
+    width: SCREEN_WIDTH * 0.85,
+    maxHeight: '70%',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
+    ...theme.shadows.neopop.lg,
+  },
+  dayPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.backgroundAlt,
+  },
+  dayPickerTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: theme.colors.textPrimary,
+  },
+  dayPickerClose: {
+    fontSize: 22,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+  },
+  dayPickerList: {
+    maxHeight: 350,
+  },
+  dayPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dayPickerItemActive: {
+    backgroundColor: theme.colors.primary + '15',
+  },
+  dayPickerItemIcon: {
+    fontSize: 20,
+    marginRight: 14,
+  },
+  dayPickerItemTextContainer: {
+    flex: 1,
+  },
+  dayPickerItemText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  dayPickerItemDate: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  dayPickerItemCheck: {
+    fontSize: 18,
+    color: theme.colors.success,
+    fontWeight: '800',
+    marginLeft: 10,
   },
 });

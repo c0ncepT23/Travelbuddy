@@ -67,6 +67,23 @@ router.patch(
   SavedItemController.toggleMustVisit
 );
 
+// Assign item to a specific day (day planner)
+router.patch(
+  '/:id/assign-day',
+  validate([
+    param('id').isUUID().withMessage('Invalid item ID'),
+    body('day').custom((value) => {
+      if (value === null) return true;
+      const num = parseInt(value, 10);
+      if (isNaN(num) || num < 1) {
+        throw new Error('Day must be null or a positive integer');
+      }
+      return true;
+    }),
+  ]),
+  SavedItemController.assignToDay
+);
+
 // Delete item
 router.delete(
   '/:id',

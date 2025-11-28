@@ -181,6 +181,16 @@ export class SavedItemModel {
       values.push(updates.is_must_visit);
     }
 
+    if (updates.planned_day !== undefined) {
+      fields.push(`planned_day = $${paramCount++}`);
+      values.push(updates.planned_day);
+    }
+
+    if (updates.day_order !== undefined) {
+      fields.push(`day_order = $${paramCount++}`);
+      values.push(updates.day_order);
+    }
+
     if (fields.length === 0) {
       return null;
     }
@@ -332,6 +342,109 @@ export class SavedItemModel {
 
     const result = await query(queryText, params);
     return result.rows;
+  }
+
+  /**
+   * Get items grouped by planned day
+   */
+  static async findByDay(
+    tripGroupId: string
+  ): Promise<{ day: number | null; items: SavedItem[] }[]> {
+    const result = await query(
+      `SELECT * FROM saved_items 
+       WHERE trip_group_id = $1
+       ORDER BY planned_day NULLS LAST, day_order ASC, created_at DESC`,
+      [tripGroupId]
+    );
+
+    // Convert string lat/lng to numbers and group by day
+    const items = result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
+
+    // Group items by day
+    const dayMap = new Map<number | null, SavedItem[]>();
+    
+    for (const item of items) {
+      const day = item.planned_day;
+      if (!dayMap.has(day)) {
+        dayMap.set(day, []);
+      }
+      dayMap.get(day)!.push(item);
+    }
+
+    // Convert to array and sort (assigned days first, then unassigned)
+    const grouped = Array.from(dayMap.entries())
+      .map(([day, items]) => ({ day, items }))
+      .sort((a, b) => {
+        if (a.day === null) return 1;
+        if (b.day === null) return -1;
+        return a.day - b.day;
+      });
+
+    return grouped;
+  }
+
+  /**
+   * Assign item to a specific day
+   */
+  static async assignToDay(
+    itemId: string,
+    day: number | null,
+    order?: number
+  ): Promise<SavedItem | null> {
+    // If no order specified, put it at the end of the day
+    let dayOrder = order;
+    if (dayOrder === undefined && day !== null) {
+      const item = await this.findById(itemId);
+      if (item) {
+        const result = await query(
+          `SELECT COALESCE(MAX(day_order), -1) + 1 as next_order 
+           FROM saved_items 
+           WHERE trip_group_id = $1 AND planned_day = $2`,
+          [item.trip_group_id, day]
+        );
+        dayOrder = result.rows[0]?.next_order || 0;
+      }
+    }
+
+    const result = await query(
+      `UPDATE saved_items 
+       SET planned_day = $1, day_order = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [day, dayOrder ?? 0, itemId]
+    );
+
+    const row = result.rows[0];
+    if (!row) return null;
+
+    return {
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    };
+  }
+
+  /**
+   * Reorder items within a day (for drag-drop)
+   */
+  static async reorderInDay(
+    tripGroupId: string,
+    day: number | null,
+    itemIds: string[]
+  ): Promise<void> {
+    // Update each item's order based on its position in the array
+    for (let i = 0; i < itemIds.length; i++) {
+      await query(
+        `UPDATE saved_items 
+         SET day_order = $1, planned_day = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3 AND trip_group_id = $4`,
+        [i, day, itemIds[i], tripGroupId]
+      );
+    }
   }
 }
 

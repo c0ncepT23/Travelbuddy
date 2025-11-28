@@ -329,5 +329,83 @@ export class SavedItemService {
       throw error;
     }
   }
+
+  /**
+   * Get items grouped by day for day planner view
+   */
+  static async getItemsByDay(
+    userId: string,
+    tripGroupId: string
+  ): Promise<{ day: number | null; items: SavedItem[] }[]> {
+    try {
+      // Verify user is member of trip
+      const isMember = await TripGroupModel.isMember(tripGroupId, userId);
+      if (!isMember) {
+        throw new Error('Access denied');
+      }
+
+      return await SavedItemModel.findByDay(tripGroupId);
+    } catch (error: any) {
+      logger.error('Error fetching items by day:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Assign item to a specific day
+   */
+  static async assignItemToDay(
+    userId: string,
+    itemId: string,
+    day: number | null
+  ): Promise<SavedItem> {
+    try {
+      const item = await SavedItemModel.findById(itemId);
+      if (!item) {
+        throw new Error('Item not found');
+      }
+
+      // Verify user is member of trip
+      const isMember = await TripGroupModel.isMember(item.trip_group_id, userId);
+      if (!isMember) {
+        throw new Error('Access denied');
+      }
+
+      const updatedItem = await SavedItemModel.assignToDay(itemId, day);
+      if (!updatedItem) {
+        throw new Error('Failed to assign item to day');
+      }
+
+      logger.info(`Item ${itemId} assigned to day ${day} by user ${userId}`);
+      return updatedItem;
+    } catch (error: any) {
+      logger.error('Error assigning item to day:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reorder items within a day (for drag-drop)
+   */
+  static async reorderItemsInDay(
+    userId: string,
+    tripGroupId: string,
+    day: number | null,
+    itemIds: string[]
+  ): Promise<void> {
+    try {
+      // Verify user is member of trip
+      const isMember = await TripGroupModel.isMember(tripGroupId, userId);
+      if (!isMember) {
+        throw new Error('Access denied');
+      }
+
+      await SavedItemModel.reorderInDay(tripGroupId, day, itemIds);
+      logger.info(`Items reordered in day ${day} for trip ${tripGroupId} by user ${userId}`);
+    } catch (error: any) {
+      logger.error('Error reordering items:', error);
+      throw error;
+    }
+  }
 }
 

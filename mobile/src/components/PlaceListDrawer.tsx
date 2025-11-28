@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import * as Location from 'expo-location';
-import { SavedItem, ItemCategory } from '../types';
+import { SavedItem, ItemCategory, Trip } from '../types';
 import { PlaceDetailCard } from './PlaceDetailCard';
 import { StarRating } from './StarRating';
 import theme from '../config/theme';
@@ -35,6 +35,9 @@ interface PlaceListDrawerProps {
   onToggleMustVisit?: (place: SavedItem) => void;
   onDeleteItem?: (itemId: string) => void;
   userLocation?: { latitude: number; longitude: number } | null;
+  // Day planner props
+  trip?: Trip;
+  onAssignToDay?: (place: SavedItem, day: number | null) => void;
 }
 
 const CATEGORY_EMOJIS: Record<ItemCategory, string> = {
@@ -69,6 +72,8 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
   onToggleMustVisit,
   onDeleteItem,
   userLocation,
+  trip,
+  onAssignToDay,
 }) => {
   const drawerHeight = selectedPlace ? DRAWER_DETAIL_HEIGHT : DRAWER_LIST_HEIGHT;
   const [nearMeFilter, setNearMeFilter] = useState(false);
@@ -224,6 +229,8 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
           addedByName={getUserName ? getUserName(selectedPlace.added_by) : 'Someone'}
           onToggleFavorite={onToggleFavorite}
           onToggleMustVisit={onToggleMustVisit}
+          trip={trip}
+          onAssignToDay={onAssignToDay}
         />
       </View>
     );

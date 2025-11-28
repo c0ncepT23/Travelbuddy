@@ -158,6 +158,9 @@ export interface SavedItem {
   // User preference fields
   is_favorite?: boolean;
   is_must_visit?: boolean;
+  // Day planner fields
+  planned_day?: number | null;  // Day number (1 = Day 1, null = Unassigned)
+  day_order?: number;           // Order within the day
 }
 
 // Check-in types
@@ -246,6 +249,12 @@ export interface TripStats {
   total_time_minutes?: number;
   first_checkin?: string;
   last_checkin?: string;
+}
+
+// Day Planner Types
+export interface DayGroup {
+  day: number | null;  // null = Unassigned
+  items: SavedItem[];
 }
 
 // API Response Types

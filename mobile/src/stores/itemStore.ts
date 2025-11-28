@@ -7,6 +7,7 @@ import {
   TagFilter,
   TagFacet,
   TagGroupItems,
+  DayGroup,
 } from '../types';
 
 interface ItemState {
@@ -15,6 +16,7 @@ interface ItemState {
   isLoading: boolean;
   tagFacets: TagFacet[];
   groupedItems: TagGroupItems[];
+  dayGroups: DayGroup[];  // For day planner view
   
   // Actions
   fetchTripItems: (
@@ -47,6 +49,10 @@ interface ItemState {
   deleteItem: (itemId: string) => Promise<void>;
   toggleFavorite: (itemId: string) => Promise<SavedItem>;
   toggleMustVisit: (itemId: string) => Promise<SavedItem>;
+  // Day planner actions
+  fetchItemsByDay: (tripId: string) => Promise<DayGroup[]>;
+  assignItemToDay: (itemId: string, day: number | null) => Promise<SavedItem>;
+  reorderItemsInDay: (tripId: string, day: number | null, itemIds: string[]) => Promise<void>;
   setItems: (items: SavedItem[]) => void;
   clearItems: () => void;
 }
@@ -57,6 +63,7 @@ export const useItemStore = create<ItemState>((set, get) => ({
   isLoading: false,
   tagFacets: [],
   groupedItems: [],
+  dayGroups: [],
 
   fetchTripItems: async (tripId, filters) => {
     set({ isLoading: true });
@@ -243,11 +250,79 @@ export const useItemStore = create<ItemState>((set, get) => ({
     }
   },
 
+  // Day planner actions
+  fetchItemsByDay: async (tripId) => {
+    set({ isLoading: true });
+    try {
+      const response = await api.get<{ data: DayGroup[] }>(`/trips/${tripId}/items/by-day`);
+      const dayGroups = response.data.data;
+      
+      console.log(`[ItemStore] Fetched ${dayGroups.length} day groups`);
+      
+      set({ dayGroups, isLoading: false });
+      return dayGroups;
+    } catch (error) {
+      console.error('Fetch items by day error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  assignItemToDay: async (itemId, day) => {
+    try {
+      const response = await api.patch<{ data: SavedItem }>(`/items/${itemId}/assign-day`, { day });
+      const updatedItem = response.data.data;
+      
+      // Update local items state
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === itemId 
+            ? { ...item, planned_day: updatedItem.planned_day, day_order: updatedItem.day_order } 
+            : item
+        ),
+        currentItem:
+          state.currentItem?.id === itemId
+            ? { ...state.currentItem, planned_day: updatedItem.planned_day, day_order: updatedItem.day_order }
+            : state.currentItem,
+      }));
+      
+      return updatedItem;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to assign item to day');
+    }
+  },
+
+  reorderItemsInDay: async (tripId, day, itemIds) => {
+    try {
+      await api.patch(`/trips/${tripId}/items/reorder`, { day, itemIds });
+      
+      // Update local dayGroups state with new order
+      set((state) => {
+        const newDayGroups = state.dayGroups.map((group) => {
+          if (group.day === day) {
+            // Reorder items based on itemIds array
+            const reorderedItems = itemIds
+              .map((id, index) => {
+                const item = group.items.find((i) => i.id === id);
+                return item ? { ...item, day_order: index, planned_day: day } : null;
+              })
+              .filter((item): item is SavedItem => item !== null);
+            return { ...group, items: reorderedItems };
+          }
+          return group;
+        });
+        return { dayGroups: newDayGroups };
+      });
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to reorder items');
+    }
+  },
+
   setItems: (items) => {
     set({ items });
   },
 
   clearItems: () => {
-    set({ items: [], currentItem: null, tagFacets: [], groupedItems: [] });
+    set({ items: [], currentItem: null, tagFacets: [], groupedItems: [], dayGroups: [] });
   },
 }));

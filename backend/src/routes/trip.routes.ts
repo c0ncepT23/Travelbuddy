@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { param, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { SavedItemController } from '../controllers/savedItem.controller';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validation';
@@ -8,6 +8,15 @@ const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// Get items grouped by day (for day planner view) - MUST be before /:tripId/items
+router.get(
+  '/:tripId/items/by-day',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+  ]),
+  SavedItemController.getItemsByDay
+);
 
 // Get all items for a trip
 router.get(
@@ -18,6 +27,25 @@ router.get(
     query('status').optional().isIn(['saved', 'visited']),
   ]),
   SavedItemController.getTripItems
+);
+
+// Reorder items within a day (for drag-drop)
+router.patch(
+  '/:tripId/items/reorder',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+    body('day').custom((value) => {
+      if (value === null) return true;
+      const num = parseInt(value, 10);
+      if (isNaN(num) || num < 1) {
+        throw new Error('Day must be null or a positive integer');
+      }
+      return true;
+    }),
+    body('itemIds').isArray({ min: 1 }).withMessage('itemIds must be a non-empty array'),
+    body('itemIds.*').isUUID().withMessage('Each itemId must be a valid UUID'),
+  ]),
+  SavedItemController.reorderInDay
 );
 
 // Search items in a trip

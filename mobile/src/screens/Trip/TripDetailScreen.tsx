@@ -26,6 +26,7 @@ import { MapView, MapViewRef } from '../../components/MapView';
 import { PlaceDetailCard } from '../../components/PlaceDetailCard';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
 import { EnhancedCheckInModal } from '../../components/EnhancedCheckInModal';
+import { DayPlannerView } from '../../components/DayPlannerView';
 import api from '../../config/api';
 import { ItemCategory } from '../../types';
 import { MotiView } from 'moti';
@@ -48,7 +49,7 @@ const BOTTOM_SHEET_MAX_HEIGHT = screenHeight * 0.75;
 export default function TripDetailScreen({ route, navigation }: any) {
   const { tripId } = route.params;
   const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
-  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem } = useItemStore();
+  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, fetchItemsByDay } = useItemStore();
   const { sendQuery, getMessages, isLoading: chatLoading } = useCompanionStore();
   const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking, location } = useLocationStore();
   const { addXP, level, getProgress, getLevelTitle } = useXPStore();
@@ -67,6 +68,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [checkInPlace, setCheckInPlace] = useState<any>(null);
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'map' | 'planner'>('map');
   const confettiRef = React.useRef<any>(null);
   const mapRef = React.useRef<MapViewRef>(null);
   const [mapRegion, setMapRegion] = useState({
@@ -253,6 +255,40 @@ export default function TripDetailScreen({ route, navigation }: any) {
     );
   };
 
+  const handleAssignToDay = async (place: any, day: number | null) => {
+    try {
+      HapticFeedback.medium();
+      const updatedPlace = await assignItemToDay(place.id, day);
+      
+      // Update selected place if it's currently showing
+      if (selectedPlace?.id === place.id) {
+        setSelectedPlace(updatedPlace);
+      }
+      
+      // Update drawer items
+      setDrawerItems(prev => prev.map(item => 
+        item.id === place.id ? { ...item, planned_day: updatedPlace.planned_day, day_order: updatedPlace.day_order } : item
+      ));
+
+      // Refresh items to update the main list
+      await fetchTripItems(tripId, {});
+      
+      // If in planner view, also refresh the day groups
+      if (viewMode === 'planner') {
+        await fetchItemsByDay(tripId);
+      }
+
+      Alert.alert(
+        'Success',
+        day === null ? 'Place unassigned from day' : `Place assigned to Day ${day}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('Assign to day error:', error);
+      Alert.alert('Error', 'Failed to assign place to day.');
+    }
+  };
+
 
   useEffect(() => {
     const loadTripData = async () => {
@@ -406,179 +442,277 @@ export default function TripDetailScreen({ route, navigation }: any) {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
-      {/* FULL SCREEN MAP (Z-Index 0) */}
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          items={items}
-          region={mapRegion}
-          selectedPlace={selectedPlace}
-          onMarkerPress={(item) => {
-            HapticFeedback.medium();
-            setSelectedPlace(item);
-            // Animate to place
-            if (item.location_lat && item.location_lng && mapRef.current) {
-              mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
-            }
-          }}
-          onClusterPress={handleClusterPress}
-        />
-      </View>
+      {/* MAP VIEW */}
+      {viewMode === 'map' && (
+        <>
+          {/* FULL SCREEN MAP (Z-Index 0) */}
+          <View style={styles.mapContainer}>
+            <MapView
+              ref={mapRef}
+              items={items}
+              region={mapRegion}
+              selectedPlace={selectedPlace}
+              onMarkerPress={(item) => {
+                HapticFeedback.medium();
+                setSelectedPlace(item);
+                // Animate to place
+                if (item.location_lat && item.location_lng && mapRef.current) {
+                  mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
+                }
+              }}
+              onClusterPress={handleClusterPress}
+            />
+          </View>
 
-      {/* PLACE LIST DRAWER - Only shows when drawer is open */}
-      {isDrawerOpen && (
-        <PlaceListDrawer
-          items={drawerItems}
-          selectedCategory={selectedCategory}
-          selectedPlace={selectedPlace}
-          onPlaceSelect={handlePlaceSelectFromDrawer}
-          onBackToList={handleBackToList}
-          onClose={handleDrawerClose}
-          onCheckIn={handleCheckIn}
-          isPlaceCheckedIn={(placeId) => isPlaceCheckedIn(tripId, placeId)}
-          getUserName={getUserName}
-          onToggleFavorite={handleToggleFavorite}
-          onToggleMustVisit={handleToggleMustVisit}
-          onDeleteItem={handleDeleteItem}
-          userLocation={location ? { latitude: location.coords.latitude, longitude: location.coords.longitude } : null}
-        />
+          {/* PLACE LIST DRAWER - Only shows when drawer is open */}
+          {isDrawerOpen && (
+            <PlaceListDrawer
+              items={drawerItems}
+              selectedCategory={selectedCategory}
+              selectedPlace={selectedPlace}
+              onPlaceSelect={handlePlaceSelectFromDrawer}
+              onBackToList={handleBackToList}
+              onClose={handleDrawerClose}
+              onCheckIn={handleCheckIn}
+              isPlaceCheckedIn={(placeId) => isPlaceCheckedIn(tripId, placeId)}
+              getUserName={getUserName}
+              onToggleFavorite={handleToggleFavorite}
+              onToggleMustVisit={handleToggleMustVisit}
+              onDeleteItem={handleDeleteItem}
+              userLocation={location ? { latitude: location.coords.latitude, longitude: location.coords.longitude } : null}
+              trip={currentTrip}
+              onAssignToDay={handleAssignToDay}
+            />
+          )}
+        </>
+      )}
+
+      {/* DAY PLANNER VIEW - Full screen overlay */}
+      {viewMode === 'planner' && currentTrip && (
+        <MotiView
+          from={{ opacity: 0, translateY: 50 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 300 }}
+          style={styles.plannerContainer}
+        >
+          <DayPlannerView
+            trip={currentTrip}
+            tripId={tripId}
+            onPlaceSelect={(item) => {
+              HapticFeedback.medium();
+              setSelectedPlace(item);
+              // Switch to map view to show the place
+              setViewMode('map');
+              if (item.location_lat && item.location_lng && mapRef.current) {
+                setTimeout(() => {
+                  mapRef.current?.animateToRegion(item.location_lat!, item.location_lng!, 0.01);
+                }, 100);
+              }
+            }}
+            onClose={() => setViewMode('map')}
+          />
+        </MotiView>
       )}
 
       {/* FLOATING TOP CONTROLS (Z-Index 10) */}
-      <View style={styles.topControls}>
-        {/* Back Button */}
-        <MotiView
-          from={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', delay: 100 }}
-        >
-          <TouchableOpacity 
-          style={styles.floatingButton} 
-          onPress={() => {
-            HapticFeedback.medium();
-            navigation.goBack();
-          }}
-        >
-            <Text style={styles.floatingButtonText}>←</Text>
-          </TouchableOpacity>
-        </MotiView>
-
-        {/* Trip Name Pill with Members */}
-        <TouchableOpacity 
-          onPress={() => {
-            HapticFeedback.medium();
-            navigation.navigate('GroupChat', { tripId });
-          }}
-          activeOpacity={0.9}
-        >
+      {viewMode === 'map' ? (
+        // MAP VIEW HEADER - Full header with trip info
+        <View style={styles.topControls}>
+          {/* Back Button */}
           <MotiView
             from={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', delay: 200 }}
-            style={styles.tripPill}
+            transition={{ type: 'spring', delay: 100 }}
           >
-            <Text style={styles.tripPillText}>{currentTrip.name}</Text>
-            <Text style={styles.tripPillSubtext}>📍 {currentTrip.destination}</Text>
-            
-            {/* Member Avatars Row */}
-            <View style={styles.memberAvatarsRow}>
-              {currentTripMembers?.slice(0, 4).map((member, index) => (
-                <View 
-                  key={member.id}
-                  style={[
-                    styles.memberAvatarMini,
-                    { 
-                      marginLeft: index > 0 ? -8 : 0,
-                      backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EC4899'][index % 4],
-                      zIndex: 10 - index,
-                    }
-                  ]}
-                >
-                  <Text style={styles.memberAvatarMiniText}>
-                    {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
-                  </Text>
-                </View>
-              ))}
-              {(currentTripMembers?.length || 0) > 4 && (
-                <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
-                  <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 4}</Text>
-                </View>
-              )}
-            </View>
-          </MotiView>
-          
-          {/* XP Badge */}
-          <MotiView
-            from={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', delay: 400 }}
-            style={styles.xpBadge}
+            <TouchableOpacity 
+            style={styles.floatingButton} 
+            onPress={() => {
+              HapticFeedback.medium();
+              navigation.goBack();
+            }}
           >
-            <Text style={styles.xpBadgeText}>⭐ Lv.{level}</Text>
+              <Text style={styles.floatingButtonText}>←</Text>
+            </TouchableOpacity>
           </MotiView>
-        </TouchableOpacity>
 
-        {/* Share Button */}
+          {/* Trip Name Pill with Members */}
+          <TouchableOpacity 
+            onPress={() => {
+              HapticFeedback.medium();
+              navigation.navigate('GroupChat', { tripId });
+            }}
+            activeOpacity={0.9}
+          >
+            <MotiView
+              from={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', delay: 200 }}
+              style={styles.tripPill}
+            >
+              <Text style={styles.tripPillText}>{currentTrip.name}</Text>
+              <Text style={styles.tripPillSubtext}>📍 {currentTrip.destination}</Text>
+              
+              {/* Member Avatars Row */}
+              <View style={styles.memberAvatarsRow}>
+                {currentTripMembers?.slice(0, 4).map((member, index) => (
+                  <View 
+                    key={member.id}
+                    style={[
+                      styles.memberAvatarMini,
+                      { 
+                        marginLeft: index > 0 ? -8 : 0,
+                        backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EC4899'][index % 4],
+                        zIndex: 10 - index,
+                      }
+                    ]}
+                  >
+                    <Text style={styles.memberAvatarMiniText}>
+                      {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                    </Text>
+                  </View>
+                ))}
+                {(currentTripMembers?.length || 0) > 4 && (
+                  <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
+                    <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 4}</Text>
+                  </View>
+                )}
+              </View>
+            </MotiView>
+            
+            {/* XP Badge */}
+            <MotiView
+              from={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', delay: 400 }}
+              style={styles.xpBadge}
+            >
+              <Text style={styles.xpBadgeText}>⭐ Lv.{level}</Text>
+            </MotiView>
+          </TouchableOpacity>
+
+          {/* View Toggle + Share Button */}
+          <View style={styles.headerRightButtons}>
+            {/* View Toggle */}
+            <MotiView
+              from={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', delay: 250 }}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.viewToggleButton,
+                  viewMode === 'planner' && styles.viewToggleButtonActive,
+                ]}
+                onPress={() => {
+                  HapticFeedback.medium();
+                  setViewMode(viewMode === 'map' ? 'planner' : 'map');
+                  // Close drawer when switching views
+                  if (isDrawerOpen) {
+                    handleDrawerClose();
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.viewToggleText}>
+                  {viewMode === 'map' ? '📅' : '🗺️'}
+                </Text>
+              </TouchableOpacity>
+            </MotiView>
+
+            {/* Share Button */}
+            <MotiView
+              from={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', delay: 300 }}
+            >
+              <TouchableOpacity 
+                style={styles.floatingButton}
+                onPress={async () => {
+                  HapticFeedback.medium();
+                  
+                  const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
+                  const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
+                  
+                  try {
+                    await Share.share({
+                      message: shareMessage,
+                      title: `Join ${currentTrip.name}`,
+                    });
+                  } catch (error) {
+                    console.error('Share error:', error);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.floatingButtonText}>↗</Text>
+              </TouchableOpacity>
+            </MotiView>
+          </View>
+        </View>
+      ) : (
+        // PLANNER VIEW HEADER - Simple header with just back and map buttons
+        <View style={styles.plannerHeader}>
+          <TouchableOpacity 
+            style={styles.plannerHeaderButton} 
+            onPress={() => {
+              HapticFeedback.medium();
+              navigation.goBack();
+            }}
+          >
+            <Text style={styles.plannerHeaderButtonText}>←</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.plannerHeaderCenter}>
+            <Text style={styles.plannerHeaderTitle}>📅 Day Planner</Text>
+            <Text style={styles.plannerHeaderSubtitle}>{currentTrip.name}</Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.plannerHeaderButton}
+            onPress={() => {
+              HapticFeedback.medium();
+              setViewMode('map');
+            }}
+          >
+            <Text style={styles.plannerHeaderButtonText}>🗺️</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* GROUP CHAT BUTTON (FAB) - Only in map view */}
+      {viewMode === 'map' && (
         <MotiView
-          from={{ scale: 0.8, opacity: 0 }}
+          from={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', delay: 300 }}
+          transition={{ type: 'spring', delay: 500, damping: 12 }}
+          style={styles.magicButton}
+          pointerEvents="box-none"
         >
           <TouchableOpacity 
-            style={styles.floatingButton}
-            onPress={async () => {
-              HapticFeedback.medium();
-              
-              const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
-              const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
-              
-              try {
-                await Share.share({
-                  message: shareMessage,
-                  title: `Join ${currentTrip.name}`,
-                });
-              } catch (error) {
-                console.error('Share error:', error);
-              }
+            style={styles.magicButtonInner}
+            onPress={() => {
+              HapticFeedback.heavy();
+              navigation.navigate('GroupChat', { tripId });
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.floatingButtonText}>↗</Text>
+            <MotiView
+              from={{ scale: 1 }}
+              animate={{ scale: 1.15 }}
+              transition={{
+                type: 'timing',
+                duration: 2000,
+                loop: true,
+              }}
+              style={[styles.magicGlow, { backgroundColor: theme.colors.primary }]}
+            />
+            <Text style={styles.magicButtonText}>💬</Text>
           </TouchableOpacity>
         </MotiView>
-      </View>
+      )}
 
-      {/* GROUP CHAT BUTTON (FAB) */}
-      <MotiView
-        from={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', delay: 500, damping: 12 }}
-        style={styles.magicButton}
-        pointerEvents="box-none"
-      >
-        <TouchableOpacity 
-          style={styles.magicButtonInner}
-          onPress={() => {
-            HapticFeedback.heavy();
-            navigation.navigate('GroupChat', { tripId });
-          }}
-          activeOpacity={0.8}
-        >
-          <MotiView
-            from={{ scale: 1 }}
-            animate={{ scale: 1.15 }}
-            transition={{
-              type: 'timing',
-              duration: 2000,
-              loop: true,
-            }}
-            style={[styles.magicGlow, { backgroundColor: theme.colors.primary }]}
-          />
-          <Text style={styles.magicButtonText}>💬</Text>
-        </TouchableOpacity>
-      </MotiView>
-
-      {/* BOTTOM SHEET - SNEAK PEEK */}
+      {/* BOTTOM SHEET - SNEAK PEEK - Only in map view */}
+      {viewMode === 'map' && (
       <Animated.View style={[styles.bottomSheet, bottomSheetStyle]}>
         {/* Swipe Handle - Only this should respond to pan gesture */}
         <GestureDetector gesture={panGesture}>
@@ -777,6 +911,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
             </View>
           )}
         </Animated.View>
+      )}
 
       {/* AI CHAT MODAL */}
       {showChatModal && (
@@ -1014,6 +1149,79 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: theme.colors.textPrimary,
     fontWeight: '800',
+  },
+  headerRightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  viewToggleButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 3,
+    borderColor: theme.colors.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...theme.shadows.neopop.sm,
+  },
+  viewToggleButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  viewToggleText: {
+    fontSize: 22,
+  },
+  plannerContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 80, // Below planner header
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+    backgroundColor: '#F8FAFC',
+  },
+  
+  // Planner Header Styles
+  plannerHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    zIndex: 100,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  plannerHeaderButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  plannerHeaderButtonText: {
+    fontSize: 20,
+  },
+  plannerHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  plannerHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  plannerHeaderSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
   },
   tripPill: {
     paddingHorizontal: 20,
