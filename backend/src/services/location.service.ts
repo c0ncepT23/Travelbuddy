@@ -3,7 +3,7 @@ import { TripGroupModel } from '../models/tripGroup.model';
 import { SavedItemModel } from '../models/savedItem.model';
 import { ChatMessageModel } from '../models/chatMessage.model';
 import { UserModel } from '../models/user.model';
-import { MessageSenderType, MessageType, ItemCategory } from '../types';
+import { MessageSenderType, MessageType } from '../types';
 import logger from '../config/logger';
 
 // Category emoji mapping
