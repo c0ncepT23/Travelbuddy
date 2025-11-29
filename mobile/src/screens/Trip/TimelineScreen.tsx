@@ -249,9 +249,9 @@ export const TimelineScreen: React.FC<TimelineScreenProps> = ({
                       • Spent: ¥{day.stats.total_cost.toLocaleString()}
                     </Text>
                   )}
-                  {day.stats.avg_rating && (
+                  {typeof day.stats.avg_rating === 'number' && day.stats.avg_rating > 0 && (
                     <Text style={styles.daySummaryText}>
-                      • Avg: {day.stats.avg_rating.toFixed(1)}⭐
+                      • Avg: {Number(day.stats.avg_rating).toFixed(1)}⭐
                     </Text>
                   )}
                 </View>

@@ -163,9 +163,9 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
                     <Text style={styles.statNumber}>{stats.days_active || 0}</Text>
                     <Text style={styles.statLabel}>Days</Text>
                   </View>
-                  {stats.avg_rating && (
+                  {typeof stats.avg_rating === 'number' && stats.avg_rating > 0 && (
                     <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>{stats.avg_rating.toFixed(1)}⭐</Text>
+                      <Text style={styles.statNumber}>{Number(stats.avg_rating).toFixed(1)}⭐</Text>
                       <Text style={styles.statLabel}>Avg Rating</Text>
                     </View>
                   )}
