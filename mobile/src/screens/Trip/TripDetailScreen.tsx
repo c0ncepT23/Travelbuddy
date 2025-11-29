@@ -767,6 +767,21 @@ export default function TripDetailScreen({ route, navigation }: any) {
         </View>
       )}
 
+      {/* MY JOURNEY BUTTON (FAB) - Direct access to timeline */}
+      {viewMode === 'map' && !isExpanded && !isDrawerOpen && (
+        <TouchableOpacity 
+          style={styles.journeyFab}
+          onPress={() => {
+            HapticFeedback.medium();
+            setViewMode('timeline');
+          }}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.journeyFabIcon}>📸</Text>
+          <Text style={styles.journeyFabLabel}>Journey</Text>
+        </TouchableOpacity>
+      )}
+
       {/* GROUP CHAT BUTTON (FAB) - Clean modern style */}
       {viewMode === 'map' && !isExpanded && !isDrawerOpen && (
         <TouchableOpacity 
@@ -1483,6 +1498,32 @@ const styles = StyleSheet.create({
   },
 
   // Chat FAB - Clean Modern Style
+  journeyFab: {
+    position: 'absolute',
+    bottom: BOTTOM_SHEET_MIN_HEIGHT + 16,
+    left: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#10B981',
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  journeyFabIcon: {
+    fontSize: 18,
+  },
+  journeyFabLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   chatFab: {
     position: 'absolute',
     bottom: BOTTOM_SHEET_MIN_HEIGHT + 16,
