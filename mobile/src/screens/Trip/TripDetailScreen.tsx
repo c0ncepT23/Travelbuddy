@@ -27,6 +27,7 @@ import { PlaceDetailCard } from '../../components/PlaceDetailCard';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
 import { EnhancedCheckInModal } from '../../components/EnhancedCheckInModal';
 import { DayPlannerView } from '../../components/DayPlannerView';
+import { TimelineScreen } from './TimelineScreen';
 import api from '../../config/api';
 import { ItemCategory } from '../../types';
 import { MotiView } from 'moti';
@@ -69,7 +70,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [checkInPlace, setCheckInPlace] = useState<any>(null);
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'map' | 'planner'>('map');
+  const [viewMode, setViewMode] = useState<'map' | 'planner' | 'timeline'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
   const confettiRef = React.useRef<any>(null);
@@ -625,6 +626,23 @@ export default function TripDetailScreen({ route, navigation }: any) {
         </MotiView>
       )}
 
+      {/* TIMELINE VIEW - Shows checked-in places and share story */}
+      {viewMode === 'timeline' && currentTrip && (
+        <MotiView
+          from={{ opacity: 0, translateY: 50 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 300 }}
+          style={styles.plannerContainer}
+        >
+          <TimelineScreen
+            tripId={tripId}
+            tripName={currentTrip.name}
+            destination={currentTrip.destination}
+            onClose={() => setViewMode('map')}
+          />
+        </MotiView>
+      )}
+
       {/* FLOATING TOP CONTROLS - Clean Modern Style */}
       {viewMode === 'map' ? (
         <View style={styles.topControls}>
@@ -682,18 +700,26 @@ export default function TripDetailScreen({ route, navigation }: any) {
           {/* View Toggle + Share Button - Hidden when drawer is open */}
           {!isDrawerOpen && (
             <View style={styles.headerRightButtons}>
-              {/* Planner Toggle */}
+              {/* View Mode Toggle: Map → Planner → Timeline → Map */}
               <TouchableOpacity
                 style={styles.headerButton}
                 onPress={() => {
                   HapticFeedback.medium();
-                  setViewMode(viewMode === 'map' ? 'planner' : 'map');
+                  if (viewMode === 'map') {
+                    setViewMode('planner');
+                  } else if (viewMode === 'planner') {
+                    setViewMode('timeline');
+                  } else {
+                    setViewMode('map');
+                  }
                   if (isDrawerOpen) {
                     handleDrawerClose();
                   }
                 }}
               >
-                <Text style={styles.headerButtonIcon}>📅</Text>
+                <Text style={styles.headerButtonIcon}>
+                  {viewMode === 'map' ? '📅' : viewMode === 'planner' ? '📸' : '🗺️'}
+                </Text>
               </TouchableOpacity>
 
               {/* Share Button */}
@@ -710,7 +736,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
           )}
         </View>
       ) : (
-        // PLANNER VIEW HEADER - Simple header with just back and map buttons
+        // PLANNER/TIMELINE VIEW HEADER - Simple header with back and map buttons
         <View style={styles.plannerHeader}>
           <TouchableOpacity 
             style={styles.plannerHeaderButton} 
@@ -723,8 +749,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
           </TouchableOpacity>
           
           <View style={styles.plannerHeaderCenter}>
-            <Text style={styles.plannerHeaderTitle}>📅 Day Planner</Text>
-            <Text style={styles.plannerHeaderSubtitle}>{currentTrip.name}</Text>
+            <Text style={styles.plannerHeaderTitle}>
+              {viewMode === 'planner' ? '📅 Day Planner' : '📸 My Journey'}
+            </Text>
+            <Text style={styles.plannerHeaderSubtitle}>{currentTrip?.name}</Text>
           </View>
           
           <TouchableOpacity 
