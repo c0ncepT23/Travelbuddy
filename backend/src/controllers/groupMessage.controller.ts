@@ -18,7 +18,7 @@ export class GroupMessageController {
       // Authorization check could be added here to verify user is trip member
 
       const messages = await GroupMessageModel.getMessages(
-        parseInt(tripId),
+        tripId, // UUID string
         parseInt(limit as string),
         parseInt(offset as string)
       );
@@ -48,8 +48,8 @@ export class GroupMessageController {
       }
 
       const message = await GroupMessageModel.create(
-        parseInt(tripId),
-        typeof userId === 'string' ? parseInt(userId) : userId,
+        tripId, // UUID string
+        userId, // UUID string
         content,
         messageType || 'text',
         metadata,
@@ -82,7 +82,7 @@ export class GroupMessageController {
 
       const message = await GroupMessageModel.update(
         parseInt(messageId),
-        typeof userId === 'string' ? parseInt(userId) : userId,
+        userId, // UUID string
         content
       );
 
@@ -111,7 +111,7 @@ export class GroupMessageController {
 
       const deleted = await GroupMessageModel.delete(
         parseInt(messageId),
-        typeof userId === 'string' ? parseInt(userId) : userId
+        userId // UUID string
       );
 
       if (!deleted) {
@@ -138,8 +138,8 @@ export class GroupMessageController {
       }
 
       const count = await GroupMessageModel.getUnreadCount(
-        parseInt(tripId),
-        typeof userId === 'string' ? parseInt(userId) : userId
+        tripId, // UUID string
+        userId  // UUID string
       );
 
       res.json({ success: true, data: { count } });
@@ -161,12 +161,10 @@ export class GroupMessageController {
         return;
       }
 
-      const userIdNum = typeof userId === 'string' ? parseInt(userId) : userId;
-
       if (messageId) {
-        await GroupMessageModel.markAsRead(parseInt(messageId), userIdNum);
+        await GroupMessageModel.markAsRead(parseInt(messageId), userId);
       } else {
-        await GroupMessageModel.markAllAsRead(parseInt(tripId), userIdNum);
+        await GroupMessageModel.markAllAsRead(tripId, userId);
       }
 
       res.json({ success: true, message: 'Marked as read' });
@@ -193,7 +191,7 @@ export class GroupMessageController {
       }
 
       await GroupMessageModel.savePushToken(
-        typeof userId === 'string' ? parseInt(userId) : userId,
+        userId, // UUID string
         token,
         deviceType,
         deviceId
@@ -206,4 +204,3 @@ export class GroupMessageController {
     }
   }
 }
-

@@ -2,8 +2,8 @@ import { pool } from '../config/database';
 
 export interface GroupMessage {
   id: number;
-  trip_group_id: number;
-  sender_id: number;
+  trip_group_id: string;
+  sender_id: string;
   message_type: 'text' | 'ai_response' | 'system';
   content: string;
   metadata?: any;
@@ -18,14 +18,14 @@ export interface GroupMessage {
 }
 
 export interface TypingIndicator {
-  trip_group_id: number;
-  user_id: number;
+  trip_group_id: string;
+  user_id: string;
   started_at: Date;
 }
 
 export interface OnlineStatus {
-  user_id: number;
-  trip_group_id: number;
+  user_id: string;
+  trip_group_id: string;
   is_online: boolean;
   last_seen: Date;
   socket_id?: string;
@@ -34,8 +34,8 @@ export interface OnlineStatus {
 export class GroupMessageModel {
   // Create a new message
   static async create(
-    tripGroupId: number,
-    senderId: number,
+    tripGroupId: string,
+    senderId: string | number,
     content: string,
     messageType: 'text' | 'ai_response' | 'system' = 'text',
     metadata?: any,
@@ -64,7 +64,7 @@ export class GroupMessageModel {
 
   // Get messages for a trip group
   static async getMessages(
-    tripGroupId: number,
+    tripGroupId: string,
     limit: number = 50,
     offset: number = 0
   ): Promise<GroupMessage[]> {
@@ -82,7 +82,7 @@ export class GroupMessageModel {
   // Update a message
   static async update(
     messageId: number,
-    senderId: number,
+    senderId: string,
     content: string
   ): Promise<GroupMessage | null> {
     const query = `
@@ -97,7 +97,7 @@ export class GroupMessageModel {
   }
 
   // Delete a message
-  static async delete(messageId: number, senderId: number): Promise<boolean> {
+  static async delete(messageId: number, senderId: string): Promise<boolean> {
     const query = `
       DELETE FROM group_messages
       WHERE id = $1 AND sender_id = $2
@@ -108,7 +108,7 @@ export class GroupMessageModel {
   }
 
   // Mark message as read
-  static async markAsRead(messageId: number, userId: number): Promise<void> {
+  static async markAsRead(messageId: number, userId: string): Promise<void> {
     const query = `
       INSERT INTO message_read_status (message_id, user_id)
       VALUES ($1, $2)
@@ -119,7 +119,7 @@ export class GroupMessageModel {
   }
 
   // Mark all messages in a trip as read
-  static async markAllAsRead(tripGroupId: number, userId: number): Promise<void> {
+  static async markAllAsRead(tripGroupId: string, userId: string): Promise<void> {
     const query = `
       INSERT INTO message_read_status (message_id, user_id)
       SELECT id, $2 FROM group_messages
@@ -131,7 +131,7 @@ export class GroupMessageModel {
   }
 
   // Get unread message count
-  static async getUnreadCount(tripGroupId: number, userId: number): Promise<number> {
+  static async getUnreadCount(tripGroupId: string, userId: string): Promise<number> {
     const query = `
       SELECT COUNT(*) as count
       FROM group_messages gm
@@ -146,7 +146,7 @@ export class GroupMessageModel {
   }
 
   // Typing indicators
-  static async setTyping(tripGroupId: number, userId: number): Promise<void> {
+  static async setTyping(tripGroupId: string, userId: string | number): Promise<void> {
     const query = `
       INSERT INTO typing_indicators (trip_group_id, user_id, started_at)
       VALUES ($1, $2, CURRENT_TIMESTAMP)
@@ -157,7 +157,7 @@ export class GroupMessageModel {
     await pool.query(query, [tripGroupId, userId]);
   }
 
-  static async removeTyping(tripGroupId: number, userId: number): Promise<void> {
+  static async removeTyping(tripGroupId: string, userId: string | number): Promise<void> {
     const query = `
       DELETE FROM typing_indicators
       WHERE trip_group_id = $1 AND user_id = $2
@@ -166,7 +166,7 @@ export class GroupMessageModel {
     await pool.query(query, [tripGroupId, userId]);
   }
 
-  static async getTypingUsers(tripGroupId: number): Promise<number[]> {
+  static async getTypingUsers(tripGroupId: string): Promise<string[]> {
     // Clean up old indicators first
     await pool.query('SELECT cleanup_old_typing_indicators()');
     
@@ -181,8 +181,8 @@ export class GroupMessageModel {
 
   // Online status
   static async setOnlineStatus(
-    userId: number,
-    tripGroupId: number,
+    userId: string | number,
+    tripGroupId: string,
     isOnline: boolean,
     socketId?: string
   ): Promise<void> {
@@ -199,7 +199,7 @@ export class GroupMessageModel {
     await pool.query(query, [userId, tripGroupId, isOnline, socketId]);
   }
 
-  static async getOnlineUsers(tripGroupId: number): Promise<OnlineStatus[]> {
+  static async getOnlineUsers(tripGroupId: string): Promise<OnlineStatus[]> {
     const query = `
       SELECT * FROM user_online_status
       WHERE trip_group_id = $1 AND is_online = TRUE
@@ -211,7 +211,7 @@ export class GroupMessageModel {
 
   // Push notification tokens
   static async savePushToken(
-    userId: number,
+    userId: string,
     token: string,
     deviceType: 'ios' | 'android' | 'web',
     deviceId?: string
@@ -230,7 +230,7 @@ export class GroupMessageModel {
     await pool.query(query, [userId, token, deviceType, deviceId]);
   }
 
-  static async getUserTokens(userId: number): Promise<string[]> {
+  static async getUserTokens(userId: string | number): Promise<string[]> {
     const query = `
       SELECT token FROM push_notification_tokens
       WHERE user_id = $1 AND is_active = TRUE
@@ -240,4 +240,3 @@ export class GroupMessageModel {
     return result.rows.map((row: any) => row.token);
   }
 }
-

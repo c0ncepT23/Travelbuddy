@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 import logger from '../config/logger';
 
 interface AuthenticatedSocket extends Socket {
-  userId?: number;
+  userId?: string;
   userEmail?: string;
 }
 
@@ -73,7 +73,7 @@ export class WebSocketService {
           // Update online status
           await GroupMessageModel.setOnlineStatus(
             socket.userId,
-            parseInt(tripId),
+            tripId,
             true,
             socket.id
           );
@@ -85,7 +85,7 @@ export class WebSocketService {
           });
           
           // Send current online users
-          const onlineUsers = await GroupMessageModel.getOnlineUsers(parseInt(tripId));
+          const onlineUsers = await GroupMessageModel.getOnlineUsers(tripId);
           socket.emit('online_users', onlineUsers);
           
           logger.info(`[WebSocket] User ${socket.userId} joined trip ${tripId}`);
@@ -105,7 +105,7 @@ export class WebSocketService {
           // Update online status
           await GroupMessageModel.setOnlineStatus(
             socket.userId,
-            parseInt(tripId),
+            tripId,
             false
           );
           
@@ -143,7 +143,7 @@ export class WebSocketService {
           
           // Save message to database
           const message = await GroupMessageModel.create(
-            parseInt(tripId),
+            tripId,
             socket.userId,
             content,
             messageType || 'text',
@@ -159,7 +159,7 @@ export class WebSocketService {
           });
           
           // Remove typing indicator
-          await GroupMessageModel.removeTyping(parseInt(tripId), socket.userId);
+          await GroupMessageModel.removeTyping(tripId, socket.userId);
           this.io.to(room).emit('typing_stopped', {
             userId: socket.userId,
             email: socket.userEmail
@@ -174,7 +174,7 @@ export class WebSocketService {
             
             if (user && trip) {
               await PushNotificationService.notifyNewMessage(
-                parseInt(tripId),
+                tripId,
                 socket.userId,
                 user.name || socket.userEmail || 'Someone',
                 trip.name,
@@ -199,7 +199,7 @@ export class WebSocketService {
             logger.info(`[WebSocket] Creating processing message for room: ${room}`);
             try {
               const processingMessage = await GroupMessageModel.create(
-                parseInt(tripId),
+                tripId,
                 socket.userId, // Use sender's ID - message_type distinguishes it
                 `🤖 Processing ${urls[0].includes('youtube') ? 'YouTube video' : urls[0].includes('instagram') ? 'Instagram post' : 'link'}... Please wait! ⏳`,
                 'ai_response',
@@ -229,7 +229,7 @@ export class WebSocketService {
               
               // Send AI response with extracted places
               const aiMessage = await GroupMessageModel.create(
-                parseInt(tripId),
+                tripId,
                 socket.userId, // Use sender's ID
                 aiResponse.message,
                 'ai_response',
@@ -254,7 +254,7 @@ export class WebSocketService {
               
               // Send error message
               const errorMessage = await GroupMessageModel.create(
-                parseInt(tripId),
+                tripId,
                 socket.userId,
                 `😅 Sorry, I had trouble processing that link. ${aiError.message || 'The video might not contain travel locations, or there was a technical issue.'} Try another link?`,
                 'ai_response',
@@ -279,7 +279,7 @@ export class WebSocketService {
         
         try {
           const { tripId } = data;
-          await GroupMessageModel.setTyping(parseInt(tripId), socket.userId);
+          await GroupMessageModel.setTyping(tripId, socket.userId);
           
           const room = `trip_${tripId}`;
           socket.to(room).emit('typing_started', {
@@ -296,7 +296,7 @@ export class WebSocketService {
         
         try {
           const { tripId } = data;
-          await GroupMessageModel.removeTyping(parseInt(tripId), socket.userId);
+          await GroupMessageModel.removeTyping(tripId, socket.userId);
           
           const room = `trip_${tripId}`;
           socket.to(room).emit('typing_stopped', {
@@ -318,7 +318,7 @@ export class WebSocketService {
           if (messageId) {
             await GroupMessageModel.markAsRead(messageId, socket.userId);
           } else {
-            await GroupMessageModel.markAllAsRead(parseInt(tripId), socket.userId);
+            await GroupMessageModel.markAllAsRead(tripId, socket.userId);
           }
           
           const room = `trip_${tripId}`;
@@ -347,7 +347,7 @@ export class WebSocketService {
               
               await GroupMessageModel.setOnlineStatus(
                 socket.userId,
-                parseInt(tripId),
+                tripId,
                 false
               );
               

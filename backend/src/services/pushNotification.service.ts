@@ -32,7 +32,7 @@ export class PushNotificationService {
    * Send push notification to a user
    */
   static async sendToUser(
-    userId: number,
+    userId: string | number,
     notification: {
       title: string;
       body: string;
@@ -85,8 +85,8 @@ export class PushNotificationService {
    * Send push notification to all members of a trip (except sender)
    */
   static async sendToTripMembers(
-    tripGroupId: number,
-    excludeUserId: number,
+    tripGroupId: string | number,
+    excludeUserId: string | number,
     notification: {
       title: string;
       body: string;
@@ -123,7 +123,7 @@ export class PushNotificationService {
   /**
    * Get all push tokens for trip members (excluding one user)
    */
-  private static async getTripMemberTokens(tripGroupId: number, excludeUserId: number): Promise<string[]> {
+  private static async getTripMemberTokens(tripGroupId: string | number, excludeUserId: string | number): Promise<string[]> {
     const { pool } = await import('../config/database');
     
     const query = `
@@ -220,8 +220,8 @@ export class PushNotificationService {
    * Send new message notification
    */
   static async notifyNewMessage(
-    tripGroupId: number,
-    senderId: number,
+    tripGroupId: string | number,
+    senderId: string | number,
     senderName: string,
     tripName: string,
     messagePreview: string
@@ -242,8 +242,8 @@ export class PushNotificationService {
    * Send new place added notification
    */
   static async notifyNewPlace(
-    tripGroupId: number,
-    addedByUserId: number,
+    tripGroupId: string | number,
+    addedByUserId: string | number,
     addedByName: string,
     tripName: string,
     placeName: string
