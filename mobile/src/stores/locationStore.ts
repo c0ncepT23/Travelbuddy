@@ -114,6 +114,19 @@ export const useLocationStore = create<LocationState>((set, get) => ({
 
   startBackgroundTracking: async (tripId: string) => {
     try {
+      // ALWAYS set the active trip first - even if task is already running
+      // This ensures the trip ID is available for the background task
+      console.log('[LocationStore] Setting active trip:', tripId);
+      await setActiveTrip(tripId);
+      
+      // Check if already tracking
+      const isAlreadyActive = await isBackgroundTrackingActive();
+      if (isAlreadyActive) {
+        console.log('[LocationStore] Background tracking already active, trip ID updated');
+        set({ isBackgroundTracking: true });
+        return;
+      }
+      
       const { hasBackgroundPermission } = get();
       
       if (!hasBackgroundPermission) {
@@ -122,9 +135,6 @@ export const useLocationStore = create<LocationState>((set, get) => ({
           throw new Error('Background location permission denied');
         }
       }
-
-      // Set the active trip for background task
-      await setActiveTrip(tripId);
 
       // Start background location tracking
       await startBackgroundLocationTracking();

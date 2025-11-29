@@ -10,40 +10,40 @@ interface CategoryClusterMarkerProps {
 
 const CATEGORY_CONFIG = {
   [ItemCategory.FOOD]: {
-    emoji: '🍜',
+    emoji: '🍽️',
     label: 'Food',
-    color: '#FF6B6B',
-    backgroundColor: '#FFE8E8',
+    color: '#FFFFFF',
+    backgroundColor: '#EF4444',
   },
   [ItemCategory.SHOPPING]: {
     emoji: '🛍️',
     label: 'Shopping',
-    color: '#4ECDC4',
-    backgroundColor: '#E0F7F6',
+    color: '#FFFFFF',
+    backgroundColor: '#10B981',
   },
   [ItemCategory.ACTIVITY]: {
     emoji: '🎯',
     label: 'Activities',
-    color: '#FFD93D',
-    backgroundColor: '#FFF8E1',
+    color: '#FFFFFF',
+    backgroundColor: '#F59E0B',
   },
   [ItemCategory.PLACE]: {
-    emoji: '📍',
+    emoji: '🏛️',
     label: 'Places',
-    color: '#6C5CE7',
-    backgroundColor: '#F0EDFF',
+    color: '#FFFFFF',
+    backgroundColor: '#6366F1',
   },
   [ItemCategory.ACCOMMODATION]: {
     emoji: '🏨',
     label: 'Hotels',
-    color: '#A8E6CF',
-    backgroundColor: '#E8F8F5',
+    color: '#FFFFFF',
+    backgroundColor: '#8B5CF6',
   },
   [ItemCategory.TIP]: {
     emoji: '💡',
     label: 'Tips',
-    color: '#FFA502',
-    backgroundColor: '#FFF3E0',
+    color: '#FFFFFF',
+    backgroundColor: '#EC4899',
   },
 };
 
@@ -55,15 +55,11 @@ export const CategoryClusterMarker: React.FC<CategoryClusterMarkerProps> = ({
   const config = CATEGORY_CONFIG[category];
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-      <View style={[styles.container, { backgroundColor: config.backgroundColor, borderColor: config.color }]}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
+      <View style={[styles.container, { backgroundColor: config.backgroundColor }]}>
         <Text style={styles.emoji}>{config.emoji}</Text>
-        <Text style={[styles.label, { color: config.color }]}>
-          {config.label} {count}
-        </Text>
+        <Text style={[styles.count, { color: config.color }]}>{count}</Text>
       </View>
-      {/* Pointer triangle */}
-      <View style={[styles.pointer, { borderTopColor: config.color }]} />
     </TouchableOpacity>
   );
 };
@@ -72,36 +68,23 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 2,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    minWidth: 60,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
   emoji: {
     fontSize: 18,
     marginRight: 6,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  pointer: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    alignSelf: 'center',
-    marginTop: -2,
+  count: {
+    fontSize: 16,
+    fontWeight: '800',
   },
 });
-

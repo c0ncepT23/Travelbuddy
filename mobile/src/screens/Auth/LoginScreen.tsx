@@ -28,7 +28,6 @@ function LoginScreenContent({ navigation }: any) {
 
     try {
       setIsLoadingOTP(true);
-      // Call backend to send OTP
       const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,7 +56,6 @@ function LoginScreenContent({ navigation }: any) {
     }
 
     try {
-      // Call the new phone-based login
       await login({ phoneNumber, otpCode });
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
@@ -79,7 +77,7 @@ function LoginScreenContent({ navigation }: any) {
             <View style={styles.logoBox}>
               <Text style={styles.logoEmoji}>✈️</Text>
             </View>
-            <Text style={styles.title}>WELCOME BACK!</Text>
+            <Text style={styles.title}>Welcome back!</Text>
             <Text style={styles.subtitle}>Your travel squad is waiting</Text>
           </View>
 
@@ -88,7 +86,7 @@ function LoginScreenContent({ navigation }: any) {
             {step === 'phone' ? (
               <>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>PHONE NUMBER</Text>
+                  <Text style={styles.inputLabel}>Phone Number</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="+1 234 567 8900"
@@ -104,17 +102,17 @@ function LoginScreenContent({ navigation }: any) {
                   style={[styles.loginButton, isLoadingOTP && styles.buttonDisabled]}
                   onPress={handleSendOTP}
                   disabled={isLoadingOTP}
-                  activeOpacity={0.8}
+                  activeOpacity={0.9}
                 >
                   <Text style={styles.loginButtonText}>
-                    {isLoadingOTP ? 'SENDING OTP...' : 'SEND OTP 📱'}
+                    {isLoadingOTP ? 'Sending OTP...' : 'Send OTP'}
                   </Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>ENTER OTP CODE</Text>
+                  <Text style={styles.inputLabel}>Enter OTP Code</Text>
                   <Text style={styles.otpHint}>We sent a 4-digit code to {phoneNumber}</Text>
                   <TextInput
                     style={styles.input}
@@ -132,10 +130,10 @@ function LoginScreenContent({ navigation }: any) {
                   style={[styles.loginButton, isLoading && styles.buttonDisabled]}
                   onPress={handleLogin}
                   disabled={isLoading}
-                  activeOpacity={0.8}
+                  activeOpacity={0.9}
                 >
                   <Text style={styles.loginButtonText}>
-                    {isLoading ? 'LOGGING IN...' : 'LET\'S GO! 🚀'}
+                    {isLoading ? 'Logging in...' : "Let's Go! 🚀"}
                   </Text>
                 </TouchableOpacity>
 
@@ -144,7 +142,7 @@ function LoginScreenContent({ navigation }: any) {
                   onPress={() => setStep('phone')}
                   disabled={isLoading}
                 >
-                  <Text style={styles.backButtonText}>← CHANGE PHONE NUMBER</Text>
+                  <Text style={styles.backButtonText}>← Change phone number</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -157,8 +155,9 @@ function LoginScreenContent({ navigation }: any) {
               style={styles.signupButton}
               onPress={() => navigation.navigate('Register')}
               disabled={isLoading}
+              activeOpacity={0.9}
             >
-              <Text style={styles.signupButtonText}>CREATE ACCOUNT</Text>
+              <Text style={styles.signupButtonText}>Create Account</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -187,7 +186,7 @@ export default function LoginScreen(props: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBEB', // Cream background
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
@@ -200,38 +199,30 @@ const styles = StyleSheet.create({
   // Hero Section
   heroSection: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 40,
   },
   logoBox: {
     width: 100,
     height: 100,
-    backgroundColor: '#3B82F6', // Electric Blue
-    borderWidth: 4,
-    borderColor: '#000',
-    borderRadius: 0,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 8, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
   },
   logoEmoji: {
-    fontSize: 56,
+    fontSize: 50,
   },
   title: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1F2937',
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: 1,
   },
   subtitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#6B7280',
     textAlign: 'center',
   },
@@ -244,54 +235,42 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
     marginBottom: 8,
-    letterSpacing: 0.5,
   },
   otpHint: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#6B7280',
     marginBottom: 12,
   },
   input: {
     height: 56,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 3,
-    borderColor: '#000',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
+    fontWeight: '500',
+    color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
 
   // Login Button
   loginButton: {
-    height: 60,
-    backgroundColor: '#3B82F6', // Electric Blue
-    borderWidth: 4,
-    borderColor: '#000',
+    height: 56,
+    backgroundColor: '#1F2937',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 6, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 6,
+    marginTop: 8,
   },
   loginButtonText: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 1,
   },
   buttonDisabled: {
     opacity: 0.5,
@@ -301,32 +280,25 @@ const styles = StyleSheet.create({
   signupSection: {
     alignItems: 'center',
     paddingTop: 24,
-    borderTopWidth: 3,
-    borderTopColor: '#E5E7EB',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   signupText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     color: '#6B7280',
     marginBottom: 16,
   },
   signupButton: {
     paddingVertical: 14,
     paddingHorizontal: 32,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 3,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
   },
   signupButtonText: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#000',
-    letterSpacing: 0.5,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2937',
   },
 
   // Back Button
@@ -336,8 +308,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#6B7280',
   },
 });
-

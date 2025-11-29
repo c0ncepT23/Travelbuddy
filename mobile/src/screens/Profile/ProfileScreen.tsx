@@ -12,7 +12,6 @@ import {
 import { useAuthStore } from '../../stores/authStore';
 import { useTripStore } from '../../stores/tripStore';
 import { useXPStore } from '../../stores/xpStore';
-import theme from '../../config/theme';
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuthStore();
@@ -37,7 +36,6 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   useEffect(() => {
-    // Calculate stats from trips
     const now = new Date();
     const active = trips.filter((trip) => {
       if (!trip.end_date) return true;
@@ -91,10 +89,17 @@ export default function ProfileScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="#1F2937" />
       
       {/* Header Section */}
       <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{user ? getInitials(user.name) : '?'}</Text>
@@ -118,26 +123,26 @@ export default function ProfileScreen({ navigation }: any) {
 
       {/* Stats Section */}
       <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>YOUR STATS 📊</Text>
+        <Text style={styles.sectionTitle}>Your Stats</Text>
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{stats.totalTrips}</Text>
-            <Text style={styles.statLabel}>TOTAL</Text>
+            <Text style={styles.statLabel}>Total</Text>
           </View>
           <View style={[styles.statCard, styles.statCardActive]}>
             <Text style={[styles.statNumber, styles.statNumberActive]}>{stats.activeTrips}</Text>
-            <Text style={[styles.statLabel, styles.statLabelActive]}>ACTIVE</Text>
+            <Text style={[styles.statLabel, styles.statLabelActive]}>Active</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{stats.pastTrips}</Text>
-            <Text style={styles.statLabel}>DONE</Text>
+            <Text style={styles.statLabel}>Done</Text>
           </View>
         </View>
       </View>
 
       {/* Past Trips Section */}
       <View style={styles.pastTripsSection}>
-        <Text style={styles.sectionTitle}>PAST TRIPS 🗺️</Text>
+        <Text style={styles.sectionTitle}>Past Trips</Text>
         {getPastTrips().length > 0 ? (
           <View style={styles.tripsContainer}>
             {getPastTrips().map((trip) => (
@@ -163,7 +168,7 @@ export default function ProfileScreen({ navigation }: any) {
                     <Text style={styles.tripDestination}>📍 {trip.destination}</Text>
                   </View>
                   <View style={styles.tripArrow}>
-                    <Text style={styles.tripArrowText}>→</Text>
+                    <Text style={styles.tripArrowText}>›</Text>
                   </View>
                 </View>
                 {trip.end_date && (
@@ -187,24 +192,26 @@ export default function ProfileScreen({ navigation }: any) {
 
       {/* Settings Section */}
       <View style={styles.settingsSection}>
-        <Text style={styles.sectionTitle}>SETTINGS ⚙️</Text>
+        <Text style={styles.sectionTitle}>Settings</Text>
         
         <TouchableOpacity
           style={styles.settingButton}
           onPress={() => Alert.alert('Coming Soon', 'Edit profile feature coming soon!')}
           activeOpacity={0.8}
         >
-          <Text style={styles.settingButtonText}>✏️ EDIT PROFILE</Text>
+          <Text style={styles.settingIcon}>✏️</Text>
+          <Text style={styles.settingButtonText}>Edit Profile</Text>
+          <Text style={styles.settingArrow}>›</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.settingButton}
-          onPress={() =>
-            Alert.alert('Coming Soon', 'Notification settings coming soon!')
-          }
+          onPress={() => Alert.alert('Coming Soon', 'Notification settings coming soon!')}
           activeOpacity={0.8}
         >
-          <Text style={styles.settingButtonText}>🔔 NOTIFICATIONS</Text>
+          <Text style={styles.settingIcon}>🔔</Text>
+          <Text style={styles.settingButtonText}>Notifications</Text>
+          <Text style={styles.settingArrow}>›</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -212,13 +219,15 @@ export default function ProfileScreen({ navigation }: any) {
           onPress={() => Alert.alert('Coming Soon', 'Privacy settings coming soon!')}
           activeOpacity={0.8}
         >
-          <Text style={styles.settingButtonText}>🔒 PRIVACY</Text>
+          <Text style={styles.settingIcon}>🔒</Text>
+          <Text style={styles.settingButtonText}>Privacy</Text>
+          <Text style={styles.settingArrow}>›</Text>
         </TouchableOpacity>
       </View>
 
       {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutButtonText}>🚪 LOG OUT</Text>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.9}>
+        <Text style={styles.logoutButtonText}>Log Out</Text>
       </TouchableOpacity>
 
       {/* Footer Spacing */}
@@ -230,7 +239,7 @@ export default function ProfileScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -239,11 +248,26 @@ const styles = StyleSheet.create({
   // Header Section
   header: {
     alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 60,
     paddingBottom: 32,
-    backgroundColor: theme.colors.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: theme.colors.borderDark,
+    backgroundColor: '#1F2937',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: '#FFFFFF',
   },
   avatarContainer: {
     marginBottom: 16,
@@ -252,87 +276,81 @@ const styles = StyleSheet.create({
   avatar: {
     width: 100,
     height: 100,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 4,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.neopop.lg,
   },
   avatarText: {
-    fontSize: 40,
-    fontWeight: '900',
-    color: theme.colors.primary,
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#1F2937',
   },
   levelBadge: {
     position: 'absolute',
-    bottom: -8,
-    right: -8,
-    backgroundColor: theme.colors.secondary,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    bottom: -4,
+    right: -4,
+    backgroundColor: '#FCD34D',
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    ...theme.shadows.neopop.sm,
   },
   levelBadgeText: {
     fontSize: 12,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
+    fontWeight: '700',
+    color: '#92400E',
   },
   name: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: theme.colors.textInverse,
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 4,
-    letterSpacing: 1,
   },
   email: {
     fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
     marginBottom: 8,
   },
   levelTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.secondary,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FCD34D',
     marginBottom: 16,
   },
   xpContainer: {
-    width: '80%',
+    width: '70%',
     marginTop: 8,
   },
   xpBarBackground: {
-    height: 12,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 4,
     overflow: 'hidden',
   },
   xpBarFill: {
     height: '100%',
-    backgroundColor: theme.colors.secondary,
+    backgroundColor: '#FCD34D',
+    borderRadius: 4,
   },
   xpText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.textInverse,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
     marginTop: 6,
   },
 
   // Stats Section
   statsSection: {
-    padding: 16,
+    padding: 20,
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 16,
-    letterSpacing: 1,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -340,31 +358,33 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FFFFFF',
     padding: 20,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    borderRadius: 16,
     alignItems: 'center',
-    ...theme.shadows.neopop.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   statCardActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: '#3B82F6',
   },
   statNumber: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: theme.colors.primary,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#3B82F6',
     marginBottom: 4,
   },
   statNumberActive: {
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
   },
   statLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
     textAlign: 'center',
-    letterSpacing: 1,
   },
   statLabelActive: {
     color: 'rgba(255,255,255,0.9)',
@@ -372,30 +392,31 @@ const styles = StyleSheet.create({
 
   // Past Trips Section
   pastTripsSection: {
-    padding: 16,
+    padding: 20,
     marginBottom: 8,
   },
   tripsContainer: {
     gap: 12,
   },
   tripCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FFFFFF',
     padding: 16,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   tripCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
   tripEmoji: {
     width: 48,
     height: 48,
-    backgroundColor: theme.categoryColors.place.bg,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -407,35 +428,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tripName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 2,
   },
   tripDestination: {
     fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
+    fontWeight: '500',
+    color: '#6B7280',
   },
   tripArrow: {
     width: 32,
     height: 32,
-    backgroundColor: theme.colors.backgroundAlt,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   tripArrowText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
+    fontSize: 18,
+    color: '#9CA3AF',
   },
   tripDate: {
     fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textTertiary,
-    marginTop: 4,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    marginTop: 8,
   },
 
   // Empty State
@@ -446,67 +465,74 @@ const styles = StyleSheet.create({
   emptyIconBox: {
     width: 80,
     height: 80,
-    backgroundColor: theme.colors.secondary,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    ...theme.shadows.neopop.md,
   },
   emptyIcon: {
     fontSize: 40,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
+    fontWeight: '500',
+    color: '#6B7280',
     textAlign: 'center',
   },
 
   // Settings Section
   settingsSection: {
-    padding: 16,
+    padding: 20,
     marginBottom: 8,
   },
   settingButton: {
-    backgroundColor: theme.colors.surface,
-    padding: 18,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    marginBottom: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    ...theme.shadows.neopop.sm,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  settingIcon: {
+    fontSize: 20,
+    marginRight: 12,
   },
   settingButtonText: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
-    letterSpacing: 0.5,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  settingArrow: {
+    fontSize: 18,
+    color: '#9CA3AF',
   },
 
   // Logout Button
   logoutButton: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 18,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.error,
+    marginHorizontal: 20,
+    marginTop: 8,
+    padding: 16,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
     alignItems: 'center',
-    ...theme.shadows.neopop.sm,
   },
   logoutButtonText: {
     fontSize: 16,
-    fontWeight: '900',
-    color: theme.colors.error,
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    color: '#DC2626',
   },
 
   // Footer

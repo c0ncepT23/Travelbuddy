@@ -11,7 +11,6 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTripStore } from '../../stores/tripStore';
-import theme from '../../config/theme';
 
 // For mobile, we'll use conditional import
 const DateTimePicker = Platform.OS !== 'web' 
@@ -89,28 +88,39 @@ export default function CreateTripScreen({ navigation }: any) {
         <View style={styles.content}>
           {/* Header */}
           <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.backButtonText}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>New Trip</Text>
+            <View style={styles.backButton} />
+          </View>
+
+          {/* Icon */}
+          <View style={styles.iconContainer}>
             <View style={styles.iconBox}>
               <Text style={styles.icon}>✈️</Text>
             </View>
-            <Text style={styles.title}>CREATE NEW TRIP</Text>
-            <Text style={styles.subtitle}>Plan your next adventure together</Text>
+            <Text style={styles.subtitle}>Plan your next adventure</Text>
           </View>
 
           {/* Trip Name */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>TRIP NAME *</Text>
+            <Text style={styles.label}>Trip Name</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g., Japan Adventure 2025"
               value={name}
               onChangeText={setName}
-              placeholderTextColor={theme.colors.textTertiary}
+              placeholderTextColor="#9CA3AF"
             />
           </View>
 
           {/* Destination */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>DESTINATION *</Text>
+            <Text style={styles.label}>Destination</Text>
             <View style={styles.inputWithIcon}>
               <Text style={styles.inputIcon}>📍</Text>
               <TextInput
@@ -118,19 +128,19 @@ export default function CreateTripScreen({ navigation }: any) {
                 placeholder="e.g., Tokyo, Japan"
                 value={destination}
                 onChangeText={setDestination}
-                placeholderTextColor={theme.colors.textTertiary}
+                placeholderTextColor="#9CA3AF"
               />
             </View>
           </View>
 
           {/* Dates Section */}
           <View style={styles.datesSection}>
-            <Text style={styles.sectionTitle}>WHEN ARE YOU GOING?</Text>
+            <Text style={styles.label}>When are you going?</Text>
             
             <View style={styles.dateRow}>
               {/* Start Date */}
               <View style={styles.dateInputGroup}>
-                <Text style={styles.dateLabel}>START</Text>
+                <Text style={styles.dateLabel}>Start</Text>
                 <TouchableOpacity
                   style={styles.datePicker}
                   onPress={() => setShowStartPicker(true)}
@@ -144,7 +154,7 @@ export default function CreateTripScreen({ navigation }: any) {
 
               {/* End Date */}
               <View style={styles.dateInputGroup}>
-                <Text style={styles.dateLabel}>END</Text>
+                <Text style={styles.dateLabel}>End</Text>
                 <TouchableOpacity
                   style={styles.datePicker}
                   onPress={() => setShowEndPicker(true)}
@@ -240,18 +250,11 @@ export default function CreateTripScreen({ navigation }: any) {
             style={[styles.createButton, isLoading && styles.createButtonDisabled]}
             onPress={handleCreate}
             disabled={isLoading}
+            activeOpacity={0.9}
           >
             <Text style={styles.createButtonText}>
-              {isLoading ? 'CREATING...' : '✨ CREATE TRIP'}
+              {isLoading ? 'Creating...' : 'Create Trip'}
             </Text>
-          </TouchableOpacity>
-
-          {/* Cancel Button */}
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.cancelText}>← CANCEL</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -262,104 +265,120 @@ export default function CreateTripScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 40,
   },
   content: {
     flex: 1,
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 20 : 20,
+    padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
   },
+  
+  // Header
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: '#1F2937',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+
+  // Icon
+  iconContainer: {
     alignItems: 'center',
     marginBottom: 32,
   },
   iconBox: {
     width: 80,
     height: 80,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 4,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    ...theme.shadows.neopop.lg,
+    marginBottom: 12,
   },
   icon: {
     fontSize: 40,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    marginBottom: 8,
-    color: theme.colors.textPrimary,
-    letterSpacing: 1,
-  },
   subtitle: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    fontWeight: '600',
+    fontSize: 15,
+    color: '#6B7280',
+    fontWeight: '500',
   },
+
+  // Inputs
   inputGroup: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '600',
     marginBottom: 8,
-    color: theme.colors.textPrimary,
-    letterSpacing: 1,
+    color: '#374151',
   },
   input: {
-    height: 56,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    height: 52,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.textPrimary,
-    ...theme.shadows.neopop.sm,
+    color: '#1F2937',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   inputWithIcon: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingHorizontal: 16,
-    height: 56,
-    ...theme.shadows.neopop.sm,
+    height: 52,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   inputIcon: {
-    fontSize: 20,
-    marginRight: 12,
+    fontSize: 18,
+    marginRight: 10,
   },
   inputWithIconField: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.textPrimary,
+    color: '#1F2937',
     height: '100%',
   },
+
+  // Dates
   datesSection: {
     marginBottom: 24,
-    backgroundColor: theme.colors.surface,
-    padding: 16,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
-    marginBottom: 16,
-    letterSpacing: 1,
   },
   dateRow: {
     flexDirection: 'row',
@@ -369,82 +388,65 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dateLabel: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '600',
     marginBottom: 8,
-    color: theme.colors.textSecondary,
-    letterSpacing: 1,
+    color: '#6B7280',
   },
   datePicker: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.backgroundAlt,
-    borderWidth: 2,
-    borderColor: theme.colors.borderMedium,
-    padding: 12,
-    minHeight: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   dateIcon: {
-    fontSize: 18,
+    fontSize: 16,
     marginRight: 8,
   },
   dateText: {
     flex: 1,
     fontSize: 13,
-    color: theme.colors.textPrimary,
-    fontWeight: '600',
+    color: '#1F2937',
+    fontWeight: '500',
   },
   dateTextPlaceholder: {
-    color: theme.colors.textTertiary,
-    fontWeight: '500',
+    color: '#9CA3AF',
   },
   durationBadge: {
     marginTop: 16,
-    backgroundColor: theme.colors.secondary,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     alignSelf: 'flex-start',
-    ...theme.shadows.neopop.sm,
   },
   durationText: {
-    color: theme.colors.textPrimary,
+    color: '#059669',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '600',
   },
+
+  // Create Button
   createButton: {
-    height: 60,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 4,
-    borderColor: theme.colors.borderDark,
+    height: 56,
+    backgroundColor: '#1F2937',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
-    ...theme.shadows.neopop.lg,
+    marginTop: 16,
   },
   createButtonDisabled: {
     opacity: 0.6,
   },
   createButtonText: {
-    color: theme.colors.textInverse,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  cancelButton: {
-    marginTop: 16,
-    alignItems: 'center',
-    paddingVertical: 14,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
-  },
-  cancelText: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
   },
 });

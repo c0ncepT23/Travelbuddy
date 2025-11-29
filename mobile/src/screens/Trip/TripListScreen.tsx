@@ -14,7 +14,6 @@ import { useXPStore } from '../../stores/xpStore';
 import { format } from 'date-fns';
 import { AnimatedCard } from '../../components/AnimatedCard';
 import { FadeIn } from '../../components/FadeIn';
-import theme from '../../config/theme';
 
 export default function TripListScreen({ navigation }: any) {
   const { trips, isLoading, fetchTrips } = useTripStore();
@@ -55,19 +54,19 @@ export default function TripListScreen({ navigation }: any) {
         )}
       </View>
       <View style={styles.arrowContainer}>
-        <Text style={styles.arrow}>→</Text>
+        <Text style={styles.arrow}>›</Text>
       </View>
     </AnimatedCard>
   );
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       {/* HEADER */}
       <FadeIn delay={0} style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.greeting}>Hello, {user?.name}! 👋</Text>
+          <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0]}! 👋</Text>
           <View style={styles.levelBadge}>
             <Text style={styles.levelText}>⭐ {getLevelTitle()}</Text>
           </View>
@@ -82,8 +81,7 @@ export default function TripListScreen({ navigation }: any) {
 
       {/* TITLE SECTION */}
       <FadeIn delay={100} style={styles.titleSection}>
-        <Text style={styles.pageTitle}>YOUR TRIPS</Text>
-        <View style={styles.titleUnderline} />
+        <Text style={styles.pageTitle}>Your Trips</Text>
       </FadeIn>
 
       <FlatList
@@ -95,8 +93,8 @@ export default function TripListScreen({ navigation }: any) {
           <RefreshControl 
             refreshing={isLoading} 
             onRefresh={fetchTrips}
-            colors={[theme.colors.primary]}
-            tintColor={theme.colors.primary}
+            colors={['#3B82F6']}
+            tintColor="#3B82F6"
           />
         }
         ListEmptyComponent={
@@ -106,7 +104,7 @@ export default function TripListScreen({ navigation }: any) {
             </View>
             <Text style={styles.emptyText}>No trips yet!</Text>
             <Text style={styles.emptySubtext}>
-              Time to start planning your next adventure! ✨
+              Time to start planning your next adventure
             </Text>
           </FadeIn>
         }
@@ -117,18 +115,18 @@ export default function TripListScreen({ navigation }: any) {
         <TouchableOpacity
           style={styles.createButton}
           onPress={() => navigation.navigate('CreateTrip')}
-          activeOpacity={0.8}
+          activeOpacity={0.9}
         >
-          <Text style={styles.createButtonText}>✨ CREATE TRIP</Text>
+          <Text style={styles.createButtonText}>+ Create Trip</Text>
         </TouchableOpacity>
         
         {/* Join Trip Button */}
         <TouchableOpacity
           style={styles.joinButton}
           onPress={() => navigation.navigate('JoinTrip')}
-          activeOpacity={0.8}
+          activeOpacity={0.9}
         >
-          <Text style={styles.joinButtonText}>🔗 JOIN TRIP</Text>
+          <Text style={styles.joinButtonText}>🔗 Join</Text>
         </TouchableOpacity>
       </FadeIn>
     </View>
@@ -138,7 +136,7 @@ export default function TripListScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#F9FAFB',
   },
   
   // HEADER
@@ -148,133 +146,120 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 2,
-    borderBottomColor: theme.colors.border,
+    backgroundColor: '#FFFFFF',
   },
   headerContent: {
     flex: 1,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
-    letterSpacing: -0.5,
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
   },
   levelBadge: {
-    backgroundColor: theme.colors.secondary,
+    backgroundColor: '#FEF3C7',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 0,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
-    marginTop: 8,
+    borderRadius: 16,
     alignSelf: 'flex-start',
-    ...theme.shadows.neopop.sm,
   },
   levelText: {
     fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
+    fontWeight: '600',
+    color: '#92400E',
   },
   profileButton: {
-    width: 52,
-    height: 52,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    width: 48,
+    height: 48,
+    backgroundColor: '#3B82F6',
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.neopop.sm,
   },
   profileInitials: {
-    color: theme.colors.textInverse,
-    fontSize: 18,
-    fontWeight: '900',
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 
   // TITLE SECTION
   titleSection: {
     paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingTop: 20,
     paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
   },
   pageTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: theme.colors.textSecondary,
-    letterSpacing: 2,
-  },
-  titleUnderline: {
-    width: 40,
-    height: 4,
-    backgroundColor: theme.colors.primary,
-    marginTop: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
   },
 
   // TRIP LIST
   list: {
     padding: 16,
-    paddingBottom: 180,
+    paddingBottom: 160,
   },
 
-  // TRIP CARDS - NeoPOP Style
+  // TRIP CARDS - Clean Modern Style
   tripCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    ...theme.shadows.neopop.md,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   tripIconContainer: {
-    width: 56,
-    height: 56,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    width: 52,
+    height: 52,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   tripIconText: {
-    fontSize: 28,
+    fontSize: 26,
   },
   tripInfo: {
     flex: 1,
   },
   tripName: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     marginBottom: 4,
-    color: theme.colors.textPrimary,
+    color: '#1F2937',
   },
   tripDestination: {
     fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.primary,
+    fontWeight: '500',
+    color: '#3B82F6',
     marginBottom: 4,
   },
   tripDate: {
     fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
+    fontWeight: '500',
+    color: '#9CA3AF',
   },
   arrowContainer: {
-    width: 40,
-    height: 40,
-    backgroundColor: theme.colors.backgroundAlt,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    width: 32,
+    height: 32,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   arrow: {
     fontSize: 20,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
+    fontWeight: '300',
+    color: '#9CA3AF',
   },
 
   // EMPTY STATE
@@ -284,31 +269,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyIconBox: {
-    width: 120,
-    height: 120,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 4,
-    borderColor: theme.colors.borderDark,
+    width: 100,
+    height: 100,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
-    ...theme.shadows.neopop.lg,
   },
   emptyIcon: {
-    fontSize: 60,
+    fontSize: 50,
   },
   emptyText: {
-    fontSize: 24,
-    fontWeight: '900',
-    marginBottom: 12,
-    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: '#1F2937',
   },
   emptySubtext: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
   },
 
   // BOTTOM BUTTONS
@@ -318,42 +301,40 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    backgroundColor: theme.colors.surface,
-    borderTopWidth: 2,
-    borderTopColor: theme.colors.border,
+    paddingBottom: 32,
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 10,
   },
   createButton: {
     flex: 2,
-    height: 56,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    height: 54,
+    backgroundColor: '#1F2937',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.neopop.md,
   },
   createButtonText: {
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontWeight: '700',
   },
   joinButton: {
     flex: 1,
-    height: 56,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    height: 54,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.neopop.sm,
   },
   joinButtonText: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    color: '#1F2937',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

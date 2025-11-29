@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -69,7 +69,8 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'map' | 'planner'>('map');
-  const [mapDisplayMode, setMapDisplayMode] = useState<'markers' | 'heatmap' | 'photos'>('markers');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
   const confettiRef = React.useRef<any>(null);
   const mapRef = React.useRef<MapViewRef>(null);
   const [mapRegion, setMapRegion] = useState({
@@ -319,6 +320,20 @@ export default function TripDetailScreen({ route, navigation }: any) {
         const loadedItems = await fetchTripItems(tripId, {});
         await fetchCheckIns(tripId);
 
+        // Debug: Log items by category and their coordinates
+        const categories = ['food', 'place', 'shopping', 'activity', 'accommodation'];
+        categories.forEach(cat => {
+          const catItems = loadedItems.filter(i => i.category === cat);
+          if (catItems.length > 0) {
+            const coords = catItems.map(i => ({ 
+              name: i.name.substring(0, 20), 
+              lat: i.location_lat?.toFixed(2), 
+              lng: i.location_lng?.toFixed(2) 
+            }));
+            console.log(`[TripDetail] ${cat} items (${catItems.length}):`, JSON.stringify(coords));
+          }
+        });
+
         // Set map center based on saved places OR destination
         if (loadedItems.length > 0) {
           const validItems = loadedItems.filter(item => item.location_lat && item.location_lng);
@@ -396,14 +411,21 @@ export default function TripDetailScreen({ route, navigation }: any) {
     const initializeLocationFeatures = async () => {
       try {
         await initializeNotifications();
+        // Always try to start background tracking - it will set the trip ID
+        // even if the task is already running from a previous session
+        console.log('[TripDetail] Starting background tracking for trip:', tripId);
         await startBackgroundTracking(tripId);
       } catch (error) {
         console.error('[TripDetail] Error initializing location features:', error);
       }
     };
     initializeLocationFeatures();
+    
+    // Don't stop background tracking on unmount - just let it run
+    // The trip ID will be updated next time user enters a trip
     return () => {
-      stopBackgroundTracking();
+      // Only stop if navigating away from app entirely (handled elsewhere)
+      // stopBackgroundTracking();
     };
   }, [tripId]);
 
@@ -438,13 +460,80 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const tipCount = items.filter(i => i.category === 'tip').length;
 
   // Filter items based on selected category and check-in status
-  let filteredItems = selectedCategory === 'all' 
-    ? items 
-    : items.filter(i => i.category === selectedCategory);
-  
-  if (showOnlyCheckedIn) {
-    filteredItems = filteredItems.filter(i => isPlaceCheckedIn(tripId, i.id));
-  }
+  // Filter items by category, search, and check-in status
+  const filteredItems = useMemo(() => {
+    let result = selectedCategory === 'all' 
+      ? items 
+      : items.filter(i => i.category === selectedCategory);
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(item => 
+        item.name.toLowerCase().includes(query) ||
+        item.area_name?.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query)
+      );
+    }
+    
+    if (showOnlyCheckedIn) {
+      result = result.filter(i => isPlaceCheckedIn(tripId, i.id));
+    }
+    
+    return result;
+  }, [items, selectedCategory, searchQuery, showOnlyCheckedIn, tripId]);
+
+  // Extract city from formatted address
+  const extractCity = (address: string | undefined): string => {
+    if (!address) return '';
+    const parts = address.split(',').map(p => p.trim());
+    if (parts.length >= 3) {
+      const cityPart = parts[parts.length - 2];
+      const cityClean = cityPart.replace(/\d{3}-\d{4}/, '').trim();
+      if (cityClean && cityClean !== 'Japan') {
+        return cityClean;
+      }
+    }
+    return '';
+  };
+
+  // Group items by area with city context
+  const groupedByArea = useMemo(() => {
+    const groups: Record<string, { items: any[], city: string }> = {};
+    
+    filteredItems.forEach(item => {
+      const area = item.area_name || 'Other Locations';
+      const city = extractCity(item.formatted_address || item.location_name);
+      
+      if (!groups[area]) {
+        groups[area] = { items: [], city };
+      }
+      groups[area].items.push(item);
+      if (city && !groups[area].city) {
+        groups[area].city = city;
+      }
+    });
+    
+    const sortedAreas = Object.keys(groups).sort((a, b) => {
+      if (a === 'Other Locations') return 1;
+      if (b === 'Other Locations') return -1;
+      return a.localeCompare(b);
+    });
+    
+    return { groups, sortedAreas };
+  }, [filteredItems]);
+
+  const toggleAreaCollapse = (area: string) => {
+    setCollapsedAreas(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(area)) {
+        newSet.delete(area);
+      } else {
+        newSet.add(area);
+      }
+      return newSet;
+    });
+  };
 
   if (isLoading || !currentTrip) {
     return (
@@ -472,7 +561,6 @@ export default function TripDetailScreen({ route, navigation }: any) {
               items={items}
               region={mapRegion}
               selectedPlace={selectedPlace}
-              displayMode={mapDisplayMode}
               onMarkerPress={(item) => {
                 HapticFeedback.medium();
                 setSelectedPlace(item);
@@ -483,28 +571,6 @@ export default function TripDetailScreen({ route, navigation }: any) {
               }}
               onClusterPress={handleClusterPress}
             />
-            
-            {/* Map Display Mode Toggle - Bottom left of map */}
-            <View style={styles.mapModeToggle}>
-              <TouchableOpacity
-                style={[styles.mapModeButton, mapDisplayMode === 'markers' && styles.mapModeButtonActive]}
-                onPress={() => setMapDisplayMode('markers')}
-              >
-                <Text style={styles.mapModeIcon}>📍</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.mapModeButton, mapDisplayMode === 'heatmap' && styles.mapModeButtonActive]}
-                onPress={() => setMapDisplayMode('heatmap')}
-              >
-                <Text style={styles.mapModeIcon}>🔥</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.mapModeButton, mapDisplayMode === 'photos' && styles.mapModeButtonActive]}
-                onPress={() => setMapDisplayMode('photos')}
-              >
-                <Text style={styles.mapModeIcon}>📷</Text>
-              </TouchableOpacity>
-            </View>
           </View>
 
           {/* PLACE LIST DRAWER - Only shows when drawer is open */}
@@ -558,142 +624,96 @@ export default function TripDetailScreen({ route, navigation }: any) {
         </MotiView>
       )}
 
-      {/* FLOATING TOP CONTROLS (Z-Index 10) */}
+      {/* FLOATING TOP CONTROLS - Clean Modern Style */}
       {viewMode === 'map' ? (
-        // MAP VIEW HEADER - Full header with trip info (hidden when drawer is open)
         <View style={styles.topControls}>
-          {/* Back Button - Always visible */}
-          <MotiView
-            from={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', delay: 100 }}
-          >
-            <TouchableOpacity 
-            style={styles.floatingButton} 
+          {/* Back Button */}
+          <TouchableOpacity 
+            style={styles.headerButton} 
             onPress={() => {
               HapticFeedback.medium();
               navigation.goBack();
             }}
           >
-              <Text style={styles.floatingButtonText}>←</Text>
-            </TouchableOpacity>
-          </MotiView>
+            <Text style={styles.headerButtonIcon}>←</Text>
+          </TouchableOpacity>
 
-          {/* Trip Name Pill with Members - Hidden when drawer is open */}
+          {/* Trip Name Pill - Clean minimal design */}
           {!isDrawerOpen && (
             <TouchableOpacity 
+              style={styles.tripPill}
               onPress={() => {
                 HapticFeedback.medium();
                 navigation.navigate('GroupChat', { tripId });
               }}
               activeOpacity={0.9}
             >
-              <MotiView
-                from={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', delay: 200 }}
-                style={styles.tripPill}
-              >
-                <Text style={styles.tripPillText}>{currentTrip.name}</Text>
-                <Text style={styles.tripPillSubtext}>📍 {currentTrip.destination}</Text>
-                
-                {/* Member Avatars Row */}
-                <View style={styles.memberAvatarsRow}>
-                  {currentTripMembers?.slice(0, 4).map((member, index) => (
-                    <View 
-                      key={member.id}
-                      style={[
-                        styles.memberAvatarMini,
-                        { 
-                          marginLeft: index > 0 ? -8 : 0,
-                          backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EC4899'][index % 4],
-                          zIndex: 10 - index,
-                        }
-                      ]}
-                    >
-                      <Text style={styles.memberAvatarMiniText}>
-                        {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
-                      </Text>
-                    </View>
-                  ))}
-                  {(currentTripMembers?.length || 0) > 4 && (
-                    <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
-                      <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 4}</Text>
-                    </View>
-                  )}
-                </View>
-              </MotiView>
+              <Text style={styles.tripPillText}>{currentTrip.name}</Text>
               
-              {/* XP Badge */}
-              <MotiView
-                from={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', delay: 400 }}
-                style={styles.xpBadge}
-              >
-                <Text style={styles.xpBadgeText}>⭐ Lv.{level}</Text>
-              </MotiView>
+              {/* Member Avatars - Inline */}
+              <View style={styles.memberAvatarsInline}>
+                {currentTripMembers?.slice(0, 3).map((member, index) => (
+                  <View 
+                    key={member.id}
+                    style={[
+                      styles.memberAvatarMini,
+                      { 
+                        marginLeft: index > 0 ? -6 : 0,
+                        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EC4899'][index % 4],
+                        zIndex: 10 - index,
+                      }
+                    ]}
+                  >
+                    <Text style={styles.memberAvatarMiniText}>
+                      {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                    </Text>
+                  </View>
+                ))}
+                {(currentTripMembers?.length || 0) > 3 && (
+                  <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
+                    <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 3}</Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           )}
 
           {/* View Toggle + Share Button - Hidden when drawer is open */}
           {!isDrawerOpen && (
             <View style={styles.headerRightButtons}>
-              {/* View Toggle */}
-              <MotiView
-                from={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', delay: 250 }}
+              {/* Planner Toggle */}
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => {
+                  HapticFeedback.medium();
+                  setViewMode(viewMode === 'map' ? 'planner' : 'map');
+                  if (isDrawerOpen) {
+                    handleDrawerClose();
+                  }
+                }}
               >
-                <TouchableOpacity
-                  style={[
-                    styles.viewToggleButton,
-                    viewMode === 'planner' && styles.viewToggleButtonActive,
-                  ]}
-                  onPress={() => {
-                    HapticFeedback.medium();
-                    setViewMode(viewMode === 'map' ? 'planner' : 'map');
-                    // Close drawer when switching views
-                    if (isDrawerOpen) {
-                      handleDrawerClose();
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.viewToggleText}>
-                    {viewMode === 'map' ? '📅' : '🗺️'}
-                  </Text>
-                </TouchableOpacity>
-              </MotiView>
+                <Text style={styles.headerButtonIcon}>📅</Text>
+              </TouchableOpacity>
 
               {/* Share Button */}
-              <MotiView
-                from={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', delay: 300 }}
+              <TouchableOpacity 
+                style={styles.headerButton}
+                onPress={async () => {
+                  HapticFeedback.medium();
+                  const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
+                  const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
+                  try {
+                    await Share.share({
+                      message: shareMessage,
+                      title: `Join ${currentTrip.name}`,
+                    });
+                  } catch (error) {
+                    console.error('Share error:', error);
+                  }
+                }}
               >
-                <TouchableOpacity 
-                  style={styles.floatingButton}
-                  onPress={async () => {
-                    HapticFeedback.medium();
-                    
-                    const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
-                    const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
-                    
-                    try {
-                      await Share.share({
-                        message: shareMessage,
-                        title: `Join ${currentTrip.name}`,
-                      });
-                    } catch (error) {
-                      console.error('Share error:', error);
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.floatingButtonText}>↗</Text>
-                </TouchableOpacity>
-              </MotiView>
+                <Text style={styles.headerButtonIcon}>↗</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -727,36 +747,18 @@ export default function TripDetailScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* GROUP CHAT BUTTON (FAB) - Only in map view, hidden when expanded */}
-      {viewMode === 'map' && !isExpanded && (
-        <MotiView
-          from={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', delay: 500, damping: 12 }}
-          style={styles.magicButton}
-          pointerEvents="box-none"
+      {/* GROUP CHAT BUTTON (FAB) - Clean modern style */}
+      {viewMode === 'map' && !isExpanded && !isDrawerOpen && (
+        <TouchableOpacity 
+          style={styles.chatFab}
+          onPress={() => {
+            HapticFeedback.medium();
+            navigation.navigate('GroupChat', { tripId });
+          }}
+          activeOpacity={0.9}
         >
-          <TouchableOpacity 
-            style={styles.magicButtonInner}
-            onPress={() => {
-              HapticFeedback.heavy();
-              navigation.navigate('GroupChat', { tripId });
-            }}
-            activeOpacity={0.8}
-          >
-            <MotiView
-              from={{ scale: 1 }}
-              animate={{ scale: 1.15 }}
-              transition={{
-                type: 'timing',
-                duration: 2000,
-                loop: true,
-              }}
-              style={[styles.magicGlow, { backgroundColor: theme.colors.primary }]}
-            />
-            <Text style={styles.magicButtonText}>💬</Text>
-          </TouchableOpacity>
-        </MotiView>
+          <Text style={styles.chatFabIcon}>💬</Text>
+        </TouchableOpacity>
       )}
 
       {/* BOTTOM SHEET - SNEAK PEEK - Only in map view */}
@@ -769,55 +771,75 @@ export default function TripDetailScreen({ route, navigation }: any) {
           </View>
         </GestureDetector>
 
-          {/* Sneak Peek (Collapsed) */}
+          {/* Sneak Peek (Collapsed) - Clean modern style */}
           {!isExpanded && (
-            <MotiView
-              from={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ type: 'timing', duration: 300 }}
-              style={styles.sneakPeek}
-            >
-              <Text style={styles.sneakPeekTitle}>{items.length} saved spots ✨</Text>
+            <View style={styles.sneakPeek}>
+              <View style={styles.sneakPeekHeader}>
+                <Text style={styles.sneakPeekTitle}>{currentTrip?.destination || 'Your Places'}</Text>
+                <Text style={styles.sneakPeekCount}>{items.length} saved</Text>
+              </View>
               <View style={styles.sneakPeekStats}>
                 {foodCount > 0 && (
-                  <View style={[styles.statBadge, { backgroundColor: 'rgba(244, 114, 182, 0.2)' }]}>
-                    <Text style={styles.statBadgeText}>🍜 {foodCount}</Text>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>🍽️ {foodCount}</Text>
                   </View>
                 )}
                 {placeCount > 0 && (
-                  <View style={[styles.statBadge, { backgroundColor: 'rgba(6, 182, 212, 0.2)' }]}>
-                    <Text style={styles.statBadgeText}>📍 {placeCount}</Text>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>🏛️ {placeCount}</Text>
                   </View>
                 )}
                 {shoppingCount > 0 && (
-                  <View style={[styles.statBadge, { backgroundColor: 'rgba(251, 191, 36, 0.2)' }]}>
-                    <Text style={styles.statBadgeText}>🛍️ {shoppingCount}</Text>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>🛍️ {shoppingCount}</Text>
                   </View>
                 )}
                 {activityCount > 0 && (
-                  <View style={[styles.statBadge, { backgroundColor: 'rgba(132, 204, 22, 0.2)' }]}>
-                    <Text style={styles.statBadgeText}>🎯 {activityCount}</Text>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>🎯 {activityCount}</Text>
+                  </View>
+                )}
+                {accommodationCount > 0 && (
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>🏨 {accommodationCount}</Text>
                   </View>
                 )}
               </View>
-              <Text style={styles.swipeHint}>Swipe up to explore →</Text>
-            </MotiView>
+            </View>
           )}
 
-          {/* Expanded List */}
+          {/* Expanded List - Clean UX */}
           {isExpanded && (
             <View style={styles.expandedContent}>
+              {/* Header */}
               <View style={styles.expandedHeader}>
-                <Text style={styles.expandedTitle}>Your Places 🗺️</Text>
+                <Text style={styles.expandedTitle}>{currentTrip?.destination || 'Your Places'}</Text>
                 <TouchableOpacity
-                  style={styles.shareStoryButton}
+                  style={styles.closeExpandedButton}
                   onPress={() => {
-                    HapticFeedback.medium();
-                    setShowShareStoryModal(true);
+                    setIsExpanded(false);
+                    sheetHeight.value = withSpring(BOTTOM_SHEET_MIN_HEIGHT);
                   }}
                 >
-                  <Text style={styles.shareStoryButtonText}>📖 My Story</Text>
+                  <Text style={styles.closeExpandedText}>✕</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
+                <Text style={styles.searchIcon}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search places..."
+                  placeholderTextColor="#9CA3AF"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Text style={styles.clearSearchText}>✕</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               
               {/* Category Filter Chips */}
@@ -829,26 +851,20 @@ export default function TripDetailScreen({ route, navigation }: any) {
               >
                 <TouchableOpacity
                   style={[styles.filterChip, selectedCategory === 'all' && styles.filterChipActive]}
-                  onPress={() => {
-                    HapticFeedback.selection();
-                    setSelectedCategory('all');
-                  }}
+                  onPress={() => setSelectedCategory('all')}
                 >
                   <Text style={[styles.filterChipText, selectedCategory === 'all' && styles.filterChipTextActive]}>
-                    All ({items.length})
+                    All
                   </Text>
                 </TouchableOpacity>
                 
                 {foodCount > 0 && (
                   <TouchableOpacity
                     style={[styles.filterChip, selectedCategory === 'food' && styles.filterChipActive]}
-                    onPress={() => {
-                      HapticFeedback.selection();
-                      setSelectedCategory('food');
-                    }}
+                    onPress={() => setSelectedCategory('food')}
                   >
                     <Text style={[styles.filterChipText, selectedCategory === 'food' && styles.filterChipTextActive]}>
-                      🍜 Food ({foodCount})
+                      Food
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -856,13 +872,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
                 {placeCount > 0 && (
                   <TouchableOpacity
                     style={[styles.filterChip, selectedCategory === 'place' && styles.filterChipActive]}
-                    onPress={() => {
-                      HapticFeedback.selection();
-                      setSelectedCategory('place');
-                    }}
+                    onPress={() => setSelectedCategory('place')}
                   >
                     <Text style={[styles.filterChipText, selectedCategory === 'place' && styles.filterChipTextActive]}>
-                      📍 Places ({placeCount})
+                      Places
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -870,13 +883,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
                 {shoppingCount > 0 && (
                   <TouchableOpacity
                     style={[styles.filterChip, selectedCategory === 'shopping' && styles.filterChipActive]}
-                    onPress={() => {
-                      HapticFeedback.selection();
-                      setSelectedCategory('shopping');
-                    }}
+                    onPress={() => setSelectedCategory('shopping')}
                   >
                     <Text style={[styles.filterChipText, selectedCategory === 'shopping' && styles.filterChipTextActive]}>
-                      🛍️ Shopping ({shoppingCount})
+                      Shopping
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -884,13 +894,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
                 {activityCount > 0 && (
                   <TouchableOpacity
                     style={[styles.filterChip, selectedCategory === 'activity' && styles.filterChipActive]}
-                    onPress={() => {
-                      HapticFeedback.selection();
-                      setSelectedCategory('activity');
-                    }}
+                    onPress={() => setSelectedCategory('activity')}
                   >
                     <Text style={[styles.filterChipText, selectedCategory === 'activity' && styles.filterChipTextActive]}>
-                      🎯 Activity ({activityCount})
+                      Activities
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -898,70 +905,94 @@ export default function TripDetailScreen({ route, navigation }: any) {
                 {accommodationCount > 0 && (
                   <TouchableOpacity
                     style={[styles.filterChip, selectedCategory === 'accommodation' && styles.filterChipActive]}
-                    onPress={() => {
-                      HapticFeedback.selection();
-                      setSelectedCategory('accommodation');
-                    }}
+                    onPress={() => setSelectedCategory('accommodation')}
                   >
                     <Text style={[styles.filterChipText, selectedCategory === 'accommodation' && styles.filterChipTextActive]}>
-                      🏨 Hotels ({accommodationCount})
+                      Hotels
                     </Text>
                   </TouchableOpacity>
                 )}
-                
-                {/* Checked In Filter */}
-                <TouchableOpacity
-                  style={[styles.filterChip, showOnlyCheckedIn && styles.filterChipActive]}
-                  onPress={() => {
-                    HapticFeedback.selection();
-                    setShowOnlyCheckedIn(!showOnlyCheckedIn);
-                  }}
-                >
-                  <Text style={[styles.filterChipText, showOnlyCheckedIn && styles.filterChipTextActive]}>
-                    ✓ Visited
-                  </Text>
-                </TouchableOpacity>
               </ScrollView>
               
-              <FlatList
-                data={filteredItems}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.listItem}
-                    onPress={() => {
-                      HapticFeedback.light();
-                      setSelectedPlace(item);
-                      setDrawerItems(filteredItems); // Set all items for navigation
-                      setIsDrawerOpen(true); // Open drawer to show place details
-                      setIsExpanded(false);
-                      sheetHeight.value = withSpring(BOTTOM_SHEET_MIN_HEIGHT);
-                      // Animate map to the selected place
-                      if (item.location_lat && item.location_lng && mapRef.current) {
-                        mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
-                      }
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.listItemIconContainer}>
-                      <Text style={styles.listItemEmoji}>
-                        {item.category === 'food' ? '🍜' : 
-                         item.category === 'place' ? '📍' :
-                         item.category === 'shopping' ? '🛍️' :
-                         item.category === 'activity' ? '🎯' :
-                         item.category === 'accommodation' ? '🏨' : '💡'}
-                      </Text>
-                    </View>
-                    <View style={styles.listItemInfo}>
-                      <Text style={styles.listItemName}>{item.name}</Text>
-                      <Text style={styles.listItemLocation}>{item.location_name || 'Location unknown'}</Text>
-                    </View>
-                    <Text style={styles.listItemArrow}>→</Text>
-                  </TouchableOpacity>
-                )}
+              {/* Places grouped by area */}
+              <ScrollView 
+                style={styles.placesScrollView}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.flatListContent}
-              />
+                contentContainerStyle={styles.placesScrollContent}
+              >
+                {groupedByArea.sortedAreas.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateEmoji}>🔍</Text>
+                    <Text style={styles.emptyStateText}>No places found</Text>
+                  </View>
+                ) : (
+                  groupedByArea.sortedAreas.map(area => {
+                    const areaData = groupedByArea.groups[area];
+                    const areaItems = areaData.items;
+                    const city = areaData.city;
+                    const isCollapsed = collapsedAreas.has(area);
+                    const displayName = city && area !== 'Other Locations' 
+                      ? `${area}, ${city}` 
+                      : area;
+                    
+                    return (
+                      <View key={area} style={styles.areaSection}>
+                        <TouchableOpacity 
+                          style={styles.areaHeader}
+                          onPress={() => toggleAreaCollapse(area)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.areaHeaderLeft}>
+                            <Text style={styles.areaTitle}>{displayName}</Text>
+                            <Text style={styles.areaCount}>
+                              {areaItems.length} {areaItems.length === 1 ? 'place' : 'places'}
+                            </Text>
+                          </View>
+                          <Text style={styles.areaChevron}>
+                            {isCollapsed ? '›' : '⌄'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {!isCollapsed && areaItems.map((item: any) => (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.placeCard}
+                            onPress={() => {
+                              HapticFeedback.light();
+                              setSelectedPlace(item);
+                              setDrawerItems(filteredItems);
+                              setIsDrawerOpen(true);
+                              setIsExpanded(false);
+                              sheetHeight.value = withSpring(BOTTOM_SHEET_MIN_HEIGHT);
+                              if (item.location_lat && item.location_lng && mapRef.current) {
+                                mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
+                              }
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.placeIconContainer}>
+                              <Text style={styles.placeIcon}>
+                                {item.category === 'food' ? '🍽️' : 
+                                 item.category === 'place' ? '🏛️' :
+                                 item.category === 'shopping' ? '🛍️' :
+                                 item.category === 'activity' ? '🎯' :
+                                 item.category === 'accommodation' ? '🏨' : '📍'}
+                              </Text>
+                            </View>
+                            <View style={styles.placeInfo}>
+                              <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
+                              <Text style={styles.placeDescription} numberOfLines={2}>
+                                {item.description || item.location_name || 'Tap to view details'}
+                              </Text>
+                            </View>
+                            <Text style={styles.placeChevron}>›</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
             </View>
           )}
         </Animated.View>
@@ -1178,34 +1209,8 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   
-  // Map Display Mode Toggle - Bottom left above sheet
-  mapModeToggle: {
-    position: 'absolute',
-    bottom: BOTTOM_SHEET_MIN_HEIGHT + 20,
-    left: 16,
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
-    zIndex: 100,
-  },
-  mapModeButton: {
-    width: 44,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 2,
-    borderRightColor: theme.colors.border,
-  },
-  mapModeButtonActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  mapModeIcon: {
-    fontSize: 18,
-  },
   
-  // Top Floating Controls - NeoPOP Style
+  // Top Floating Controls - Clean Modern Style
   topControls: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 40,
@@ -1216,41 +1221,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 100,
   },
-  floatingButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+  headerButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.neopop.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  floatingButtonText: {
-    fontSize: 22,
-    color: theme.colors.textPrimary,
-    fontWeight: '800',
+  headerButtonIcon: {
+    fontSize: 20,
   },
   headerRightButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  viewToggleButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...theme.shadows.neopop.sm,
-  },
-  viewToggleButtonActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  viewToggleText: {
-    fontSize: 22,
+    gap: 10,
   },
   plannerContainer: {
     position: 'absolute',
@@ -1305,65 +1295,57 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tripPill: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
-    maxWidth: screenWidth * 0.5,
-    ...theme.shadows.neopop.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    gap: 10,
   },
   tripPillText: {
     fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    textAlign: 'center',
-  },
-  tripPillSubtext: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 2,
+    fontWeight: '700',
+    color: '#1F2937',
   },
   xpBadge: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: -6,
+    right: -6,
     backgroundColor: theme.colors.success,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderWidth: 2,
     borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
+    borderRadius: 4,
   },
   xpBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     color: theme.colors.textInverse,
   },
 
-  // Member Avatars in Header
-  memberAvatarsRow: {
+  // Member Avatars - Inline with trip name
+  memberAvatarsInline: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
   memberAvatarMini: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   memberAvatarMiniText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
     color: theme.colors.textInverse,
   },
@@ -1377,205 +1359,267 @@ const styles = StyleSheet.create({
     color: theme.colors.textInverse,
   },
 
-  // Magic AI Button - NeoPOP Style
-  magicButton: {
+  // Chat FAB - Clean Modern Style
+  chatFab: {
     position: 'absolute',
-    bottom: BOTTOM_SHEET_MIN_HEIGHT + 20,
-    right: 20,
-    zIndex: 1000,
-  },
-  magicButtonInner: {
-    width: 64,
-    height: 64,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    bottom: BOTTOM_SHEET_MIN_HEIGHT + 16,
+    right: 16,
+    width: 56,
+    height: 56,
+    backgroundColor: '#1F2937',
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.neopop.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 1000,
   },
-  magicGlow: {
-    position: 'absolute',
-    width: 70,
-    height: 70,
-    opacity: 0.4,
-  },
-  magicButtonText: {
-    fontSize: 28,
+  chatFabIcon: {
+    fontSize: 24,
   },
 
-  // Bottom Sheet - NeoPOP Style
+  // Bottom Sheet - Clean Modern Style
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.soft.lg,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
   },
   sheetHandleArea: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   sheetHandle: {
-    width: 48,
-    height: 6,
-    backgroundColor: theme.colors.borderMedium,
-    borderRadius: 3,
+    width: 40,
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
   },
   
-  // Sneak Peek - NeoPOP Style
+  // Sneak Peek - Clean Modern Style
   sneakPeek: {
-    paddingVertical: 8,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  sneakPeekHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 16,
   },
   sneakPeekTitle: {
     fontSize: 22,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
-    marginBottom: 16,
-    letterSpacing: -0.5,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginRight: 8,
+  },
+  sneakPeekCount: {
+    fontSize: 14,
+    color: '#9CA3AF',
   },
   sneakPeekStats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
-  statBadge: {
-    paddingHorizontal: 14,
+  statPill: {
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
   },
-  statBadgeText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  swipeHint: {
-    fontSize: 13,
+  statPillText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.textSecondary,
-    marginTop: 12,
-    textAlign: 'center',
+    color: '#4B5563',
   },
 
-  // Expanded List - NeoPOP Style
+  // Expanded List - Clean Modern Style
   expandedContent: {
-    height: BOTTOM_SHEET_MAX_HEIGHT - 50,
-    paddingHorizontal: 4,
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   expandedHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingBottom: 16,
   },
   expandedTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: theme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
     letterSpacing: -0.5,
   },
-  shareStoryButton: {
-    backgroundColor: theme.colors.secondary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
+  closeExpandedButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  shareStoryButtonText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
+  closeExpandedText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  // Search
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    padding: 0,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    padding: 4,
   },
   chipScrollView: {
-    marginBottom: 16,
-    maxHeight: 48,
+    maxHeight: 44,
+    marginBottom: 12,
   },
   chipContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 4,
+    gap: 8,
   },
   filterChip: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: theme.colors.backgroundAlt,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-    marginRight: 10,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingVertical: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.borderDark,
+    backgroundColor: '#1F2937',
   },
   filterChipText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
+    fontWeight: '600',
+    color: '#6B7280',
   },
   filterChipTextActive: {
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
   },
-  flatListContent: {
-    paddingBottom: 40,
+  // Places List
+  placesScrollView: {
+    flex: 1,
+  },
+  placesScrollContent: {
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
-  listItem: {
+  // Area Section
+  areaSection: {
+    marginBottom: 8,
+  },
+  areaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  areaHeaderLeft: {
+    flex: 1,
+  },
+  areaTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  areaCount: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  areaChevron: {
+    fontSize: 20,
+    color: '#9CA3AF',
+    fontWeight: '300',
+  },
+  // Place Card
+  placeCard: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
-    ...theme.shadows.neopop.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
   },
-  listItemIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: theme.colors.primary,
-    borderWidth: 2,
-    borderColor: theme.colors.borderDark,
+  placeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
-  listItemEmoji: {
-    fontSize: 24,
+  placeIcon: {
+    fontSize: 22,
   },
-  listItemInfo: {
+  placeInfo: {
     flex: 1,
+    marginRight: 8,
   },
-  listItemName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    marginBottom: 4,
-    letterSpacing: -0.3,
-  },
-  listItemLocation: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
+  placeName: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
   },
-  listItemArrow: {
+  placeDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  placeChevron: {
     fontSize: 20,
-    color: theme.colors.primary,
-    fontWeight: '800',
+    color: '#9CA3AF',
+  },
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+    opacity: 0.5,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
   },
 
   // Place Card (when marker clicked)

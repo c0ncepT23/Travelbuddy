@@ -56,8 +56,6 @@ export default function RegisterScreen({ navigation }: any) {
       Alert.alert('Invalid OTP', 'Please enter the 4-digit OTP code');
       return;
     }
-
-    // OTP verified, move to name input
     setStep('name');
   };
 
@@ -96,7 +94,7 @@ export default function RegisterScreen({ navigation }: any) {
             <View style={styles.logoBox}>
               <Text style={styles.logoEmoji}>🌍</Text>
             </View>
-            <Text style={styles.title}>JOIN THE SQUAD!</Text>
+            <Text style={styles.title}>Join the squad!</Text>
             <Text style={styles.subtitle}>Start your travel journey today</Text>
           </View>
 
@@ -105,7 +103,7 @@ export default function RegisterScreen({ navigation }: any) {
             {step === 'phone' ? (
               <>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>PHONE NUMBER</Text>
+                  <Text style={styles.inputLabel}>Phone Number</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="+1 234 567 8900"
@@ -121,17 +119,17 @@ export default function RegisterScreen({ navigation }: any) {
                   style={[styles.signupButton, isLoadingOTP && styles.buttonDisabled]}
                   onPress={handleSendOTP}
                   disabled={isLoadingOTP}
-                  activeOpacity={0.8}
+                  activeOpacity={0.9}
                 >
                   <Text style={styles.signupButtonText}>
-                    {isLoadingOTP ? 'SENDING OTP...' : 'SEND OTP 📱'}
+                    {isLoadingOTP ? 'Sending OTP...' : 'Send OTP'}
                   </Text>
                 </TouchableOpacity>
               </>
             ) : step === 'otp' ? (
               <>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>ENTER OTP CODE</Text>
+                  <Text style={styles.inputLabel}>Enter OTP Code</Text>
                   <Text style={styles.otpHint}>We sent a 4-digit code to {phoneNumber}</Text>
                   <TextInput
                     style={styles.input}
@@ -148,22 +146,22 @@ export default function RegisterScreen({ navigation }: any) {
                 <TouchableOpacity
                   style={styles.signupButton}
                   onPress={handleVerifyOTP}
-                  activeOpacity={0.8}
+                  activeOpacity={0.9}
                 >
-                  <Text style={styles.signupButtonText}>VERIFY OTP ✅</Text>
+                  <Text style={styles.signupButtonText}>Verify OTP</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.backButton}
                   onPress={() => setStep('phone')}
                 >
-                  <Text style={styles.backButtonText}>← CHANGE PHONE NUMBER</Text>
+                  <Text style={styles.backButtonText}>← Change phone number</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>FIRST NAME</Text>
+                  <Text style={styles.inputLabel}>First Name</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="John"
@@ -176,7 +174,7 @@ export default function RegisterScreen({ navigation }: any) {
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>LAST NAME</Text>
+                  <Text style={styles.inputLabel}>Last Name</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="Doe"
@@ -191,10 +189,10 @@ export default function RegisterScreen({ navigation }: any) {
                   style={[styles.signupButton, isLoading && styles.buttonDisabled]}
                   onPress={handleRegister}
                   disabled={isLoading}
-                  activeOpacity={0.8}
+                  activeOpacity={0.9}
                 >
                   <Text style={styles.signupButtonText}>
-                    {isLoading ? 'CREATING ACCOUNT...' : 'SIGN ME UP! 🎉'}
+                    {isLoading ? 'Creating Account...' : "Sign Me Up! 🎉"}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -208,8 +206,9 @@ export default function RegisterScreen({ navigation }: any) {
               style={styles.loginButton}
               onPress={() => navigation.navigate('Login')}
               disabled={isLoading}
+              activeOpacity={0.9}
             >
-              <Text style={styles.loginButtonText}>LOG IN</Text>
+              <Text style={styles.loginButtonText}>Log In</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -221,11 +220,11 @@ export default function RegisterScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBEB', // Cream background
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: 40,
+    justifyContent: 'center',
   },
   content: {
     padding: 24,
@@ -239,33 +238,25 @@ const styles = StyleSheet.create({
   logoBox: {
     width: 100,
     height: 100,
-    backgroundColor: '#22C55E', // Green for registration
-    borderWidth: 4,
-    borderColor: '#000',
-    borderRadius: 0,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 8, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
   },
   logoEmoji: {
-    fontSize: 56,
+    fontSize: 50,
   },
   title: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1F2937',
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: 1,
   },
   subtitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#6B7280',
     textAlign: 'center',
   },
@@ -278,54 +269,42 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
     marginBottom: 8,
-    letterSpacing: 0.5,
   },
   otpHint: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#6B7280',
     marginBottom: 12,
   },
   input: {
     height: 56,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 3,
-    borderColor: '#000',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
+    fontWeight: '500',
+    color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
 
   // Sign Up Button
   signupButton: {
-    height: 60,
-    backgroundColor: '#22C55E', // Green
-    borderWidth: 4,
-    borderColor: '#000',
+    height: 56,
+    backgroundColor: '#10B981',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 6, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 6,
+    marginTop: 8,
   },
   signupButtonText: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 1,
   },
   buttonDisabled: {
     opacity: 0.5,
@@ -335,32 +314,25 @@ const styles = StyleSheet.create({
   loginSection: {
     alignItems: 'center',
     paddingTop: 24,
-    borderTopWidth: 3,
-    borderTopColor: '#E5E7EB',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   loginText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     color: '#6B7280',
     marginBottom: 16,
   },
   loginButton: {
     paddingVertical: 14,
     paddingHorizontal: 32,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 3,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
   },
   loginButtonText: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#000',
-    letterSpacing: 0.5,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2937',
   },
 
   // Back Button
@@ -370,8 +342,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#6B7280',
   },
 });
-
