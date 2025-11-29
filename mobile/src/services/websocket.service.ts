@@ -105,13 +105,15 @@ class WebSocketService {
   }
 
   joinTrip(tripId: string) {
+    // Always store the tripId so we can join when connected
+    this.currentTripId = tripId;
+    
     if (!this.socket?.connected) {
-      console.warn('[WebSocket] Not connected, cannot join trip');
+      console.warn('[WebSocket] Not connected yet, will join trip on connect');
       return;
     }
 
     console.log('[WebSocket] Joining trip:', tripId);
-    this.currentTripId = tripId;
     this.socket.emit('join_trip', tripId);
   }
 
