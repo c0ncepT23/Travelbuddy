@@ -4,6 +4,8 @@ import { GroupMessageModel } from '../models/groupMessage.model';
 import { PushNotificationService } from './pushNotification.service';
 import { UserModel } from '../models/user.model';
 import { TripGroupModel } from '../models/tripGroup.model';
+import { AICompanionService } from './aiCompanion.service';
+import { extractUrls } from '../utils/helpers';
 import jwt from 'jsonwebtoken';
 import logger from '../config/logger';
 
@@ -177,6 +179,69 @@ export class WebSocketService {
           }
           
           logger.info(`Message sent by ${socket.userId} in trip ${tripId}`);
+          
+          // 🆕 AUTO-PROCESS URLs: If message contains YouTube/Instagram/Reddit links, process with AI
+          const urls = extractUrls(content);
+          if (urls.length > 0) {
+            logger.info(`[WebSocket] URL detected in message, triggering AI processing: ${urls[0]}`);
+            
+            // Send "processing" message first
+            const processingMessage = await GroupMessageModel.create(
+              parseInt(tripId),
+              0, // System user ID (or bot ID)
+              `🤖 Processing ${urls[0].includes('youtube') ? 'YouTube video' : urls[0].includes('instagram') ? 'Instagram post' : 'link'}... Please wait! ⏳`,
+              'ai_response',
+              { isProcessing: true }
+            );
+            this.io.to(room).emit('new_message', {
+              ...processingMessage,
+              sender_email: 'AI Assistant'
+            });
+            
+            // Process the URL asynchronously
+            try {
+              const aiResponse = await AICompanionService.processQuery(
+                socket.userId.toString(),
+                tripId,
+                content
+              );
+              
+              // Send AI response with extracted places
+              const aiMessage = await GroupMessageModel.create(
+                parseInt(tripId),
+                0, // System/AI user
+                aiResponse.message,
+                'ai_response',
+                { 
+                  places: aiResponse.places,
+                  suggestions: aiResponse.suggestions,
+                  sourceUrl: urls[0]
+                }
+              );
+              
+              this.io.to(room).emit('new_message', {
+                ...aiMessage,
+                sender_email: 'AI Assistant'
+              });
+              
+              logger.info(`[WebSocket] AI processed URL and found ${aiResponse.places?.length || 0} places`);
+            } catch (aiError) {
+              logger.error('[WebSocket] AI URL processing error:', aiError);
+              
+              // Send error message
+              const errorMessage = await GroupMessageModel.create(
+                parseInt(tripId),
+                0,
+                `😅 Sorry, I had trouble processing that link. The video might not contain travel locations, or there was a technical issue. Try another link?`,
+                'ai_response',
+                { error: true }
+              );
+              this.io.to(room).emit('new_message', {
+                ...errorMessage,
+                sender_email: 'AI Assistant'
+              });
+            }
+          }
         } catch (error) {
           logger.error('Error sending message:', error);
           socket.emit('message_error', { error: 'Failed to send message' });
