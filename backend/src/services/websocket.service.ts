@@ -129,7 +129,14 @@ export class WebSocketService {
         metadata?: any;
         replyToMessageId?: number;
       }) => {
-        if (!socket.userId) return;
+        logger.info(`[WebSocket] ===== SEND_MESSAGE EVENT RECEIVED =====`);
+        logger.info(`[WebSocket] Data: ${JSON.stringify(data)}`);
+        logger.info(`[WebSocket] Socket userId: ${socket.userId}`);
+        
+        if (!socket.userId) {
+          logger.error('[WebSocket] No userId on socket, rejecting message');
+          return;
+        }
         
         try {
           const { tripId, content, messageType, metadata, replyToMessageId } = data;
@@ -184,8 +191,9 @@ export class WebSocketService {
           const urls = extractUrls(content);
           logger.info(`[WebSocket] Extracted URLs from message: ${JSON.stringify(urls)}`);
           
-          if (urls.length > 0) {
+          if (urls.length > 0 && socket.userId) {
             logger.info(`[WebSocket] URL DETECTED! Starting AI processing for: ${urls[0]}`);
+            logger.info(`[WebSocket] User ID: ${socket.userId}, Trip ID: ${tripId}`);
             
             // Send "processing" message first (use sender's ID with ai_response type)
             logger.info(`[WebSocket] Creating processing message for room: ${room}`);
