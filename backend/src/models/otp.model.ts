@@ -34,16 +34,13 @@ export class OTPModel {
     return otpCode;
   }
 
-  /**
-   * Generate a cryptographically secure 4-digit OTP
-   */
-  private static generateSecureOTP(): string {
-    const crypto = require('crypto');
-    // Generate 2 random bytes and convert to a 4-digit number
-    const randomBytes = crypto.randomBytes(2);
-    const randomNum = (randomBytes[0] << 8 | randomBytes[1]) % 10000;
-    return randomNum.toString().padStart(4, '0');
-  }
+  // TODO: Uncomment when SMS integration is ready
+  // private static generateSecureOTP(): string {
+  //   const crypto = require('crypto');
+  //   const randomBytes = crypto.randomBytes(2);
+  //   const randomNum = (randomBytes[0] << 8 | randomBytes[1]) % 10000;
+  //   return randomNum.toString().padStart(4, '0');
+  // }
 
   /**
    * Verify OTP for a phone number
