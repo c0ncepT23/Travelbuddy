@@ -230,7 +230,8 @@ export class AuthService {
 
   /**
    * Send OTP to phone number
-   * In production, this should integrate with Twilio/AWS SNS
+   * TODO: In production, integrate with Twilio/AWS SNS
+   * For now: Always returns '0000' for testing
    */
   static async sendOTP(phoneNumber: string): Promise<{ message: string; otpCode?: string }> {
     try {
@@ -239,34 +240,14 @@ export class AuthService {
         throw new Error('Invalid phone number');
       }
 
-      // Create OTP
+      // Create OTP (always '0000' for now)
       const otpCode = await OTPModel.createOTP(phoneNumber);
 
-      // Test phone numbers that can see OTP (for testing without SMS)
-      const testPhoneNumbers = ['+1234567890', '1234567890', '+919999999999', '9999999999'];
-      const isTestPhone = testPhoneNumbers.some(test => phoneNumber.includes(test.replace('+', '')));
-
-      // In production, send SMS via Twilio/AWS SNS/etc.
-      // logger.info(`OTP generated for ${phoneNumber}`); // Don't log OTP in production
-      
-      // SECURITY: Only return OTP code in development mode OR for test phone numbers
-      const isDevelopment = process.env.NODE_ENV !== 'production';
-      
-      if (isDevelopment || isTestPhone) {
-        if (isTestPhone) {
-          logger.info(`[TEST PHONE] OTP for ${phoneNumber}: ${otpCode}`);
-        } else {
-          logger.warn(`[DEV ONLY] OTP for ${phoneNumber}: ${otpCode}`);
-        }
-        return {
-          message: 'OTP sent successfully',
-          otpCode: otpCode, // Exposed for dev/test phones
-        };
-      }
-
-      // In production with real phone, never expose OTP in response
+      // TEMPORARY: Always return OTP until SMS is integrated
+      logger.info(`OTP for ${phoneNumber}: ${otpCode}`);
       return {
         message: 'OTP sent successfully',
+        otpCode: otpCode,
       };
     } catch (error) {
       logger.error('Send OTP error:', error);
