@@ -14,8 +14,8 @@ class WebSocketService {
     }
 
     try {
-      // Get auth token
-      const token = await AsyncStorage.getItem('token');
+      // Get auth token (stored as 'accessToken' by authStore)
+      const token = await AsyncStorage.getItem('accessToken');
       if (!token) {
         console.error('[WebSocket] No auth token found');
         return;
