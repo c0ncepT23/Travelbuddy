@@ -736,13 +736,13 @@ export default function TripDetailScreen({ route, navigation }: any) {
           )}
         </View>
       ) : (
-        // PLANNER/TIMELINE VIEW HEADER - Simple header with back and map buttons
+        // PLANNER/TIMELINE VIEW HEADER - Simple header with back to map
         <View style={styles.plannerHeader}>
           <TouchableOpacity 
             style={styles.plannerHeaderButton} 
             onPress={() => {
               HapticFeedback.medium();
-              navigation.goBack();
+              setViewMode('map'); // Go back to map, not previous screen
             }}
           >
             <Text style={styles.plannerHeaderButtonText}>←</Text>
@@ -759,10 +759,10 @@ export default function TripDetailScreen({ route, navigation }: any) {
             style={styles.plannerHeaderButton}
             onPress={() => {
               HapticFeedback.medium();
-              setViewMode('map');
+              navigation.goBack(); // This one exits the trip entirely
             }}
           >
-            <Text style={styles.plannerHeaderButtonText}>🗺️</Text>
+            <Text style={styles.plannerHeaderButtonText}>✕</Text>
           </TouchableOpacity>
         </View>
       )}
