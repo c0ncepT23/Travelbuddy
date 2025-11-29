@@ -560,9 +560,9 @@ export default function TripDetailScreen({ route, navigation }: any) {
 
       {/* FLOATING TOP CONTROLS (Z-Index 10) */}
       {viewMode === 'map' ? (
-        // MAP VIEW HEADER - Full header with trip info
+        // MAP VIEW HEADER - Full header with trip info (hidden when drawer is open)
         <View style={styles.topControls}>
-          {/* Back Button */}
+          {/* Back Button - Always visible */}
           <MotiView
             from={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -579,119 +579,123 @@ export default function TripDetailScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </MotiView>
 
-          {/* Trip Name Pill with Members */}
-          <TouchableOpacity 
-            onPress={() => {
-              HapticFeedback.medium();
-              navigation.navigate('GroupChat', { tripId });
-            }}
-            activeOpacity={0.9}
-          >
-            <MotiView
-              from={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', delay: 200 }}
-              style={styles.tripPill}
+          {/* Trip Name Pill with Members - Hidden when drawer is open */}
+          {!isDrawerOpen && (
+            <TouchableOpacity 
+              onPress={() => {
+                HapticFeedback.medium();
+                navigation.navigate('GroupChat', { tripId });
+              }}
+              activeOpacity={0.9}
             >
-              <Text style={styles.tripPillText}>{currentTrip.name}</Text>
-              <Text style={styles.tripPillSubtext}>📍 {currentTrip.destination}</Text>
+              <MotiView
+                from={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', delay: 200 }}
+                style={styles.tripPill}
+              >
+                <Text style={styles.tripPillText}>{currentTrip.name}</Text>
+                <Text style={styles.tripPillSubtext}>📍 {currentTrip.destination}</Text>
+                
+                {/* Member Avatars Row */}
+                <View style={styles.memberAvatarsRow}>
+                  {currentTripMembers?.slice(0, 4).map((member, index) => (
+                    <View 
+                      key={member.id}
+                      style={[
+                        styles.memberAvatarMini,
+                        { 
+                          marginLeft: index > 0 ? -8 : 0,
+                          backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EC4899'][index % 4],
+                          zIndex: 10 - index,
+                        }
+                      ]}
+                    >
+                      <Text style={styles.memberAvatarMiniText}>
+                        {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                      </Text>
+                    </View>
+                  ))}
+                  {(currentTripMembers?.length || 0) > 4 && (
+                    <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
+                      <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 4}</Text>
+                    </View>
+                  )}
+                </View>
+              </MotiView>
               
-              {/* Member Avatars Row */}
-              <View style={styles.memberAvatarsRow}>
-                {currentTripMembers?.slice(0, 4).map((member, index) => (
-                  <View 
-                    key={member.id}
-                    style={[
-                      styles.memberAvatarMini,
-                      { 
-                        marginLeft: index > 0 ? -8 : 0,
-                        backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EC4899'][index % 4],
-                        zIndex: 10 - index,
-                      }
-                    ]}
-                  >
-                    <Text style={styles.memberAvatarMiniText}>
-                      {member.name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
-                    </Text>
-                  </View>
-                ))}
-                {(currentTripMembers?.length || 0) > 4 && (
-                  <View style={[styles.memberAvatarMini, styles.memberCountMini]}>
-                    <Text style={styles.memberCountMiniText}>+{(currentTripMembers?.length || 0) - 4}</Text>
-                  </View>
-                )}
-              </View>
-            </MotiView>
-            
-            {/* XP Badge */}
-            <MotiView
-              from={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', delay: 400 }}
-              style={styles.xpBadge}
-            >
-              <Text style={styles.xpBadgeText}>⭐ Lv.{level}</Text>
-            </MotiView>
-          </TouchableOpacity>
-
-          {/* View Toggle + Share Button */}
-          <View style={styles.headerRightButtons}>
-            {/* View Toggle */}
-            <MotiView
-              from={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', delay: 250 }}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.viewToggleButton,
-                  viewMode === 'planner' && styles.viewToggleButtonActive,
-                ]}
-                onPress={() => {
-                  HapticFeedback.medium();
-                  setViewMode(viewMode === 'map' ? 'planner' : 'map');
-                  // Close drawer when switching views
-                  if (isDrawerOpen) {
-                    handleDrawerClose();
-                  }
-                }}
-                activeOpacity={0.8}
+              {/* XP Badge */}
+              <MotiView
+                from={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', delay: 400 }}
+                style={styles.xpBadge}
               >
-                <Text style={styles.viewToggleText}>
-                  {viewMode === 'map' ? '📅' : '🗺️'}
-                </Text>
-              </TouchableOpacity>
-            </MotiView>
+                <Text style={styles.xpBadgeText}>⭐ Lv.{level}</Text>
+              </MotiView>
+            </TouchableOpacity>
+          )}
 
-            {/* Share Button */}
-            <MotiView
-              from={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', delay: 300 }}
-            >
-              <TouchableOpacity 
-                style={styles.floatingButton}
-                onPress={async () => {
-                  HapticFeedback.medium();
-                  
-                  const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
-                  const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
-                  
-                  try {
-                    await Share.share({
-                      message: shareMessage,
-                      title: `Join ${currentTrip.name}`,
-                    });
-                  } catch (error) {
-                    console.error('Share error:', error);
-                  }
-                }}
-                activeOpacity={0.8}
+          {/* View Toggle + Share Button - Hidden when drawer is open */}
+          {!isDrawerOpen && (
+            <View style={styles.headerRightButtons}>
+              {/* View Toggle */}
+              <MotiView
+                from={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', delay: 250 }}
               >
-                <Text style={styles.floatingButtonText}>↗</Text>
-              </TouchableOpacity>
-            </MotiView>
-          </View>
+                <TouchableOpacity
+                  style={[
+                    styles.viewToggleButton,
+                    viewMode === 'planner' && styles.viewToggleButtonActive,
+                  ]}
+                  onPress={() => {
+                    HapticFeedback.medium();
+                    setViewMode(viewMode === 'map' ? 'planner' : 'map');
+                    // Close drawer when switching views
+                    if (isDrawerOpen) {
+                      handleDrawerClose();
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.viewToggleText}>
+                    {viewMode === 'map' ? '📅' : '🗺️'}
+                  </Text>
+                </TouchableOpacity>
+              </MotiView>
+
+              {/* Share Button */}
+              <MotiView
+                from={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', delay: 300 }}
+              >
+                <TouchableOpacity 
+                  style={styles.floatingButton}
+                  onPress={async () => {
+                    HapticFeedback.medium();
+                    
+                    const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
+                    const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
+                    
+                    try {
+                      await Share.share({
+                        message: shareMessage,
+                        title: `Join ${currentTrip.name}`,
+                      });
+                    } catch (error) {
+                      console.error('Share error:', error);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.floatingButtonText}>↗</Text>
+                </TouchableOpacity>
+              </MotiView>
+            </View>
+          )}
         </View>
       ) : (
         // PLANNER VIEW HEADER - Simple header with just back and map buttons
@@ -928,8 +932,14 @@ export default function TripDetailScreen({ route, navigation }: any) {
                     onPress={() => {
                       HapticFeedback.light();
                       setSelectedPlace(item);
+                      setDrawerItems(filteredItems); // Set all items for navigation
+                      setIsDrawerOpen(true); // Open drawer to show place details
                       setIsExpanded(false);
                       sheetHeight.value = withSpring(BOTTOM_SHEET_MIN_HEIGHT);
+                      // Animate map to the selected place
+                      if (item.location_lat && item.location_lng && mapRef.current) {
+                        mapRef.current.animateToRegion(item.location_lat, item.location_lng, 0.01);
+                      }
                     }}
                     activeOpacity={0.7}
                   >
