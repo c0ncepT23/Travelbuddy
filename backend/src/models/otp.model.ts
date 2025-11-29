@@ -13,11 +13,16 @@ export class OTPModel {
   /**
    * Create or update OTP for a phone number
    * Generates random 4-digit OTP in production, '0000' in development
+   * Special test numbers always use '0000' for testing purposes
    */
   static async createOTP(phoneNumber: string): Promise<string> {
-    // Generate secure random OTP in production, use '0000' only in development
+    // Test phone numbers that always use '0000' (for testing without SMS)
+    const testPhoneNumbers = ['+1234567890', '1234567890', '+919999999999', '9999999999'];
+    const isTestPhone = testPhoneNumbers.some(test => phoneNumber.includes(test.replace('+', '')));
+    
+    // Generate secure random OTP in production, use '0000' only in development or for test phones
     const isDevelopment = process.env.NODE_ENV !== 'production';
-    const otpCode = isDevelopment ? '0000' : this.generateSecureOTP();
+    const otpCode = (isDevelopment || isTestPhone) ? '0000' : this.generateSecureOTP();
     
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10); // Valid for 10 minutes

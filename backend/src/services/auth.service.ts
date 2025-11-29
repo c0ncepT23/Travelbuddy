@@ -242,21 +242,29 @@ export class AuthService {
       // Create OTP
       const otpCode = await OTPModel.createOTP(phoneNumber);
 
+      // Test phone numbers that can see OTP (for testing without SMS)
+      const testPhoneNumbers = ['+1234567890', '1234567890', '+919999999999', '9999999999'];
+      const isTestPhone = testPhoneNumbers.some(test => phoneNumber.includes(test.replace('+', '')));
+
       // In production, send SMS via Twilio/AWS SNS/etc.
       // logger.info(`OTP generated for ${phoneNumber}`); // Don't log OTP in production
       
-      // SECURITY: Only return OTP code in development mode
+      // SECURITY: Only return OTP code in development mode OR for test phone numbers
       const isDevelopment = process.env.NODE_ENV !== 'production';
       
-      if (isDevelopment) {
-        logger.warn(`[DEV ONLY] OTP for ${phoneNumber}: ${otpCode}`);
+      if (isDevelopment || isTestPhone) {
+        if (isTestPhone) {
+          logger.info(`[TEST PHONE] OTP for ${phoneNumber}: ${otpCode}`);
+        } else {
+          logger.warn(`[DEV ONLY] OTP for ${phoneNumber}: ${otpCode}`);
+        }
         return {
           message: 'OTP sent successfully',
-          otpCode: otpCode, // Only exposed in development
+          otpCode: otpCode, // Exposed for dev/test phones
         };
       }
 
-      // In production, never expose OTP in response
+      // In production with real phone, never expose OTP in response
       return {
         message: 'OTP sent successfully',
       };
