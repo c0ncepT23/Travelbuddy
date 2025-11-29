@@ -157,7 +157,10 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     // Create new markers
     items.forEach((item) => {
+      // Validate coordinates are present and reasonable
       if (!item.location_lat || !item.location_lng) return;
+      if (item.location_lat === 0 && item.location_lng === 0) return; // Skip null island
+      if (Math.abs(item.location_lat) > 90 || Math.abs(item.location_lng) > 180) return; // Out of range
 
       const marker = new google.maps.Marker({
         position: { lat: item.location_lat, lng: item.location_lng },
@@ -232,8 +235,14 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
         </Marker>
       ))}
 
-      {/* Show selected place marker on top of clusters */}
-      {selectedPlace && selectedPlace.location_lat && selectedPlace.location_lng && (
+      {/* Show selected place marker on top of clusters - with coordinate validation */}
+      {selectedPlace && 
+       selectedPlace.location_lat && 
+       selectedPlace.location_lng &&
+       // Validate coordinates are reasonable (not 0,0 or out of range)
+       !(selectedPlace.location_lat === 0 && selectedPlace.location_lng === 0) &&
+       Math.abs(selectedPlace.location_lat) <= 90 &&
+       Math.abs(selectedPlace.location_lng) <= 180 && (
         <CustomMapMarker
           key={`selected-${selectedPlace.id}`}
           item={selectedPlace}

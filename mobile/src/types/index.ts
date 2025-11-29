@@ -5,6 +5,7 @@ export interface User {
   phone_number?: string; // Primary auth method
   name: string;
   avatar_url?: string;
+  cover_url?: string;
   created_at: string;
   updated_at: string;
 }

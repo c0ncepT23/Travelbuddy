@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,31 @@ import {
   Alert,
   Platform,
   StatusBar,
+  TextInput,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../stores/authStore';
 import { useTripStore } from '../../stores/tripStore';
 import { useXPStore } from '../../stores/xpStore';
+import api from '../../config/api';
 
 export default function ProfileScreen({ navigation }: any) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const { trips, fetchTrips } = useTripStore();
   const { totalXP, level, getLevelTitle, getProgress } = useXPStore();
+  
+  // Edit states
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(user?.name || '');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url || null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(user?.cover_url || null);
+  
+  const nameInputRef = useRef<TextInput>(null);
+  
   const [stats, setStats] = useState({
     totalTrips: 0,
     activeTrips: 0,
@@ -26,6 +42,12 @@ export default function ProfileScreen({ navigation }: any) {
   useEffect(() => {
     loadProfileData();
   }, []);
+
+  useEffect(() => {
+    setEditedName(user?.name || '');
+    setAvatarUrl(user?.avatar_url || null);
+    setCoverUrl(user?.cover_url || null);
+  }, [user]);
 
   const loadProfileData = async () => {
     try {
@@ -52,6 +74,107 @@ export default function ProfileScreen({ navigation }: any) {
       pastTrips: past.length,
     });
   }, [trips]);
+
+  // Name editing
+  const handleNamePress = () => {
+    setIsEditingName(true);
+    setTimeout(() => nameInputRef.current?.focus(), 100);
+  };
+
+  const handleNameSave = async () => {
+    if (!editedName.trim()) {
+      Alert.alert('Error', 'Name cannot be empty');
+      setEditedName(user?.name || '');
+      setIsEditingName(false);
+      return;
+    }
+
+    if (editedName.trim() === user?.name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    try {
+      const response = await api.patch('/auth/profile', { name: editedName.trim() });
+      if (response.data.success && updateUser) {
+        updateUser({ ...user, name: editedName.trim() });
+      }
+      setIsEditingName(false);
+    } catch (error) {
+      console.error('Failed to update name:', error);
+      Alert.alert('Error', 'Failed to update name. Please try again.');
+      setEditedName(user?.name || '');
+      setIsEditingName(false);
+    }
+  };
+
+  // Avatar/Profile Picture
+  const handleAvatarPress = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll permissions to change your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setIsUploadingAvatar(true);
+      try {
+        const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        const response = await api.patch('/auth/profile', { avatar_url: base64 });
+        if (response.data.success && updateUser) {
+          setAvatarUrl(base64);
+          updateUser({ ...user, avatar_url: base64 });
+        }
+      } catch (error) {
+        console.error('Failed to upload avatar:', error);
+        Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+      } finally {
+        setIsUploadingAvatar(false);
+      }
+    }
+  };
+
+  // Cover Photo
+  const handleCoverPress = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll permissions to change your cover photo.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setIsUploadingCover(true);
+      try {
+        const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        const response = await api.patch('/auth/profile', { cover_url: base64 });
+        if (response.data.success && updateUser) {
+          setCoverUrl(base64);
+          updateUser({ ...user, cover_url: base64 });
+        }
+      } catch (error) {
+        console.error('Failed to upload cover:', error);
+        Alert.alert('Error', 'Failed to upload cover photo. Please try again.');
+      } finally {
+        setIsUploadingCover(false);
+      }
+    }
+  };
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
@@ -91,8 +214,38 @@ export default function ProfileScreen({ navigation }: any) {
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <StatusBar barStyle="light-content" backgroundColor="#1F2937" />
       
-      {/* Header Section */}
-      <View style={styles.header}>
+      {/* Header Section with Cover Photo */}
+      <TouchableOpacity 
+        style={styles.header} 
+        onPress={handleCoverPress}
+        activeOpacity={0.9}
+      >
+        {/* Cover Image */}
+        {coverUrl ? (
+          <Image source={{ uri: coverUrl }} style={styles.coverImage} />
+        ) : (
+          <View style={styles.coverPlaceholder}>
+            <Text style={styles.coverPlaceholderText}>📷 Tap to add cover photo</Text>
+          </View>
+        )}
+        
+        {/* Cover Overlay */}
+        <View style={styles.coverOverlay} />
+        
+        {/* Upload Indicator for Cover */}
+        {isUploadingCover && (
+          <View style={styles.uploadingOverlay}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+            <Text style={styles.uploadingText}>Uploading...</Text>
+          </View>
+        )}
+        
+        {/* Edit Cover Icon */}
+        <View style={styles.editCoverButton}>
+          <Text style={styles.editCoverIcon}>📷</Text>
+        </View>
+
+        {/* Back Button */}
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -100,16 +253,65 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user ? getInitials(user.name) : '?'}</Text>
+        {/* Avatar */}
+        <TouchableOpacity 
+          style={styles.avatarContainer}
+          onPress={handleAvatarPress}
+          activeOpacity={0.8}
+        >
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{user ? getInitials(user.name) : '?'}</Text>
+            </View>
+          )}
+          
+          {/* Upload Indicator for Avatar */}
+          {isUploadingAvatar && (
+            <View style={styles.avatarUploadingOverlay}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            </View>
+          )}
+          
+          {/* Edit Avatar Icon */}
+          <View style={styles.editAvatarButton}>
+            <Text style={styles.editAvatarIcon}>✏️</Text>
           </View>
+          
+          {/* Level Badge */}
           <View style={styles.levelBadge}>
             <Text style={styles.levelBadgeText}>Lv.{level}</Text>
           </View>
-        </View>
-        <Text style={styles.name}>{user?.name || 'Unknown User'}</Text>
-        <Text style={styles.email}>{user?.email || ''}</Text>
+        </TouchableOpacity>
+        
+        {/* Name - Editable */}
+        {isEditingName ? (
+          <View style={styles.nameEditContainer}>
+            <TextInput
+              ref={nameInputRef}
+              style={styles.nameInput}
+              value={editedName}
+              onChangeText={setEditedName}
+              onBlur={handleNameSave}
+              onSubmitEditing={handleNameSave}
+              placeholder="Your name"
+              placeholderTextColor="rgba(255,255,255,0.5)"
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.saveNameButton} onPress={handleNameSave}>
+              <Text style={styles.saveNameText}>✓</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={handleNamePress} style={styles.nameContainer}>
+            <Text style={styles.name}>{user?.name || 'Unknown User'}</Text>
+            <Text style={styles.editNameHint}>✏️</Text>
+          </TouchableOpacity>
+        )}
+        
+        <Text style={styles.email}>{user?.phone_number || user?.email || ''}</Text>
         <Text style={styles.levelTitle}>{getLevelTitle()}</Text>
         
         {/* XP Progress Bar */}
@@ -119,7 +321,7 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
           <Text style={styles.xpText}>{totalXP} XP</Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* Stats Section */}
       <View style={styles.statsSection}>
@@ -190,41 +392,6 @@ export default function ProfileScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Settings Section */}
-      <View style={styles.settingsSection}>
-        <Text style={styles.sectionTitle}>Settings</Text>
-        
-        <TouchableOpacity
-          style={styles.settingButton}
-          onPress={() => Alert.alert('Coming Soon', 'Edit profile feature coming soon!')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingIcon}>✏️</Text>
-          <Text style={styles.settingButtonText}>Edit Profile</Text>
-          <Text style={styles.settingArrow}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingButton}
-          onPress={() => Alert.alert('Coming Soon', 'Notification settings coming soon!')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingIcon}>🔔</Text>
-          <Text style={styles.settingButtonText}>Notifications</Text>
-          <Text style={styles.settingArrow}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingButton}
-          onPress={() => Alert.alert('Coming Soon', 'Privacy settings coming soon!')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingIcon}>🔒</Text>
-          <Text style={styles.settingButtonText}>Privacy</Text>
-          <Text style={styles.settingArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Logout Button */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.9}>
         <Text style={styles.logoutButtonText}>Log Out</Text>
@@ -248,11 +415,80 @@ const styles = StyleSheet.create({
   // Header Section
   header: {
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 120,
     paddingBottom: 32,
     backgroundColor: '#1F2937',
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
+    position: 'relative',
+    minHeight: 320,
+  },
+  coverImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  coverPlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+    backgroundColor: '#374151',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  coverPlaceholderText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '500',
+  },
+  coverOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(31, 41, 55, 0.7)',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    zIndex: 100,
+  },
+  uploadingText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  editCoverButton: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editCoverIcon: {
+    fontSize: 18,
   },
   backButton: {
     position: 'absolute',
@@ -260,15 +496,18 @@ const styles = StyleSheet.create({
     left: 16,
     width: 44,
     height: 44,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
   backButtonText: {
     fontSize: 20,
     color: '#FFFFFF',
   },
+  
+  // Avatar
   avatarContainer: {
     marginBottom: 16,
     position: 'relative',
@@ -280,15 +519,51 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#1F2937',
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   avatarText: {
     fontSize: 36,
     fontWeight: '700',
     color: '#1F2937',
   },
+  avatarUploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    backgroundColor: '#3B82F6',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#1F2937',
+  },
+  editAvatarIcon: {
+    fontSize: 14,
+  },
   levelBadge: {
     position: 'absolute',
-    bottom: -4,
+    top: -4,
     right: -4,
     backgroundColor: '#FCD34D',
     borderRadius: 12,
@@ -300,12 +575,54 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#92400E',
   },
+  
+  // Name editing
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   name: {
     fontSize: 26,
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 4,
   },
+  editNameHint: {
+    fontSize: 16,
+    opacity: 0.6,
+  },
+  nameEditContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
+  nameInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    minWidth: 200,
+    textAlign: 'center',
+  },
+  saveNameButton: {
+    width: 36,
+    height: 36,
+    backgroundColor: '#10B981',
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveNameText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  
   email: {
     fontSize: 14,
     fontWeight: '500',
@@ -485,39 +802,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#6B7280',
     textAlign: 'center',
-  },
-
-  // Settings Section
-  settingsSection: {
-    padding: 20,
-    marginBottom: 8,
-  },
-  settingButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  settingIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  settingButtonText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  settingArrow: {
-    fontSize: 18,
-    color: '#9CA3AF',
   },
 
   // Logout Button

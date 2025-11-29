@@ -64,6 +64,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'food' | 'accommodation' | 'place' | 'shopping' | 'activity' | 'tip'>('all');
   const [showOnlyCheckedIn, setShowOnlyCheckedIn] = useState(false);
   const [showShareStoryModal, setShowShareStoryModal] = useState(false);
+  const [showShareInviteModal, setShowShareInviteModal] = useState(false);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [checkInPlace, setCheckInPlace] = useState<any>(null);
   const [drawerItems, setDrawerItems] = useState<any[]>([]);
@@ -698,18 +699,9 @@ export default function TripDetailScreen({ route, navigation }: any) {
               {/* Share Button */}
               <TouchableOpacity 
                 style={styles.headerButton}
-                onPress={async () => {
+                onPress={() => {
                   HapticFeedback.medium();
-                  const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
-                  const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}!\n\n${inviteLink}`;
-                  try {
-                    await Share.share({
-                      message: shareMessage,
-                      title: `Join ${currentTrip.name}`,
-                    });
-                  } catch (error) {
-                    console.error('Share error:', error);
-                  }
+                  setShowShareInviteModal(true);
                 }}
               >
                 <Text style={styles.headerButtonIcon}>↗</Text>
@@ -1073,6 +1065,109 @@ export default function TripDetailScreen({ route, navigation }: any) {
         onCheckInComplete={handleCheckInComplete}
       />
 
+      {/* SHARE INVITE MODAL - Modern NeoPOP Style */}
+      {showShareInviteModal && currentTrip && (
+        <View style={styles.shareInviteOverlay}>
+          <TouchableOpacity 
+            style={styles.shareInviteBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowShareInviteModal(false)} 
+          />
+          <MotiView
+            from={{ translateY: 300, opacity: 0 }}
+            animate={{ translateY: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 20 }}
+            style={styles.shareInviteModal}
+          >
+            {/* Header */}
+            <View style={styles.shareInviteHeader}>
+              <Text style={styles.shareInviteTitle}>Invite Friends ✈️</Text>
+              <TouchableOpacity 
+                onPress={() => setShowShareInviteModal(false)}
+                style={styles.shareInviteCloseBtn}
+              >
+                <Text style={styles.shareInviteCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Invite Code Display */}
+            <View style={styles.inviteCodeContainer}>
+              <Text style={styles.inviteCodeLabel}>INVITE CODE</Text>
+              <View style={styles.inviteCodeBox}>
+                <Text style={styles.inviteCodeText}>{currentTrip.invite_code}</Text>
+              </View>
+              <Text style={styles.inviteCodeHint}>Share this code with friends</Text>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.shareInviteActions}>
+              {/* Copy Code Button */}
+              <TouchableOpacity
+                style={styles.shareInviteBtn}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(currentTrip.invite_code);
+                  HapticFeedback.success();
+                  setShowShareInviteModal(false);
+                  Alert.alert('✅ Copied!', `Invite code "${currentTrip.invite_code}" copied to clipboard`);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.shareInviteBtnIcon}>📋</Text>
+                <View style={styles.shareInviteBtnContent}>
+                  <Text style={styles.shareInviteBtnTitle}>Copy Code</Text>
+                  <Text style={styles.shareInviteBtnSubtitle}>They enter code in app</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Copy Link Button */}
+              <TouchableOpacity
+                style={styles.shareInviteBtn}
+                onPress={async () => {
+                  const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
+                  await Clipboard.setStringAsync(inviteLink);
+                  HapticFeedback.success();
+                  setShowShareInviteModal(false);
+                  Alert.alert('✅ Copied!', 'Invite link copied to clipboard');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.shareInviteBtnIcon}>🔗</Text>
+                <View style={styles.shareInviteBtnContent}>
+                  <Text style={styles.shareInviteBtnTitle}>Copy Link</Text>
+                  <Text style={styles.shareInviteBtnSubtitle}>Direct join link</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Share Button - Primary */}
+              <TouchableOpacity
+                style={[styles.shareInviteBtn, styles.shareInviteBtnPrimary]}
+                onPress={async () => {
+                  const inviteCode = currentTrip.invite_code;
+                  const inviteLink = `https://travelagent.app/join/${inviteCode}`;
+                  const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}! 🌍✈️\n\n📱 Invite Code: ${inviteCode}\n\n🔗 Or tap: ${inviteLink}`;
+                  setShowShareInviteModal(false);
+                  try {
+                    await Share.share({
+                      message: shareMessage,
+                      title: `Join ${currentTrip.name}`,
+                    });
+                  } catch (error) {
+                    console.error('Share error:', error);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.shareInviteBtnIcon}>↗️</Text>
+                <View style={styles.shareInviteBtnContent}>
+                  <Text style={[styles.shareInviteBtnTitle, styles.shareInviteBtnTitlePrimary]}>Share</Text>
+                  <Text style={[styles.shareInviteBtnSubtitle, styles.shareInviteBtnSubtitlePrimary]}>Send via WhatsApp, etc.</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </MotiView>
+        </View>
+      )}
+
       {/* SHARE MY STORY MODAL */}
       {showShareStoryModal && (
         <View style={styles.shareStoryOverlay}>
@@ -1244,7 +1339,7 @@ const styles = StyleSheet.create({
   },
   plannerContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 80, // Below planner header
+    top: Platform.OS === 'ios' ? 110 : 90, // Increased gap below planner header
     left: 0,
     right: 0,
     bottom: 0,
@@ -1828,6 +1923,140 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: theme.colors.textInverse,
     fontWeight: '800',
+  },
+
+  // Share Invite Modal - Modern NeoPOP Style
+  shareInviteOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    zIndex: 4000,
+  },
+  shareInviteBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  shareInviteModal: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderColor: theme.colors.borderDark,
+  },
+  shareInviteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.border,
+    marginBottom: 20,
+  },
+  shareInviteTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: theme.colors.textPrimary,
+  },
+  shareInviteCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+  },
+  shareInviteCloseBtnText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  inviteCodeContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  inviteCodeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.colors.textSecondary,
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  inviteCodeBox: {
+    backgroundColor: theme.colors.primaryLight,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: theme.colors.primary,
+    marginBottom: 8,
+  },
+  inviteCodeText: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: theme.colors.primary,
+    letterSpacing: 6,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  inviteCodeHint: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+  },
+  shareInviteActions: {
+    gap: 12,
+  },
+  shareInviteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+  },
+  shareInviteBtnPrimary: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.borderDark,
+    borderWidth: 3,
+    ...theme.shadows.neopop.sm,
+  },
+  shareInviteBtnIcon: {
+    fontSize: 24,
+    marginRight: 16,
+  },
+  shareInviteBtnContent: {
+    flex: 1,
+  },
+  shareInviteBtnTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+  },
+  shareInviteBtnTitlePrimary: {
+    color: theme.colors.textInverse,
+  },
+  shareInviteBtnSubtitle: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  shareInviteBtnSubtitlePrimary: {
+    color: 'rgba(255, 255, 255, 0.8)',
   },
 
   // Share Story Modal - NeoPOP Style

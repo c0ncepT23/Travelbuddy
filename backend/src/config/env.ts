@@ -16,11 +16,23 @@ export const config = {
     password: process.env.DB_PASSWORD || '',
   },
 
-  // JWT
+  // JWT - SECURITY: Fail in production if secrets are not set
   jwt: {
-    secret: process.env.JWT_SECRET || 'your_jwt_secret_change_in_production',
+    secret: (() => {
+      const secret = process.env.JWT_SECRET;
+      if (!secret && process.env.NODE_ENV === 'production') {
+        throw new Error('SECURITY ERROR: JWT_SECRET must be set in production');
+      }
+      return secret || 'dev_jwt_secret_not_for_production';
+    })(),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'your_refresh_secret',
+    refreshSecret: (() => {
+      const secret = process.env.JWT_REFRESH_SECRET;
+      if (!secret && process.env.NODE_ENV === 'production') {
+        throw new Error('SECURITY ERROR: JWT_REFRESH_SECRET must be set in production');
+      }
+      return secret || 'dev_refresh_secret_not_for_production';
+    })(),
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
 

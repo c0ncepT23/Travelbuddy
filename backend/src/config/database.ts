@@ -6,12 +6,15 @@ dotenv.config();
 // Support both Supabase (DATABASE_URL) and local PostgreSQL
 const connectionString = process.env.DATABASE_URL;
 
+// Determine if SSL should be used based on environment
+const useSSL = process.env.NODE_ENV === 'production' || process.env.DB_SSL === 'true';
+
 const poolConfig: any = connectionString
   ? {
       connectionString,
-      ssl: {
-        rejectUnauthorized: false, // Required for Supabase
-      },
+      ssl: useSSL ? {
+        rejectUnauthorized: false, // Required for Supabase/Railway
+      } : false,
     }
   : {
       host: process.env.DB_HOST || 'localhost',
@@ -22,6 +25,9 @@ const poolConfig: any = connectionString
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
+      ssl: useSSL ? {
+        rejectUnauthorized: false,
+      } : false,
     };
 
 export const pool = new Pool(poolConfig);

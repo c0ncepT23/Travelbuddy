@@ -12,11 +12,13 @@ export interface OTPCode {
 export class OTPModel {
   /**
    * Create or update OTP for a phone number
-   * For development, always returns "0000"
+   * Generates random 4-digit OTP in production, '0000' in development
    */
   static async createOTP(phoneNumber: string): Promise<string> {
-    // Hardcoded OTP for development
-    const otpCode = '0000';
+    // Generate secure random OTP in production, use '0000' only in development
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const otpCode = isDevelopment ? '0000' : this.generateSecureOTP();
+    
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10); // Valid for 10 minutes
 
@@ -30,6 +32,17 @@ export class OTPModel {
     );
 
     return otpCode;
+  }
+
+  /**
+   * Generate a cryptographically secure 4-digit OTP
+   */
+  private static generateSecureOTP(): string {
+    const crypto = require('crypto');
+    // Generate 2 random bytes and convert to a 4-digit number
+    const randomBytes = crypto.randomBytes(2);
+    const randomNum = (randomBytes[0] << 8 | randomBytes[1]) % 10000;
+    return randomNum.toString().padStart(4, '0');
   }
 
   /**

@@ -20,20 +20,29 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      console.log('ðŸ”· API Interceptor: Getting token...');
+      // Only log in development mode
+      if (__DEV__) {
+        console.log('[API] Interceptor: Getting token...');
+      }
       const token = await AsyncStorage.getItem('accessToken');
-      console.log('ðŸ”· API Interceptor: Token retrieved', { hasToken: !!token });
+      if (__DEV__) {
+        console.log('[API] Interceptor: Token retrieved', { hasToken: !!token });
+      }
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
     } catch (error) {
-      console.error('âŒ API Interceptor ERROR:', error);
+      if (__DEV__) {
+        console.error('[API] Interceptor ERROR:', error);
+      }
       return config; // Return config even if error
     }
   },
   (error) => {
-    console.error('âŒ API Request Interceptor Error:', error);
+    if (__DEV__) {
+      console.error('[API] Request Interceptor Error:', error);
+    }
     return Promise.reject(error);
   }
 );
@@ -79,4 +88,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

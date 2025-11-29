@@ -1,9 +1,9 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { ChatMessageModel } from '../models/chatMessage.model';
 import { TravelAgent } from '../agents/travelAgent';
-import { ItemSourceType, MessageSenderType, MessageType } from '../types';
+import { ItemSourceType, MessageSenderType, MessageType, AuthRequest } from '../types';
 import logger from '../config/logger';
 
 export class ImportLocationsController {
@@ -11,10 +11,14 @@ export class ImportLocationsController {
    * Import selected locations from YouTube/Reddit/Instagram
    * POST /api/trips/:tripId/import-locations
    */
-  static async importLocations(req: Request, res: Response) {
+  static async importLocations(req: AuthRequest, res: Response) {
     try {
       const { tripId } = req.params;
-      const userId = (req as any).userId;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       const { sourceUrl, sourceType, sourceTitle, selectedPlaces } = req.body;
 
       logger.info(`[ImportLocations] User ${userId} importing ${selectedPlaces.length} places to trip ${tripId}`);

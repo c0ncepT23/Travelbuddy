@@ -230,7 +230,7 @@ export class AuthService {
 
   /**
    * Send OTP to phone number
-   * For development, always returns "0000"
+   * In production, this should integrate with Twilio/AWS SNS
    */
   static async sendOTP(phoneNumber: string): Promise<{ message: string; otpCode?: string }> {
     try {
@@ -239,16 +239,26 @@ export class AuthService {
         throw new Error('Invalid phone number');
       }
 
-      // Create OTP (hardcoded to "0000")
+      // Create OTP
       const otpCode = await OTPModel.createOTP(phoneNumber);
 
-      logger.info(`OTP sent to ${phoneNumber}: ${otpCode}`);
-
       // In production, send SMS via Twilio/AWS SNS/etc.
-      // For development, return the OTP code
+      // logger.info(`OTP generated for ${phoneNumber}`); // Don't log OTP in production
+      
+      // SECURITY: Only return OTP code in development mode
+      const isDevelopment = process.env.NODE_ENV !== 'production';
+      
+      if (isDevelopment) {
+        logger.warn(`[DEV ONLY] OTP for ${phoneNumber}: ${otpCode}`);
+        return {
+          message: 'OTP sent successfully',
+          otpCode: otpCode, // Only exposed in development
+        };
+      }
+
+      // In production, never expose OTP in response
       return {
         message: 'OTP sent successfully',
-        otpCode: otpCode, // Remove this in production!
       };
     } catch (error) {
       logger.error('Send OTP error:', error);

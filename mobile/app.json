@@ -2,7 +2,7 @@
   "expo": {
     "name": "Travel Agent",
     "slug": "travel-agent",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -40,12 +40,18 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to proactively suggest nearby places.",
         "NSCameraUsageDescription": "Allow camera access to take photos of places you want to save.",
         "NSPhotoLibraryUsageDescription": "Allow photo library access to upload images.",
-        "NSMicrophoneUsageDescription": "Allow microphone access for voice notes."
+        "NSMicrophoneUsageDescription": "Allow microphone access for voice notes.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["travelagent"]
+          }
+        ],
+        "LSApplicationQueriesSchemes": ["youtube", "instagram", "reddit"]
       }
     },
     "android": {
       "package": "com.travelagent.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -66,7 +72,30 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#6366F1"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "android.intent.action.SEND",
+          "category": ["android.intent.category.DEFAULT"],
+          "data": [
+            { "mimeType": "text/plain" }
+          ]
+        },
+        {
+          "action": "android.intent.action.SEND",
+          "category": ["android.intent.category.DEFAULT"],
+          "data": [
+            { "mimeType": "text/*" }
+          ]
+        },
+        {
+          "action": "android.intent.action.VIEW",
+          "category": ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"],
+          "data": [
+            { "scheme": "travelagent" }
+          ]
+        }
+      ]
     },
     "extra": {
       "eas": {

@@ -10,6 +10,8 @@ import { useAuthStore } from './src/stores/authStore';
 import { useTripStore } from './src/stores/tripStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { pushNotificationService } from './src/services/pushNotification.service';
+import shareIntentService, { SharedContent } from './src/services/shareIntent.service';
+import { ShareTripSelectorModal } from './src/components/ShareTripSelectorModal';
 import theme from './src/config/theme';
 
 // Auth Screens
@@ -47,6 +49,8 @@ const linking = {
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharedContent, setSharedContent] = useState<SharedContent | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
   const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
   const navigationRef = React.useRef<any>(null);
 
@@ -63,6 +67,92 @@ export default function App() {
     };
     prepare();
   }, []);
+
+  // Handle share intent - content shared from other apps
+  useEffect(() => {
+    const handleShareIntent = async () => {
+      try {
+        // Check initial URL for shared content
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          // Check if it's a shared link (contains common video/social URLs)
+          const urlLower = initialUrl.toLowerCase();
+          const isSocialLink = 
+            urlLower.includes('youtube.com') ||
+            urlLower.includes('youtu.be') ||
+            urlLower.includes('instagram.com') ||
+            urlLower.includes('reddit.com') ||
+            urlLower.includes('tiktok.com');
+
+          // If it's not our own deep link (join invite), treat it as shared content
+          if (isSocialLink && !initialUrl.includes('travelagent.app/join')) {
+            console.log('[App] Received shared content:', initialUrl);
+            setSharedContent({ type: 'url', data: initialUrl });
+            if (isAuthenticated) {
+              setShowShareModal(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[App] Share intent error:', err);
+      }
+    };
+
+    if (isReady && isAuthenticated) {
+      handleShareIntent();
+    }
+  }, [isReady, isAuthenticated]);
+
+  // Listen for incoming shared links while app is running
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', (event) => {
+      const url = event.url;
+      const urlLower = url.toLowerCase();
+      
+      // Check if it's shared content from social apps
+      const isSocialLink = 
+        urlLower.includes('youtube.com') ||
+        urlLower.includes('youtu.be') ||
+        urlLower.includes('instagram.com') ||
+        urlLower.includes('reddit.com') ||
+        urlLower.includes('tiktok.com');
+
+      if (isSocialLink && !url.includes('travelagent.app/join')) {
+        console.log('[App] Received shared URL:', url);
+        setSharedContent({ type: 'url', data: url });
+        if (isAuthenticated) {
+          setShowShareModal(true);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isAuthenticated]);
+
+  const handleShareSuccess = (tripId: string) => {
+    setShowShareModal(false);
+    setSharedContent(null);
+    Alert.alert(
+      '✨ Link Added!',
+      'The AI is processing your link. Check the trip chat for updates!',
+      [
+        {
+          text: 'View Trip',
+          onPress: () => {
+            if (navigationRef.current) {
+              navigationRef.current.navigate('TripDetail', { tripId });
+            }
+          },
+        },
+        { text: 'OK' },
+      ]
+    );
+  };
+
+  const handleShareClose = () => {
+    setShowShareModal(false);
+    setSharedContent(null);
+  };
 
   // Initialize push notifications when authenticated
   useEffect(() => {
@@ -184,6 +274,15 @@ export default function App() {
     <ErrorBoundary>
       <StatusBar style="dark" />
       <NavigationContainer ref={navigationRef} linking={linking}>
+        {/* Share Intent Modal - Shows when user shares from YouTube/Instagram/etc */}
+        {showShareModal && sharedContent && isAuthenticated && (
+          <ShareTripSelectorModal
+            sharedContent={sharedContent}
+            onClose={handleShareClose}
+            onSuccess={handleShareSuccess}
+          />
+        )}
+        
         <Stack.Navigator
           screenOptions={{
             headerStyle: { 

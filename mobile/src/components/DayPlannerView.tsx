@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    paddingTop: 8,
+    paddingTop: 16, // Increased to prevent overlap with header border
   },
   dayTabsScroll: {
     paddingHorizontal: 16,

@@ -17,6 +17,7 @@ interface AuthState {
   logout: () => Promise<void>;
   loadStoredAuth: () => Promise<void>;
   setUser: (user: User) => void;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -168,6 +169,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user: User) => {
     set({ user });
     AsyncStorage.setItem('user', JSON.stringify(user));
+  },
+
+  updateUser: (updates: Partial<User>) => {
+    const currentUser = get().user;
+    if (currentUser) {
+      const updatedUser = { ...currentUser, ...updates };
+      set({ user: updatedUser });
+      AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+    }
   },
 }));
 

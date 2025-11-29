@@ -79,6 +79,20 @@ export class CheckInController {
   static async getCheckIns(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      // Verify user is member of trip
+      const { TripGroupModel } = await import('../models/tripGroup.model');
+      const isMember = await TripGroupModel.isMember(tripId, userId);
+      if (!isMember) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
 
       const checkIns = await CheckInModel.findByTrip(tripId);
 
@@ -100,6 +114,20 @@ export class CheckInController {
     try {
       const { tripId } = req.params;
       const { groupByDay } = req.query;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      // Verify user is member of trip
+      const { TripGroupModel } = await import('../models/tripGroup.model');
+      const isMember = await TripGroupModel.isMember(tripId, userId);
+      if (!isMember) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
 
       if (groupByDay === 'true') {
         const timeline = await CheckInModel.getTimelineByDay(tripId);
@@ -212,6 +240,20 @@ export class CheckInController {
   static async getTripStats(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      // Verify user is member of trip
+      const { TripGroupModel } = await import('../models/tripGroup.model');
+      const isMember = await TripGroupModel.isMember(tripId, userId);
+      if (!isMember) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
 
       const stats = await CheckInModel.getTripStats(tripId);
 

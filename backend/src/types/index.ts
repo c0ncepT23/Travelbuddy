@@ -8,6 +8,7 @@ export interface User {
   password_hash?: string;
   name: string;
   avatar_url?: string;
+  cover_url?: string;
   created_at: Date;
   updated_at: Date;
 }

@@ -9,13 +9,15 @@ export const generateUUID = (): string => {
 };
 
 /**
- * Generate a 6-character alphanumeric invite code
+ * Generate a cryptographically secure 6-character alphanumeric invite code
+ * Uses crypto.randomBytes for security instead of Math.random
  */
 export const generateInviteCode = (): string => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const bytes = crypto.randomBytes(6);
   let code = '';
   for (let i = 0; i < 6; i++) {
-    code += characters.charAt(Math.floor(Math.random() * characters.length));
+    code += characters.charAt(bytes[i] % characters.length);
   }
   return code;
 };
@@ -89,11 +91,44 @@ export const formatDate = (date: Date): string => {
 };
 
 /**
- * Check if URL is valid
+ * Check if URL is valid and safe (not internal/localhost)
+ * Prevents SSRF attacks
  */
 export const isValidUrl = (url: string): boolean => {
   try {
-    new URL(url);
+    const parsed = new URL(url);
+    
+    // Only allow http and https protocols
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return false;
+    }
+    
+    // Block internal/localhost URLs to prevent SSRF
+    const hostname = parsed.hostname.toLowerCase();
+    const blockedHosts = [
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0',
+      '::1',
+      '169.254.169.254', // AWS metadata
+      'metadata.google.internal', // GCP metadata
+    ];
+    
+    if (blockedHosts.includes(hostname)) {
+      return false;
+    }
+    
+    // Block private IP ranges
+    const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    const match = hostname.match(ipv4Pattern);
+    if (match) {
+      const [, a, b] = match.map(Number);
+      // Block 10.x.x.x, 172.16-31.x.x, 192.168.x.x
+      if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+        return false;
+      }
+    }
+    
     return true;
   } catch {
     return false;

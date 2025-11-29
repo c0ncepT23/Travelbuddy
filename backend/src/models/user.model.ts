@@ -82,7 +82,7 @@ export class UserModel {
    */
   static async update(
     id: string,
-    updates: Partial<Pick<User, 'name' | 'avatar_url'>>
+    updates: Partial<Pick<User, 'name' | 'avatar_url' | 'cover_url'>>
   ): Promise<User | null> {
     const fields: string[] = [];
     const values: any[] = [];
@@ -98,6 +98,11 @@ export class UserModel {
       values.push(updates.avatar_url);
     }
 
+    if (updates.cover_url !== undefined) {
+      fields.push(`cover_url = $${paramCount++}`);
+      values.push(updates.cover_url);
+    }
+
     if (fields.length === 0) {
       return null;
     }
@@ -106,9 +111,9 @@ export class UserModel {
 
     const result = await query(
       `UPDATE users
-       SET ${fields.join(', ')}
+       SET ${fields.join(', ')}, updated_at = NOW()
        WHERE id = $${paramCount}
-       RETURNING id, email, name, avatar_url, created_at, updated_at`,
+       RETURNING id, email, phone_number, name, avatar_url, cover_url, created_at, updated_at`,
       values
     );
 

@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import { AuthController } from '../controllers/auth.controller';
 import { validate } from '../middleware/validation';
 import { authLimiter } from '../middleware/rateLimiter';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
@@ -106,6 +107,13 @@ router.post(
       .withMessage('OTP code must be 4 digits'),
   ]),
   AuthController.loginWithPhone
+);
+
+// Update profile (requires authentication)
+router.patch(
+  '/profile',
+  authenticate,
+  AuthController.updateProfile
 );
 
 export default router;

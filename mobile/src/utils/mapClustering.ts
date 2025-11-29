@@ -9,12 +9,36 @@ export interface CategoryCluster {
 }
 
 /**
+ * Check if coordinates are valid and reasonable
+ * Filters out 0,0 coordinates and obviously invalid values
+ */
+function isValidCoordinate(lat: number | undefined | null, lng: number | undefined | null): boolean {
+  // Must be defined and be numbers
+  if (lat === undefined || lat === null || lng === undefined || lng === null) return false;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return false;
+  if (isNaN(lat) || isNaN(lng)) return false;
+  
+  // Filter out 0,0 (null island) - this is almost never a valid location
+  if (lat === 0 && lng === 0) return false;
+  
+  // Check valid ranges: lat -90 to 90, lng -180 to 180
+  if (lat < -90 || lat > 90) return false;
+  if (lng < -180 || lng > 180) return false;
+  
+  // Filter out very small coordinates that are likely parsing errors
+  if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return false;
+  
+  return true;
+}
+
+/**
  * Group items by category for map clustering
  */
 export function clusterByCategory(items: SavedItem[]): CategoryCluster[] {
-  // Group items by category
+  // Group items by category - with strict coordinate validation
   const grouped = items.reduce((acc, item) => {
-    if (!item.location_lat || !item.location_lng) return acc;
+    // Strict validation to prevent floating markers at wrong locations
+    if (!isValidCoordinate(item.location_lat, item.location_lng)) return acc;
     
     if (!acc[item.category]) {
       acc[item.category] = [];

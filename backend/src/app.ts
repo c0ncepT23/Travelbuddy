@@ -27,9 +27,15 @@ app.set('trust proxy', trustProxySetting);
 
 // Security middleware
 app.use(helmet());
+
+// CORS configuration - restrict in production
+const corsOrigin = config.nodeEnv === 'production'
+  ? config.cors.origin // Use configured origins in production
+  : '*'; // Allow all origins only in development
+
 app.use(
   cors({
-    origin: '*', // Allow all origins for development
+    origin: corsOrigin,
     credentials: true,
   })
 );

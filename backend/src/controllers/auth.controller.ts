@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
+import { UserModel } from '../models/user.model';
 import logger from '../config/logger';
+import { AuthRequest } from '../types';
 
 export class AuthController {
   /**
@@ -275,6 +277,69 @@ export class AuthController {
       res.status(401).json({
         success: false,
         error: error.message || 'Login failed',
+      });
+    }
+  }
+
+  /**
+   * Update user profile (name, avatar, cover photo)
+   */
+  static async updateProfile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        });
+        return;
+      }
+
+      const { name, avatar_url, cover_url } = req.body;
+
+      // Build updates object
+      const updates: { name?: string; avatar_url?: string; cover_url?: string } = {};
+      if (name !== undefined) updates.name = name;
+      if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+      if (cover_url !== undefined) updates.cover_url = cover_url;
+
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({
+          success: false,
+          error: 'No updates provided',
+        });
+        return;
+      }
+
+      const updatedUser = await UserModel.update(userId, updates);
+
+      if (!updatedUser) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          user: {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            phone_number: updatedUser.phone_number,
+            name: updatedUser.name,
+            avatar_url: updatedUser.avatar_url,
+            cover_url: updatedUser.cover_url,
+          },
+        },
+        message: 'Profile updated successfully',
+      });
+    } catch (error: any) {
+      logger.error('Update profile error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to update profile',
       });
     }
   }

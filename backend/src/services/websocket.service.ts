@@ -40,7 +40,12 @@ export class WebSocketService {
           return next(new Error('Authentication error'));
         }
 
-        const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+          logger.error('[WebSocket] JWT_SECRET not configured');
+          return next(new Error('Server configuration error'));
+        }
+        const decoded: any = jwt.verify(token, jwtSecret);
         socket.userId = decoded.id;
         socket.userEmail = decoded.email;
         
