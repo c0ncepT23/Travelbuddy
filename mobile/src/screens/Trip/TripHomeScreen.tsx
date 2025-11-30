@@ -311,7 +311,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
                 <Text style={styles.topPickEmoji}>{getCategoryEmoji(pick.category)}</Text>
                 <View style={styles.topPickInfo}>
                   <Text style={styles.topPickName}>{pick.name}</Text>
-                  {pick.rating && (
+                  {pick.rating != null && typeof pick.rating === 'number' && (
                     <Text style={styles.topPickRating}>⭐ {pick.rating.toFixed(1)}</Text>
                   )}
                 </View>
@@ -468,7 +468,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
               >
                 <Text style={styles.placeCardEmoji}>{getCategoryEmoji(place.category)}</Text>
                 <Text style={styles.placeCardName} numberOfLines={2}>{place.name}</Text>
-                {place.rating && (
+                {place.rating != null && typeof place.rating === 'number' && (
                   <Text style={styles.placeCardRating}>⭐ {place.rating.toFixed(1)}</Text>
                 )}
                 {place.area_name && (
