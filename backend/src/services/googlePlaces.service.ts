@@ -107,7 +107,7 @@ export class GooglePlacesService {
 
   /**
    * Extract the best area/neighborhood name from address components
-   * Priority: Sublocality Level 1/2 -> Locality -> Administrative Area Level 2
+   * Priority varies by city structure (Tokyo vs Osaka vs other cities)
    */
   static identifyArea(addressComponents?: any[]): string | null {
     if (!addressComponents) return null;
@@ -116,18 +116,38 @@ export class GooglePlacesService {
       addressComponents.find((c) => c.types.includes(type))?.long_name;
 
     // In Japan: 
-    // ward = locality (e.g., "Shibuya City", "Minato City")
-    // district = sublocality_level_1 (e.g., "Jinnan")
+    // ward = locality (e.g., "Shibuya City", "Minato City") OR sublocality_level_1 for some cities
+    // district = sublocality_level_1 (e.g., "Jinnan") or political
     // sub-district = sublocality_level_2 (e.g., "1-chome")
 
-    const locality = getType('locality'); // e.g., "Shibuya City"
-    const sublocality1 = getType('sublocality_level_1'); // e.g., "Jinnan"
+    const locality = getType('locality'); // e.g., "Shibuya City" or "Osaka"
+    const sublocality1 = getType('sublocality_level_1'); // e.g., "Chuo Ward" in Osaka
+    const sublocality2 = getType('sublocality_level_2'); 
+    const ward = getType('ward'); // Explicit ward type
     const neighborhood = getType('neighborhood');
     const adminArea2 = getType('administrative_area_level_2'); // County/City in some regions
+    const political = addressComponents.find((c) => 
+      c.types.includes('political') && c.types.includes('sublocality')
+    )?.long_name;
 
-    // Prefer "Locality" for Tokyo Wards as that matches the "City" grouping
-    if (locality) return locality;
+    // For cities like Osaka where locality is just "Osaka", prefer sublocality (ward)
+    // Check if locality is a major city name - if so, use sublocality for grouping
+    const majorCities = ['Osaka', '大阪市', 'Kyoto', '京都市', 'Nagoya', '名古屋市', 'Sapporo', '札幌市', 'Fukuoka', '福岡市', 'Kobe', '神戸市'];
+    const isMajorCity = locality && majorCities.some(city => locality.includes(city));
+
+    if (isMajorCity) {
+      // For major cities, prefer ward/sublocality over city name
+      if (ward) return ward;
+      if (sublocality1) return sublocality1;
+      if (political) return political;
+    }
+
+    // For Tokyo (locality includes "City" like "Shibuya City"), use locality
+    if (locality && locality.includes('City')) return locality;
     
+    // General fallback order
+    if (locality) return locality;
+    if (ward) return ward;
     if (sublocality1) return sublocality1;
     if (neighborhood) return neighborhood;
     if (adminArea2) return adminArea2;
