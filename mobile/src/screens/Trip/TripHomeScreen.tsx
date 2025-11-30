@@ -11,18 +11,20 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { MotiView } from 'moti';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useTripStore } from '../../stores/tripStore';
+import { useItemStore } from '../../stores/itemStore';
 import { useBriefingStore, getCategoryEmoji } from '../../stores/briefingStore';
 import { useSegmentStore } from '../../stores/segmentStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { SegmentContextHeader } from '../../components/SegmentContextHeader';
 import { QuickActionChips, CategoryChips, QuickPrompts } from '../../components/QuickActionChips';
 import ImportLocationsModal from '../../components/ImportLocationsModal';
-import { ImportModalData, MorningBriefing } from '../../types';
+import { ImportModalData, MorningBriefing, SavedItem } from '../../types';
 import { HapticFeedback } from '../../utils/haptics';
 import { format, isToday, isYesterday } from 'date-fns';
 import theme from '../../config/theme';
@@ -107,11 +109,14 @@ export default function TripHomeScreen({ route, navigation }: any) {
   const { briefing, isLoading: briefingLoading, fetchBriefing } = useBriefingStore();
   const { fetchCurrentSegment } = useSegmentStore();
   const { location } = useLocationStore();
+  const { items, fetchTripItems } = useItemStore();
 
   const [inputText, setInputText] = useState('');
   const [showBriefingCard, setShowBriefingCard] = useState(true);
   const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategoryPlaces, setSelectedCategoryPlaces] = useState<SavedItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -126,6 +131,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
           fetchTripMembers(tripId),
           fetchMessages(tripId),
           fetchCurrentSegment(tripId),
+          fetchTripItems(tripId, {}),
         ]);
         
         // Fetch briefing with location if available
@@ -230,9 +236,22 @@ export default function TripHomeScreen({ route, navigation }: any) {
     }, 100);
   };
 
-  // Handle category press
+  // Handle category press - show places inline as horizontal list
   const handleCategoryPress = (category: string) => {
-    navigation.navigate('TripDetail', { tripId, filterCategory: category });
+    HapticFeedback.light();
+    
+    if (selectedCategory === category) {
+      // Toggle off if same category
+      setSelectedCategory(null);
+      setSelectedCategoryPlaces([]);
+      return;
+    }
+    
+    // Filter items by category
+    const filtered = items.filter(item => item.category === category);
+    setSelectedCategory(category);
+    setSelectedCategoryPlaces(filtered);
+    setShowBriefingCard(false);
   };
 
   // Handle suggestion chip press
@@ -323,13 +342,15 @@ export default function TripHomeScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {/* Dismiss button */}
-        <TouchableOpacity
-          style={styles.dismissButton}
-          onPress={() => setShowBriefingCard(false)}
-        >
-          <Text style={styles.dismissText}>Start chatting →</Text>
-        </TouchableOpacity>
+        {/* Dismiss button - only show if no messages yet */}
+        {messages.length === 0 && (
+          <TouchableOpacity
+            style={styles.dismissButton}
+            onPress={() => setShowBriefingCard(false)}
+          >
+            <Text style={styles.dismissText}>Start chatting →</Text>
+          </TouchableOpacity>
+        )}
       </MotiView>
     );
   };
@@ -417,7 +438,50 @@ export default function TripHomeScreen({ route, navigation }: any) {
           <CategoryChips 
             categories={briefing.stats.byCategory}
             onCategoryPress={handleCategoryPress}
+            selectedCategory={selectedCategory}
           />
+        </View>
+      )}
+
+      {/* Horizontal Places List - Shows when category is selected */}
+      {selectedCategoryPlaces.length > 0 && (
+        <View style={styles.placesListContainer}>
+          <View style={styles.placesListHeader}>
+            <Text style={styles.placesListTitle}>
+              {getCategoryEmoji(selectedCategory || 'place')} {selectedCategory?.toUpperCase()} ({selectedCategoryPlaces.length})
+            </Text>
+            <TouchableOpacity onPress={() => { setSelectedCategory(null); setSelectedCategoryPlaces([]); }}>
+              <Text style={styles.placesListClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.placesListScroll}
+          >
+            {selectedCategoryPlaces.map((place) => (
+              <TouchableOpacity
+                key={place.id}
+                style={styles.placeCard}
+                onPress={() => handleTopPickPress(place.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.placeCardEmoji}>{getCategoryEmoji(place.category)}</Text>
+                <Text style={styles.placeCardName} numberOfLines={2}>{place.name}</Text>
+                {place.rating && (
+                  <Text style={styles.placeCardRating}>⭐ {place.rating.toFixed(1)}</Text>
+                )}
+                {place.area_name && (
+                  <Text style={styles.placeCardArea} numberOfLines={1}>{place.area_name}</Text>
+                )}
+                {place.is_must_visit && (
+                  <View style={styles.mustVisitBadge}>
+                    <Text style={styles.mustVisitText}>Must Visit</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -790,6 +854,78 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: theme.colors.primary,
+  },
+
+  // Horizontal Places List
+  placesListContainer: {
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.border,
+    paddingVertical: 12,
+  },
+  placesListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  placesListTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+  },
+  placesListClose: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textTertiary,
+    padding: 4,
+  },
+  placesListScroll: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  placeCard: {
+    width: 140,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    padding: 12,
+    marginRight: 12,
+  },
+  placeCardEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  placeCardName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    marginBottom: 4,
+    minHeight: 36,
+  },
+  placeCardRating: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginBottom: 2,
+  },
+  placeCardArea: {
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+  },
+  mustVisitBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  mustVisitText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: theme.colors.textInverse,
+    textTransform: 'uppercase',
   },
 
   // Empty state

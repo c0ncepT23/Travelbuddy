@@ -60,6 +60,7 @@ export function QuickActionChips({ suggestions, onChipPress, style }: QuickActio
 interface CategoryChipsProps {
   categories: Record<string, number>;
   onCategoryPress: (category: string) => void;
+  selectedCategory?: string | null;
   style?: any;
 }
 
@@ -72,7 +73,7 @@ const categoryConfig: Record<string, { emoji: string; label: string; color: stri
   tip: { emoji: '💡', label: 'Tips', color: theme.colors.tip },
 };
 
-export function CategoryChips({ categories, onCategoryPress, style }: CategoryChipsProps) {
+export function CategoryChips({ categories, onCategoryPress, selectedCategory, style }: CategoryChipsProps) {
   const availableCategories = Object.entries(categories)
     .filter(([_, count]) => count > 0)
     .sort((a, b) => b[1] - a[1]); // Sort by count descending
@@ -99,6 +100,7 @@ export function CategoryChips({ categories, onCategoryPress, style }: CategoryCh
             label: category, 
             color: theme.colors.primary 
           };
+          const isSelected = selectedCategory === category;
           
           return (
             <MotiView
@@ -112,14 +114,18 @@ export function CategoryChips({ categories, onCategoryPress, style }: CategoryCh
               }}
             >
               <TouchableOpacity
-                style={[styles.categoryChip, { borderColor: config.color }]}
+                style={[
+                  styles.categoryChip, 
+                  { borderColor: config.color },
+                  isSelected && { backgroundColor: config.color }
+                ]}
                 onPress={() => handlePress(category)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.categoryEmoji}>{config.emoji}</Text>
-                <Text style={styles.categoryLabel}>{config.label}</Text>
-                <View style={[styles.categoryBadge, { backgroundColor: config.color }]}>
-                  <Text style={styles.categoryCount}>{count}</Text>
+                <Text style={[styles.categoryLabel, isSelected && styles.categoryLabelSelected]}>{config.label}</Text>
+                <View style={[styles.categoryBadge, { backgroundColor: isSelected ? theme.colors.surface : config.color }]}>
+                  <Text style={[styles.categoryCount, isSelected && { color: config.color }]}>{count}</Text>
                 </View>
               </TouchableOpacity>
             </MotiView>
@@ -247,6 +253,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.textPrimary,
     marginRight: 8,
+  },
+  categoryLabelSelected: {
+    color: theme.colors.textInverse,
   },
   categoryBadge: {
     minWidth: 24,

@@ -697,9 +697,20 @@ export default function TripDetailScreen({ route, navigation }: any) {
             </TouchableOpacity>
           )}
 
-          {/* View Toggle + Share Button - Hidden when drawer is open */}
+          {/* View Toggle + Chat + Share Button - Hidden when drawer is open */}
           {!isDrawerOpen && (
             <View style={styles.headerRightButtons}>
+              {/* Chat Button - Go to Chat-First Home */}
+              <TouchableOpacity
+                style={[styles.headerButton, styles.chatButton]}
+                onPress={() => {
+                  HapticFeedback.medium();
+                  navigation.navigate('TripHome', { tripId });
+                }}
+              >
+                <Text style={styles.headerButtonIcon}>💬</Text>
+              </TouchableOpacity>
+
               {/* View Mode Toggle: Map → Planner → Timeline → Map */}
               <TouchableOpacity
                 style={styles.headerButton}
@@ -1374,6 +1385,9 @@ const styles = StyleSheet.create({
   },
   headerButtonIcon: {
     fontSize: 20,
+  },
+  chatButton: {
+    backgroundColor: theme.colors.primary,
   },
   headerRightButtons: {
     flexDirection: 'row',
