@@ -10,19 +10,21 @@ export class SegmentController {
    * Create a new segment for a trip
    * POST /api/trips/:tripId/segments
    */
-  static async createSegment(req: AuthRequest, res: Response) {
+  static async createSegment(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       // Check membership
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       const {
@@ -38,10 +40,11 @@ export class SegmentController {
       } = req.body;
 
       if (!city || !startDate || !endDate) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'City, start date, and end date are required',
         });
+        return;
       }
 
       // Parse dates
@@ -49,10 +52,11 @@ export class SegmentController {
       const end = new Date(endDate);
 
       if (end < start) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'End date must be after start date',
         });
+        return;
       }
 
       // Geocode accommodation if provided
@@ -122,18 +126,20 @@ export class SegmentController {
    * Get all segments for a trip
    * GET /api/trips/:tripId/segments
    */
-  static async getSegments(req: AuthRequest, res: Response) {
+  static async getSegments(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       const withStats = req.query.withStats === 'true';
@@ -153,18 +159,20 @@ export class SegmentController {
    * Get current segment (based on today's date)
    * GET /api/trips/:tripId/segments/current
    */
-  static async getCurrentSegment(req: AuthRequest, res: Response) {
+  static async getCurrentSegment(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       // Allow testing with a custom date
@@ -207,24 +215,27 @@ export class SegmentController {
    * Get a specific segment
    * GET /api/trips/:tripId/segments/:segmentId
    */
-  static async getSegment(req: AuthRequest, res: Response) {
+  static async getSegment(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId, segmentId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       const segment = await TripSegmentModel.findById(segmentId);
 
       if (!segment || segment.trip_group_id !== tripId) {
-        return res.status(404).json({ success: false, error: 'Segment not found' });
+        res.status(404).json({ success: false, error: 'Segment not found' });
+        return;
       }
 
       // Get places count
@@ -248,23 +259,26 @@ export class SegmentController {
    * Update a segment
    * PUT /api/trips/:tripId/segments/:segmentId
    */
-  static async updateSegment(req: AuthRequest, res: Response) {
+  static async updateSegment(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId, segmentId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       const existing = await TripSegmentModel.findById(segmentId);
       if (!existing || existing.trip_group_id !== tripId) {
-        return res.status(404).json({ success: false, error: 'Segment not found' });
+        res.status(404).json({ success: false, error: 'Segment not found' });
+        return;
       }
 
       const updates: any = {};
@@ -312,23 +326,26 @@ export class SegmentController {
    * Delete a segment
    * DELETE /api/trips/:tripId/segments/:segmentId
    */
-  static async deleteSegment(req: AuthRequest, res: Response) {
+  static async deleteSegment(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId, segmentId } = req.params;
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       const segment = await TripSegmentModel.findById(segmentId);
       if (!segment || segment.trip_group_id !== tripId) {
-        return res.status(404).json({ success: false, error: 'Segment not found' });
+        res.status(404).json({ success: false, error: 'Segment not found' });
+        return;
       }
 
       await TripSegmentModel.delete(segmentId);
@@ -344,23 +361,26 @@ export class SegmentController {
    * Reorder segments
    * PUT /api/trips/:tripId/segments/reorder
    */
-  static async reorderSegments(req: AuthRequest, res: Response) {
+  static async reorderSegments(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { tripId } = req.params;
       const userId = req.user?.id;
       const { segmentIds } = req.body;
 
       if (!userId) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
       }
 
       const isMember = await TripGroupModel.isMember(tripId, userId);
       if (!isMember) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
       }
 
       if (!Array.isArray(segmentIds)) {
-        return res.status(400).json({ success: false, error: 'segmentIds must be an array' });
+        res.status(400).json({ success: false, error: 'segmentIds must be an array' });
+        return;
       }
 
       await TripSegmentModel.reorder(tripId, segmentIds);

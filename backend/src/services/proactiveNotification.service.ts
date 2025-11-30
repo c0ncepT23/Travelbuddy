@@ -9,12 +9,10 @@
  */
 
 import { PushNotificationService } from './pushNotification.service';
-import { AICompanionService } from './aiCompanion.service';
 import { NotificationPreferencesModel } from '../models/notificationPreferences.model';
 import { TripSegmentModel } from '../models/tripSegment.model';
 import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroupModel } from '../models/tripGroup.model';
-import { UserModel } from '../models/user.model';
 import logger from '../config/logger';
 
 interface NearbyAlertData {
@@ -50,7 +48,7 @@ export class ProactiveNotificationService {
         return false;
       }
 
-      const { segment, dayNumber, totalDays, daysRemaining } = segmentInfo;
+      const { segment, dayNumber, daysRemaining } = segmentInfo;
       const isLastDay = daysRemaining === 0;
 
       // Get trip info
@@ -297,8 +295,7 @@ export class ProactiveNotificationService {
         return false;
       }
 
-      // Get current and next segment
-      const currentInfo = await TripSegmentModel.getCurrentSegment(tripGroupId);
+      // Get next segment
       const nextSegment = await TripSegmentModel.getNextSegment(tripGroupId);
 
       if (!nextSegment) {

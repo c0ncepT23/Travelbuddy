@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { SegmentController } from '../controllers/segment.controller';
-import { authenticateToken } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
 // All routes require authentication
-router.use(authenticateToken);
+router.use(authenticate);
 
 /**
  * @route   POST /api/trips/:tripId/segments

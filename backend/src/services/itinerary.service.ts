@@ -2,7 +2,6 @@ import OpenAI from 'openai';
 import { config } from '../config/env';
 import { TripSegmentModel } from '../models/tripSegment.model';
 import { TripGroupModel } from '../models/tripGroup.model';
-import { GooglePlacesService } from './googlePlaces.service';
 import { TripSegment } from '../types';
 import logger from '../config/logger';
 

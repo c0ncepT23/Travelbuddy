@@ -444,7 +444,7 @@ Return JSON:
    */
   static async handlePlanModification(
     tripGroupId: string,
-    userId: string,
+    _userId: string,
     message: string
   ): Promise<{ success: boolean; message: string; plan?: DailyPlan }> {
     const plan = await DailyPlanModel.getTodaysPlan(tripGroupId);

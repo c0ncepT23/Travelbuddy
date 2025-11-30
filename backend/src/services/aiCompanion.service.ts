@@ -729,7 +729,6 @@ Respond with JSON:
     const nextSegment = await TripSegmentModel.getNextSegment(tripGroupId);
 
     // Get saved places stats
-    const allPlaces = await SavedItemModel.findByTrip(tripGroupId);
     const stats = await SavedItemModel.getStatistics(tripGroupId);
 
     // Build segment context

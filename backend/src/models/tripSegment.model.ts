@@ -108,7 +108,7 @@ export class TripSegmentModel {
       [tripGroupId]
     );
     
-    return result.rows.map(row => ({
+    return result.rows.map((row: any) => ({
       ...this.parseSegment(row),
       places_count: parseInt(row.places_count) || 0,
       visited_count: parseInt(row.visited_count) || 0,

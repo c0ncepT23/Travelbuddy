@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { DailyPlanController } from '../controllers/dailyPlan.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authenticate);
 
 // Generate a new day plan
 // POST /api/trips/:tripGroupId/plans/generate
