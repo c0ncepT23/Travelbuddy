@@ -2,10 +2,13 @@ import OpenAI from 'openai';
 import { config } from '../config/env';
 import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroupModel } from '../models/tripGroup.model';
+import { TripSegmentModel } from '../models/tripSegment.model';
 import { UserModel } from '../models/user.model';
-import { SavedItem, ItemCategory } from '../types';
+import { SavedItem, ItemCategory, CompanionContext } from '../types';
 import { ContentProcessorService } from './contentProcessor.service';
 import { GeocodingService } from './geocoding.service';
+import { ItineraryService } from './itinerary.service';
+import { DayPlanningService } from './dayPlanning.service';
 import { extractUrls } from '../utils/helpers';
 import logger from '../config/logger';
 
@@ -40,6 +43,43 @@ interface CompanionResponse {
   suggestions?: string[];
 }
 
+interface MorningBriefing {
+  greeting: string;
+  segment: {
+    city: string;
+    dayNumber: number;
+    totalDays: number;
+    daysRemaining: number;
+    hotel?: {
+      name: string;
+      address: string;
+    };
+  } | null;
+  topPicks: Array<{
+    id: string;
+    name: string;
+    category: string;
+    rating?: number;
+    location_name?: string;
+    description: string;
+  }>;
+  nearbyHotel: Array<{
+    id: string;
+    name: string;
+    category: string;
+    distance: number;
+    location_name?: string;
+  }>;
+  stats: {
+    total: number;
+    visited: number;
+    remaining: number;
+    byCategory: Record<string, number>;
+  };
+  suggestions: string[];
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+}
+
 export class AICompanionService {
   /**
    * Process a user query and return intelligent response
@@ -55,6 +95,60 @@ export class AICompanionService {
       const urls = extractUrls(query);
       if (urls.length > 0) {
         return await this.processContentUrl(userId, tripGroupId, urls[0]);
+      }
+
+      // Check if user wants to finish itinerary collection
+      if (ItineraryService.isFinishIntent(query)) {
+        const summary = await ItineraryService.generateItinerarySummary(tripGroupId);
+        return {
+          message: summary,
+          suggestions: ['Show my places', 'What should I do today?'],
+        };
+      }
+
+      // Check if this is an itinerary-related query (adding segments)
+      if (ItineraryService.isItineraryIntent(query)) {
+        const result = await ItineraryService.generateItineraryResponse(
+          tripGroupId,
+          userId,
+          query
+        );
+        
+        return {
+          message: result.message,
+          suggestions: result.action === 'created_segment' 
+            ? ['Add another city', "That's all", 'Show my itinerary']
+            : undefined,
+        };
+      }
+
+      // Check if this is a "plan my day" request
+      if (DayPlanningService.isPlanIntent(query)) {
+        const result = await DayPlanningService.generateDayPlan(
+          tripGroupId,
+          userId
+        );
+        
+        return {
+          message: result.message,
+          suggestions: ['Lock plan', 'Show on map', 'Modify plan'],
+        };
+      }
+
+      // Check if this is a plan modification request (swap, remove, add)
+      if (DayPlanningService.isPlanModificationIntent(query)) {
+        const result = await DayPlanningService.handlePlanModification(
+          tripGroupId,
+          userId,
+          query
+        );
+        
+        return {
+          message: result.message,
+          suggestions: result.success 
+            ? ['Lock plan', 'Show updated plan', 'More changes']
+            : undefined,
+        };
       }
 
       // Get user context
@@ -595,6 +689,352 @@ Respond with JSON:
       logger.error('Proactive suggestion error:', error);
       return null;
     }
+  }
+
+  /**
+   * Determine time of day from current hour
+   */
+  private static getTimeOfDay(hour: number): 'morning' | 'afternoon' | 'evening' | 'night' {
+    if (hour >= 5 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
+  }
+
+  /**
+   * Build full CompanionContext for intelligent suggestions
+   */
+  static async buildCompanionContext(
+    userId: string,
+    tripGroupId: string,
+    userLocation?: { lat: number; lng: number }
+  ): Promise<CompanionContext> {
+    const now = new Date();
+    const hour = now.getHours();
+    const timeOfDay = this.getTimeOfDay(hour);
+    const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+    const currentTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+    // Get user and trip info
+    const user = await UserModel.findById(userId);
+    const trip = await TripGroupModel.findById(tripGroupId);
+    const members = await TripGroupModel.getMembers(tripGroupId);
+
+    if (!user || !trip) {
+      throw new Error('User or trip not found');
+    }
+
+    // Get current segment info
+    const currentSegmentInfo = await TripSegmentModel.getCurrentSegment(tripGroupId);
+    const nextSegment = await TripSegmentModel.getNextSegment(tripGroupId);
+
+    // Get saved places stats
+    const allPlaces = await SavedItemModel.findByTrip(tripGroupId);
+    const stats = await SavedItemModel.getStatistics(tripGroupId);
+
+    // Build segment context
+    let currentSegment: CompanionContext['currentSegment'];
+    let cityStats = { total: 0, visited: 0, unvisited: 0, byCategory: {} as Record<string, number> };
+    let nearbyNow: SavedItem[] = [];
+    let topRated: SavedItem[] = [];
+    let mustVisit: SavedItem[] = [];
+
+    if (currentSegmentInfo.segment) {
+      const seg = currentSegmentInfo.segment;
+      
+      currentSegment = {
+        id: seg.id,
+        city: seg.city,
+        startDate: seg.start_date,
+        endDate: seg.end_date,
+        dayNumber: currentSegmentInfo.dayNumber,
+        totalDays: currentSegmentInfo.totalDays,
+        daysRemaining: currentSegmentInfo.daysRemaining,
+        hotel: seg.accommodation_name && seg.accommodation_lat && seg.accommodation_lng ? {
+          name: seg.accommodation_name,
+          lat: seg.accommodation_lat,
+          lng: seg.accommodation_lng,
+          address: seg.accommodation_address || '',
+        } : undefined,
+      };
+
+      // Get city-specific stats
+      cityStats = await SavedItemModel.getCityStatistics(tripGroupId, seg.city, seg.id);
+
+      // Get top-rated places in current city
+      topRated = await SavedItemModel.getTopRated(tripGroupId, {
+        city: seg.city,
+        segmentId: seg.id,
+        excludeVisited: true,
+        limit: 5,
+      });
+
+      // Get must-visit places in current city
+      mustVisit = await SavedItemModel.getMustVisit(tripGroupId, {
+        city: seg.city,
+        excludeVisited: true,
+        limit: 5,
+      });
+
+      // Get places near hotel
+      if (seg.accommodation_lat && seg.accommodation_lng) {
+        const nearbyItems = await SavedItemModel.findNearLocation(tripGroupId, seg.accommodation_lat, seg.accommodation_lng, {
+          radiusMeters: 2000,
+          excludeVisited: true,
+          limit: 10,
+        });
+        nearbyNow = nearbyItems;
+      }
+    }
+
+    // If user location provided, get nearby places
+    if (userLocation) {
+      nearbyNow = await SavedItemModel.findNearby(tripGroupId, userLocation.lat, userLocation.lng, 1000);
+    }
+
+    // Build next segment info
+    let nextSegmentInfo: CompanionContext['nextSegment'];
+    if (nextSegment) {
+      const daysUntil = Math.ceil(
+        (new Date(nextSegment.start_date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      nextSegmentInfo = {
+        city: nextSegment.city,
+        startDate: nextSegment.start_date,
+        daysUntil,
+      };
+    }
+
+    return {
+      currentDate: now,
+      currentTime,
+      timeOfDay,
+      dayOfWeek,
+      userLocation,
+      hasItinerary: !!currentSegmentInfo.segment,
+      currentSegment,
+      nextSegment: nextSegmentInfo,
+      savedPlaces: {
+        total: parseInt(stats.total_items) || 0,
+        inCurrentCity: cityStats.total,
+        unvisitedInCity: cityStats.unvisited,
+        visitedInCity: cityStats.visited,
+        nearbyNow,
+        topRated,
+        mustVisit,
+        byCategory: {
+          food: parseInt(stats.food_count) || 0,
+          place: parseInt(stats.place_count) || 0,
+          shopping: parseInt(stats.shopping_count) || 0,
+          activity: parseInt(stats.activity_count) || 0,
+          accommodation: parseInt(stats.accommodation_count) || 0,
+          tip: parseInt(stats.tip_count) || 0,
+        },
+      },
+      tripId: tripGroupId,
+      tripName: trip.name,
+      destination: trip.destination,
+      tripStartDate: trip.start_date,
+      tripEndDate: trip.end_date,
+      groupMembers: members.map((m: any) => ({ id: m.id, name: m.name })),
+      userId,
+      userName: user.name,
+    };
+  }
+
+  /**
+   * Generate morning briefing for the user
+   */
+  static async getMorningBriefing(
+    userId: string,
+    tripGroupId: string,
+    userLocation?: { lat: number; lng: number }
+  ): Promise<MorningBriefing> {
+    try {
+      // Build full context
+      const context = await this.buildCompanionContext(userId, tripGroupId, userLocation);
+
+      // Determine appropriate greeting based on time of day
+      const greetingByTime: Record<string, string> = {
+        morning: '🌅 Good morning',
+        afternoon: '☀️ Good afternoon',
+        evening: '🌆 Good evening',
+        night: '🌙 Hello',
+      };
+
+      let greeting = `${greetingByTime[context.timeOfDay]}!`;
+      
+      if (context.currentSegment) {
+        const { city, dayNumber, totalDays, daysRemaining } = context.currentSegment;
+        greeting += ` Day ${dayNumber} of ${totalDays} in ${city}!`;
+        
+        if (daysRemaining === 0) {
+          greeting += ` 🎯 Last day in ${city}!`;
+        } else if (daysRemaining === 1) {
+          greeting += ' Just one more day here.';
+        }
+      } else if (context.nextSegment) {
+        const { city, daysUntil } = context.nextSegment;
+        if (daysUntil === 0) {
+          greeting += ` You're heading to ${city} today! 🚀`;
+        } else if (daysUntil === 1) {
+          greeting += ` ${city} tomorrow! 🎉`;
+        } else {
+          greeting += ` ${daysUntil} days until ${city}!`;
+        }
+      } else {
+        greeting += ' Ready to explore?';
+      }
+
+      // Build segment info for response
+      let segmentInfo: MorningBriefing['segment'] = null;
+      if (context.currentSegment) {
+        segmentInfo = {
+          city: context.currentSegment.city,
+          dayNumber: context.currentSegment.dayNumber,
+          totalDays: context.currentSegment.totalDays,
+          daysRemaining: context.currentSegment.daysRemaining,
+          hotel: context.currentSegment.hotel ? {
+            name: context.currentSegment.hotel.name,
+            address: context.currentSegment.hotel.address,
+          } : undefined,
+        };
+      }
+
+      // Get top picks (highest rated unvisited)
+      const topPicks = context.savedPlaces.topRated.slice(0, 5).map((place) => ({
+        id: place.id,
+        name: place.name,
+        category: place.category,
+        rating: place.rating,
+        location_name: place.location_name,
+        description: place.description || '',
+      }));
+
+      // Get places near hotel
+      let nearbyHotel: MorningBriefing['nearbyHotel'] = [];
+      if (context.currentSegment?.hotel) {
+        const { lat, lng } = context.currentSegment.hotel;
+        const nearbyItems = await SavedItemModel.findNearLocation(tripGroupId, lat, lng, {
+          radiusMeters: 1500,
+          excludeVisited: true,
+          limit: 5,
+        });
+        nearbyHotel = nearbyItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          distance: Math.round(item.distance),
+          location_name: item.location_name,
+        }));
+      }
+
+      // Build stats
+      const stats = {
+        total: context.savedPlaces.inCurrentCity || context.savedPlaces.total,
+        visited: context.savedPlaces.visitedInCity,
+        remaining: context.savedPlaces.unvisitedInCity,
+        byCategory: context.savedPlaces.byCategory,
+      };
+
+      // Build time-appropriate suggestions
+      const suggestions = this.getTimeSuggestions(context.timeOfDay, context.savedPlaces.byCategory);
+
+      // Generate AI-enhanced greeting if we have enough context
+      let enhancedGreeting = greeting;
+      if (topPicks.length > 0 || nearbyHotel.length > 0) {
+        try {
+          enhancedGreeting = await this.generateAIBriefingMessage(context, topPicks, nearbyHotel);
+        } catch (err) {
+          logger.warn('Failed to generate AI briefing message, using default:', err);
+        }
+      }
+
+      return {
+        greeting: enhancedGreeting,
+        segment: segmentInfo,
+        topPicks,
+        nearbyHotel,
+        stats,
+        suggestions,
+        timeOfDay: context.timeOfDay,
+      };
+    } catch (error) {
+      logger.error('Error generating morning briefing:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate time-appropriate suggestions
+   */
+  private static getTimeSuggestions(
+    timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night',
+    byCategory: Record<string, number>
+  ): string[] {
+    const suggestions: string[] = [];
+
+    switch (timeOfDay) {
+      case 'morning':
+        if (byCategory.food > 0) suggestions.push('Find breakfast spots 🥐');
+        suggestions.push('Plan your day 📋');
+        if (byCategory.place > 0) suggestions.push('Visit morning attractions 🏛️');
+        break;
+      case 'afternoon':
+        if (byCategory.shopping > 0) suggestions.push('Go shopping 🛍️');
+        if (byCategory.activity > 0) suggestions.push('Do an activity 🎯');
+        if (byCategory.food > 0) suggestions.push('Find lunch spots 🍱');
+        break;
+      case 'evening':
+        if (byCategory.food > 0) suggestions.push('Find dinner spots 🍽️');
+        suggestions.push('Evening stroll 🌆');
+        if (byCategory.place > 0) suggestions.push('Night views 🌃');
+        break;
+      case 'night':
+        suggestions.push('Plan tomorrow 📅');
+        if (byCategory.food > 0) suggestions.push('Late night eats 🍜');
+        suggestions.push('Review saved places 📍');
+        break;
+    }
+
+    return suggestions.slice(0, 4);
+  }
+
+  /**
+   * Generate AI-enhanced briefing message
+   */
+  private static async generateAIBriefingMessage(
+    context: CompanionContext,
+    topPicks: Array<{ name: string; category: string; rating?: number }>,
+    nearbyHotel: Array<{ name: string; category: string; distance: number }>
+  ): Promise<string> {
+    const prompt = `You are an enthusiastic travel companion AI. Generate a brief, friendly morning briefing message (2-3 sentences max).
+
+Context:
+- User: ${context.userName}
+- Time: ${context.timeOfDay}
+${context.currentSegment ? `- Location: Day ${context.currentSegment.dayNumber} of ${context.currentSegment.totalDays} in ${context.currentSegment.city}` : ''}
+${context.currentSegment?.daysRemaining === 0 ? '- This is their LAST DAY in this city!' : ''}
+- Unvisited places in city: ${context.savedPlaces.unvisitedInCity}
+- Top picks: ${topPicks.slice(0, 3).map(p => p.name).join(', ')}
+${nearbyHotel.length > 0 ? `- Near hotel: ${nearbyHotel.slice(0, 2).map(p => `${p.name} (${p.distance}m)`).join(', ')}` : ''}
+
+Guidelines:
+- Be enthusiastic but concise
+- Use 1-2 relevant emojis
+- Mention a specific place if highly rated
+- If last day, create urgency
+- If morning, suggest breakfast; if afternoon, activities; if evening, dinner
+- Keep it under 150 characters`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.8,
+      max_tokens: 100,
+    });
+
+    return response.choices[0]?.message?.content || 'Ready to explore? Check out your top picks! 🗺️';
   }
 }
 

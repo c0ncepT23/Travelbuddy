@@ -293,6 +293,125 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
+// Trip Segment Types (for itinerary tracking)
+export interface TripSegment {
+  id: string;
+  trip_group_id: string;
+  city: string;
+  area?: string;
+  country?: string;
+  timezone?: string;
+  start_date: string;
+  end_date: string;
+  accommodation_name?: string;
+  accommodation_address?: string;
+  accommodation_lat?: number;
+  accommodation_lng?: number;
+  accommodation_place_id?: string;
+  order_index: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  // Extra fields from API
+  places_count?: number;
+  visited_count?: number;
+}
+
+export interface CurrentSegmentInfo {
+  segment: TripSegment | null;
+  dayNumber: number;
+  totalDays: number;
+  daysRemaining: number;
+  isTransitDay: boolean;
+  placesInCity: number;
+  visitedInCity: number;
+  unvisitedInCity: number;
+  nextSegment?: TripSegment | null;
+}
+
+// Daily Plan Types
+export interface DailyPlanStop {
+  saved_item_id: string;
+  order: number;
+  planned_time?: string;
+  duration_minutes?: number;
+  notes?: string;
+  // Populated fields
+  place?: SavedItem;
+}
+
+export interface DailyPlan {
+  id: string;
+  trip_group_id: string;
+  segment_id?: string;
+  plan_date: string;
+  title?: string;
+  stops: DailyPlanStop[];
+  route_data?: any;
+  total_duration_minutes?: number;
+  total_distance_meters?: number;
+  status: 'active' | 'completed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}
+
+// Notification Preferences Types
+export interface NotificationPreferences {
+  id: string;
+  user_id: string;
+  trip_group_id?: string;
+  morning_briefing: boolean;
+  meal_suggestions: boolean;
+  nearby_alerts: boolean;
+  evening_recap: boolean;
+  segment_alerts: boolean;
+  quiet_start: string;  // HH:MM format
+  quiet_end: string;    // HH:MM format
+  max_daily_notifications: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Morning Briefing Types (from /api/companion/:id/briefing)
+export interface MorningBriefing {
+  greeting: string;
+  segment: {
+    city: string;
+    dayNumber: number;
+    totalDays: number;
+    daysRemaining: number;
+    hotel?: {
+      name: string;
+      address: string;
+    };
+  } | null;
+  topPicks: Array<{
+    id: string;
+    name: string;
+    category: string;
+    rating?: number;
+    location_name?: string;
+    description: string;
+  }>;
+  nearbyHotel: Array<{
+    id: string;
+    name: string;
+    category: string;
+    distance: number;
+    location_name?: string;
+  }>;
+  stats: {
+    total: number;
+    visited: number;
+    remaining: number;
+    byCategory: Record<string, number>;
+  };
+  suggestions: string[];
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+}
+
 // Navigation Types
 export type RootStackParamList = {
   Auth: undefined;
@@ -301,6 +420,7 @@ export type RootStackParamList = {
   Register: undefined;
   TripList: undefined;
   TripDetail: { tripId: string };
+  TripHome: { tripId: string };
   Chat: { tripId: string };
   CreateTrip: undefined;
   JoinTrip: undefined;

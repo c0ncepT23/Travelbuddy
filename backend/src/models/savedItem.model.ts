@@ -451,5 +451,249 @@ export class SavedItemModel {
       );
     }
   }
+
+  /**
+   * Get items for a specific city (by segment or city name matching)
+   */
+  static async findByCity(
+    tripGroupId: string,
+    city: string,
+    segmentId?: string
+  ): Promise<SavedItem[]> {
+    const result = await query(
+      `SELECT * FROM saved_items
+       WHERE trip_group_id = $1
+       AND (
+         segment_id = $2
+         OR area_name ILIKE '%' || $3 || '%'
+         OR location_name ILIKE '%' || $3 || '%'
+       )
+       ORDER BY rating DESC NULLS LAST, created_at DESC`,
+      [tripGroupId, segmentId || '', city]
+    );
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
+  }
+
+  /**
+   * Get top-rated items for a trip/city
+   */
+  static async getTopRated(
+    tripGroupId: string,
+    options?: {
+      city?: string;
+      segmentId?: string;
+      limit?: number;
+      excludeVisited?: boolean;
+      category?: ItemCategory;
+    }
+  ): Promise<SavedItem[]> {
+    let queryText = `
+      SELECT * FROM saved_items
+      WHERE trip_group_id = $1
+      AND rating IS NOT NULL
+    `;
+    const params: any[] = [tripGroupId];
+    let paramCount = 2;
+
+    if (options?.city) {
+      queryText += ` AND (
+        segment_id = $${paramCount++}
+        OR area_name ILIKE '%' || $${paramCount++} || '%'
+        OR location_name ILIKE '%' || $${paramCount++} || '%'
+      )`;
+      params.push(options.segmentId || '', options.city, options.city);
+    }
+
+    if (options?.excludeVisited) {
+      queryText += ` AND status != 'visited'`;
+    }
+
+    if (options?.category) {
+      queryText += ` AND category = $${paramCount++}`;
+      params.push(options.category);
+    }
+
+    queryText += ` ORDER BY rating DESC, user_ratings_total DESC NULLS LAST`;
+    queryText += ` LIMIT $${paramCount}`;
+    params.push(options?.limit || 5);
+
+    const result = await query(queryText, params);
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
+  }
+
+  /**
+   * Get must-visit items for a trip
+   */
+  static async getMustVisit(
+    tripGroupId: string,
+    options?: {
+      city?: string;
+      excludeVisited?: boolean;
+      limit?: number;
+    }
+  ): Promise<SavedItem[]> {
+    let queryText = `
+      SELECT * FROM saved_items
+      WHERE trip_group_id = $1
+      AND is_must_visit = true
+    `;
+    const params: any[] = [tripGroupId];
+    let paramCount = 2;
+
+    if (options?.city) {
+      queryText += ` AND (
+        area_name ILIKE '%' || $${paramCount++} || '%'
+        OR location_name ILIKE '%' || $${paramCount++} || '%'
+      )`;
+      params.push(options.city, options.city);
+    }
+
+    if (options?.excludeVisited) {
+      queryText += ` AND status != 'visited'`;
+    }
+
+    queryText += ` ORDER BY rating DESC NULLS LAST, created_at ASC`;
+
+    if (options?.limit) {
+      queryText += ` LIMIT $${paramCount}`;
+      params.push(options.limit);
+    }
+
+    const result = await query(queryText, params);
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
+  }
+
+  /**
+   * Get items near a specific location (for hotel proximity)
+   */
+  static async findNearLocation(
+    tripGroupId: string,
+    lat: number,
+    lng: number,
+    options?: {
+      radiusMeters?: number;
+      excludeVisited?: boolean;
+      category?: ItemCategory;
+      limit?: number;
+    }
+  ): Promise<Array<SavedItem & { distance: number }>> {
+    const radius = options?.radiusMeters || 2000;
+    const latDelta = radius / 111000;
+    const lngDelta = radius / (111000 * Math.cos((lat * Math.PI) / 180));
+
+    let queryText = `
+      SELECT *,
+        (6371000 * acos(
+          cos(radians($2)) * cos(radians(location_lat)) *
+          cos(radians(location_lng) - radians($3)) +
+          sin(radians($2)) * sin(radians(location_lat))
+        )) AS distance
+      FROM saved_items
+      WHERE trip_group_id = $1
+        AND location_lat IS NOT NULL
+        AND location_lng IS NOT NULL
+        AND location_lat BETWEEN $2 - $4 AND $2 + $4
+        AND location_lng BETWEEN $3 - $5 AND $3 + $5
+    `;
+    const params: any[] = [tripGroupId, lat, lng, latDelta, lngDelta];
+    let paramCount = 6;
+
+    if (options?.excludeVisited) {
+      queryText += ` AND status != 'visited'`;
+    }
+
+    if (options?.category) {
+      queryText += ` AND category = $${paramCount++}`;
+      params.push(options.category);
+    }
+
+    queryText += ` HAVING (6371000 * acos(
+      cos(radians($2)) * cos(radians(location_lat)) *
+      cos(radians(location_lng) - radians($3)) +
+      sin(radians($2)) * sin(radians(location_lat))
+    )) <= $${paramCount++}`;
+    params.push(radius);
+
+    queryText += ` ORDER BY distance ASC`;
+
+    if (options?.limit) {
+      queryText += ` LIMIT $${paramCount}`;
+      params.push(options.limit);
+    }
+
+    const result = await query(queryText, params);
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+      distance: parseFloat(row.distance),
+    }));
+  }
+
+  /**
+   * Get statistics for a specific city/segment
+   */
+  static async getCityStatistics(
+    tripGroupId: string,
+    city: string,
+    segmentId?: string
+  ): Promise<{
+    total: number;
+    visited: number;
+    unvisited: number;
+    byCategory: Record<string, number>;
+  }> {
+    const result = await query(
+      `SELECT
+         COUNT(*) as total,
+         COUNT(CASE WHEN status = 'visited' THEN 1 END) as visited,
+         COUNT(CASE WHEN status != 'visited' THEN 1 END) as unvisited,
+         COUNT(CASE WHEN category = 'food' THEN 1 END) as food_count,
+         COUNT(CASE WHEN category = 'place' THEN 1 END) as place_count,
+         COUNT(CASE WHEN category = 'shopping' THEN 1 END) as shopping_count,
+         COUNT(CASE WHEN category = 'accommodation' THEN 1 END) as accommodation_count,
+         COUNT(CASE WHEN category = 'activity' THEN 1 END) as activity_count,
+         COUNT(CASE WHEN category = 'tip' THEN 1 END) as tip_count
+       FROM saved_items
+       WHERE trip_group_id = $1
+       AND (
+         segment_id = $2
+         OR area_name ILIKE '%' || $3 || '%'
+         OR location_name ILIKE '%' || $3 || '%'
+       )`,
+      [tripGroupId, segmentId || '', city]
+    );
+
+    const row = result.rows[0];
+    return {
+      total: parseInt(row?.total) || 0,
+      visited: parseInt(row?.visited) || 0,
+      unvisited: parseInt(row?.unvisited) || 0,
+      byCategory: {
+        food: parseInt(row?.food_count) || 0,
+        place: parseInt(row?.place_count) || 0,
+        shopping: parseInt(row?.shopping_count) || 0,
+        accommodation: parseInt(row?.accommodation_count) || 0,
+        activity: parseInt(row?.activity_count) || 0,
+        tip: parseInt(row?.tip_count) || 0,
+      },
+    };
+  }
 }
 

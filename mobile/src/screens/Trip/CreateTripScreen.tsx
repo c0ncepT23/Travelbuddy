@@ -61,12 +61,12 @@ export default function CreateTripScreen({ navigation }: any) {
 
       if (Platform.OS === 'web') {
         window.alert('Trip created successfully!');
-        navigation.navigate('TripDetail', { tripId: trip.id });
+        navigation.navigate('TripHome', { tripId: trip.id });
       } else {
         Alert.alert('Success', 'Trip created successfully!', [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('TripDetail', { tripId: trip.id }),
+            onPress: () => navigation.navigate('TripHome', { tripId: trip.id }),
           },
         ]);
       }

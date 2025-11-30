@@ -34,5 +34,41 @@ router.get(
   NotificationController.getTokens
 );
 
+/**
+ * @route   GET /api/notifications/preferences
+ * @desc    Get notification preferences for current user
+ * @query   tripId?: string - Optional trip-specific preferences
+ */
+router.get('/preferences', NotificationController.getPreferences);
+
+/**
+ * @route   PUT /api/notifications/preferences
+ * @desc    Update notification preferences
+ * @query   tripId?: string - Optional trip-specific preferences
+ * @body    { morning_briefing?, meal_suggestions?, nearby_alerts?, evening_recap?, 
+ *           segment_alerts?, quiet_start?, quiet_end?, max_daily_notifications? }
+ */
+router.put('/preferences', NotificationController.updatePreferences);
+
+/**
+ * @route   POST /api/notifications/test-briefing/:tripId
+ * @desc    Test morning briefing notification (sends immediately)
+ */
+router.post('/test-briefing/:tripId', NotificationController.testMorningBriefing);
+
+/**
+ * @route   POST /api/notifications/location/:tripId
+ * @desc    Report user location for nearby place alerts
+ * @body    { lat: number, lng: number }
+ */
+router.post(
+  '/location/:tripId',
+  validate([
+    body('lat').isFloat().withMessage('Latitude is required'),
+    body('lng').isFloat().withMessage('Longitude is required'),
+  ]),
+  NotificationController.reportLocation
+);
+
 export default router;
 

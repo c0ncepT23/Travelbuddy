@@ -21,6 +21,7 @@ import RegisterScreen from './src/screens/Auth/RegisterScreen';
 // Trip Screens
 import TripListScreen from './src/screens/Trip/TripListScreen';
 import TripDetailScreen from './src/screens/Trip/TripDetailScreen';
+import TripHomeScreen from './src/screens/Trip/TripHomeScreen';
 import CreateTripScreen from './src/screens/Trip/CreateTripScreen';
 import JoinTripScreen from './src/screens/Trip/JoinTripScreen';
 
@@ -140,7 +141,7 @@ export default function App() {
           text: 'View Trip',
           onPress: () => {
             if (navigationRef.current) {
-              navigationRef.current.navigate('TripDetail', { tripId });
+              navigationRef.current.navigate('TripHome', { tripId });
             }
           },
         },
@@ -179,8 +180,8 @@ export default function App() {
               if (data?.tripId && navigationRef.current) {
                 if (data.screen === 'GroupChat') {
                   navigationRef.current.navigate('GroupChat', { tripId: data.tripId });
-                } else if (data.screen === 'TripDetail') {
-                  navigationRef.current.navigate('TripDetail', { tripId: data.tripId });
+                } else if (data.screen === 'TripDetail' || data.screen === 'TripHome') {
+                  navigationRef.current.navigate('TripHome', { tripId: data.tripId });
                 }
               }
             }
@@ -320,6 +321,11 @@ export default function App() {
               <Stack.Screen
                 name="TripList"
                 component={TripListScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripHome"
+                component={TripHomeScreen}
                 options={{ headerShown: false }}
               />
               <Stack.Screen

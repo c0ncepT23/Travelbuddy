@@ -17,6 +17,8 @@ import aiCompanionRoutes from './routes/aiCompanion.routes';
 import checkInRoutes from './routes/checkIn.routes';
 import groupMessageRoutes from './routes/groupMessage.routes';
 import notificationRoutes from './routes/notification.routes';
+import segmentRoutes from './routes/segment.routes';
+import dailyPlanRoutes from './routes/dailyPlan.routes';
 
 const app: Application = express();
 
@@ -64,6 +66,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripGroupRoutes);  // Trip CRUD operations
 app.use('/api/trips', tripRoutes);        // Trip items and search
 app.use('/api/trips', chatRoutes);       // Chat within trips
+app.use('/api/trips', segmentRoutes);    // Trip segments (itinerary)
+app.use('/api/trips', dailyPlanRoutes);  // Daily plans
 app.use('/api/items', itemRoutes);       // Direct item operations
 app.use('/api/location', locationRoutes); // Location services
 app.use('/api/companion', aiCompanionRoutes); // AI Companion queries

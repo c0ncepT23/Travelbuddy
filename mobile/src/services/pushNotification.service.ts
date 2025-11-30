@@ -51,7 +51,7 @@ class PushNotificationService {
       this.expoPushToken = tokenData.data;
       console.log('[PushNotification] Token:', this.expoPushToken);
 
-      // Configure Android channel
+      // Configure Android channels
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'Default',
@@ -74,6 +74,34 @@ class PushNotificationService {
           name: 'Trip Updates',
           importance: Notifications.AndroidImportance.DEFAULT,
           lightColor: '#10B981',
+        });
+
+        // Daily briefings channel (morning/evening)
+        await Notifications.setNotificationChannelAsync('briefings', {
+          name: 'Daily Briefings',
+          description: 'Morning briefings and evening recaps',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#2563EB',
+          sound: 'default',
+        });
+
+        // Nearby alerts channel
+        await Notifications.setNotificationChannelAsync('nearby', {
+          name: 'Nearby Places',
+          description: 'Alerts when you\'re near saved places',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 100, 100, 100],
+          lightColor: '#10B981',
+          sound: 'default',
+        });
+
+        // Suggestions channel
+        await Notifications.setNotificationChannelAsync('suggestions', {
+          name: 'Suggestions',
+          description: 'Meal and activity suggestions',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          lightColor: '#F59E0B',
         });
       }
 

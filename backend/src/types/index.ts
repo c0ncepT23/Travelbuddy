@@ -222,3 +222,149 @@ export interface AgentFunction {
   parameters: any;
 }
 
+// Trip Segment Types (for itinerary tracking)
+export interface TripSegment {
+  id: string;
+  trip_group_id: string;
+  city: string;
+  area?: string;
+  country?: string;
+  timezone?: string;
+  start_date: Date;
+  end_date: Date;
+  accommodation_name?: string;
+  accommodation_address?: string;
+  accommodation_lat?: number;
+  accommodation_lng?: number;
+  accommodation_place_id?: string;
+  order_index: number;
+  notes?: string;
+  created_at: Date;
+  updated_at: Date;
+  created_by?: string;
+}
+
+export interface TripSegmentWithStats extends TripSegment {
+  places_count: number;
+  visited_count: number;
+}
+
+export interface CurrentSegmentInfo {
+  segment: TripSegment | null;
+  dayNumber: number;
+  totalDays: number;
+  daysRemaining: number;
+  isTransitDay: boolean;
+}
+
+// Daily Plan Types
+export interface DailyPlanStop {
+  saved_item_id: string;
+  order: number;
+  planned_time?: string;
+  duration_minutes?: number;
+  notes?: string;
+}
+
+export interface DailyPlan {
+  id: string;
+  trip_group_id: string;
+  segment_id?: string;
+  plan_date: Date;
+  title?: string;
+  stops: DailyPlanStop[];
+  route_data?: any;
+  total_duration_minutes?: number;
+  total_distance_meters?: number;
+  status: 'active' | 'completed' | 'cancelled';
+  created_at: Date;
+  updated_at: Date;
+  created_by?: string;
+}
+
+// Notification Preferences Types
+export interface NotificationPreferences {
+  id: string;
+  user_id: string;
+  trip_group_id?: string;
+  morning_briefing: boolean;
+  meal_suggestions: boolean;
+  nearby_alerts: boolean;
+  evening_recap: boolean;
+  segment_alerts: boolean;
+  quiet_start: string;
+  quiet_end: string;
+  max_daily_notifications: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Enhanced Companion Context (for intelligent suggestions)
+export interface CompanionContext {
+  // Time context
+  currentDate: Date;
+  currentTime: string;
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+  dayOfWeek: string;
+  
+  // User location
+  userLocation?: {
+    lat: number;
+    lng: number;
+  };
+  
+  // Itinerary context
+  hasItinerary: boolean;
+  currentSegment?: {
+    id: string;
+    city: string;
+    startDate: Date;
+    endDate: Date;
+    dayNumber: number;
+    totalDays: number;
+    daysRemaining: number;
+    hotel?: {
+      name: string;
+      lat: number;
+      lng: number;
+      address: string;
+    };
+  };
+  nextSegment?: {
+    city: string;
+    startDate: Date;
+    daysUntil: number;
+  };
+  
+  // Places context
+  savedPlaces: {
+    total: number;
+    inCurrentCity: number;
+    unvisitedInCity: number;
+    visitedInCity: number;
+    nearbyNow: SavedItem[];
+    topRated: SavedItem[];
+    mustVisit: SavedItem[];
+    byCategory: {
+      food: number;
+      place: number;
+      shopping: number;
+      activity: number;
+      accommodation: number;
+      tip: number;
+    };
+  };
+  
+  // Trip context
+  tripId: string;
+  tripName: string;
+  destination: string;
+  tripStartDate?: Date;
+  tripEndDate?: Date;
+  groupMembers: Array<{ id: string; name: string }>;
+  
+  // User context
+  userId: string;
+  userName: string;
+}
+

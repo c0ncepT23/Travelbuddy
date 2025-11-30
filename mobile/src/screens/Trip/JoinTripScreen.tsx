@@ -31,7 +31,7 @@ export default function JoinTripScreen({ navigation }: any) {
       Alert.alert('Success', `Joined ${trip.name}!`, [
         {
           text: 'OK',
-          onPress: () => navigation.navigate('TripDetail', { tripId: trip.id }),
+          onPress: () => navigation.navigate('TripHome', { tripId: trip.id }),
         },
       ]);
     } catch (error: any) {

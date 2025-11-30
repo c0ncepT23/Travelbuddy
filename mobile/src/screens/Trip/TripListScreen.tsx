@@ -37,7 +37,7 @@ export default function TripListScreen({ navigation }: any) {
   const renderTrip = ({ item, index }: any) => (
     <AnimatedCard
       style={styles.tripCard}
-      onPress={() => navigation.navigate('TripDetail', { tripId: item.id, tripName: item.name })}
+      onPress={() => navigation.navigate('TripHome', { tripId: item.id, tripName: item.name })}
       delay={index * 100}
     >
       <View style={styles.tripIconContainer}>
