@@ -129,8 +129,8 @@ export class PushNotificationService {
     const query = `
       SELECT DISTINCT pt.token
       FROM push_notification_tokens pt
-      INNER JOIN trip_group_members tgm ON pt.user_id = tgm.user_id
-      WHERE tgm.trip_group_id = $1 
+      INNER JOIN trip_members tm ON pt.user_id = tm.user_id
+      WHERE tm.trip_group_id = $1 
         AND pt.user_id != $2
         AND pt.is_active = TRUE
     `;
