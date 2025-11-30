@@ -187,12 +187,15 @@ export class WebSocketService {
           
           logger.info(`[WebSocket] Message sent by ${socket.userId} in trip ${tripId}: "${content.substring(0, 50)}..."`);
           
-          // 🆕 AUTO-PROCESS: All user messages get AI response
+          // Check if message is directed at group members (contains @mention)
+          const hasMention = /@\w+/.test(content) || content.toLowerCase().includes('@all');
           const urls = extractUrls(content);
-          logger.info(`[WebSocket] Extracted URLs from message: ${JSON.stringify(urls)}`);
+          logger.info(`[WebSocket] Extracted URLs: ${JSON.stringify(urls)}, Has @mention: ${hasMention}`);
           
-          // Process ALL messages through AI (URLs and text queries)
-          if (socket.userId && messageType !== 'ai_response' && messageType !== 'system') {
+          // Process through AI ONLY if:
+          // 1. Not an @mention (those are for group members)
+          // 2. Not already an AI response or system message
+          if (socket.userId && !hasMention && messageType !== 'ai_response' && messageType !== 'system') {
             const hasUrl = urls.length > 0;
             logger.info(`[WebSocket] ${hasUrl ? 'URL DETECTED' : 'TEXT QUERY'}: Processing message`);
             logger.info(`[WebSocket] User ID: ${socket.userId}, Trip ID: ${tripId}`);
