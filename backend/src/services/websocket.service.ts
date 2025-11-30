@@ -187,38 +187,42 @@ export class WebSocketService {
           
           logger.info(`[WebSocket] Message sent by ${socket.userId} in trip ${tripId}: "${content.substring(0, 50)}..."`);
           
-          // 🆕 AUTO-PROCESS URLs: If message contains YouTube/Instagram/Reddit links, process with AI
+          // 🆕 AUTO-PROCESS: All user messages get AI response
           const urls = extractUrls(content);
           logger.info(`[WebSocket] Extracted URLs from message: ${JSON.stringify(urls)}`);
           
-          if (urls.length > 0 && socket.userId) {
-            logger.info(`[WebSocket] URL DETECTED! Starting AI processing for: ${urls[0]}`);
+          // Process ALL messages through AI (URLs and text queries)
+          if (socket.userId && messageType !== 'ai_response' && messageType !== 'system') {
+            const hasUrl = urls.length > 0;
+            logger.info(`[WebSocket] ${hasUrl ? 'URL DETECTED' : 'TEXT QUERY'}: Processing message`);
             logger.info(`[WebSocket] User ID: ${socket.userId}, Trip ID: ${tripId}`);
             
-            // Send "processing" message first (use sender's ID with ai_response type)
-            logger.info(`[WebSocket] Creating processing message for room: ${room}`);
-            try {
-              const processingMessage = await GroupMessageModel.create(
-                tripId,
-                socket.userId, // Use sender's ID - message_type distinguishes it
-                `🤖 Processing ${urls[0].includes('youtube') ? 'YouTube video' : urls[0].includes('instagram') ? 'Instagram post' : 'link'}... Please wait! ⏳`,
-                'ai_response',
-                { isProcessing: true, isAI: true }
-              );
-              logger.info(`[WebSocket] Processing message created: ${JSON.stringify(processingMessage)}`);
-              
-              this.io.to(room).emit('new_message', {
-                ...processingMessage,
-                sender_name: 'AI Assistant',
-                sender_email: 'ai@travelagent.app'
-              });
-              logger.info(`[WebSocket] Processing message emitted to room ${room}`);
-            } catch (procError: any) {
-              logger.error(`[WebSocket] Failed to create/emit processing message: ${procError.message}`);
+            // Send "processing" message for URLs (they take longer)
+            if (hasUrl) {
+              logger.info(`[WebSocket] Creating processing message for room: ${room}`);
+              try {
+                const processingMessage = await GroupMessageModel.create(
+                  tripId,
+                  socket.userId, // Use sender's ID - message_type distinguishes it
+                  `🤖 Processing ${urls[0].includes('youtube') ? 'YouTube video' : urls[0].includes('instagram') ? 'Instagram post' : 'link'}... Please wait! ⏳`,
+                  'ai_response',
+                  { isProcessing: true, isAI: true }
+                );
+                logger.info(`[WebSocket] Processing message created: ${JSON.stringify(processingMessage)}`);
+                
+                this.io.to(room).emit('new_message', {
+                  ...processingMessage,
+                  sender_name: 'AI Assistant',
+                  sender_email: 'ai@travelagent.app'
+                });
+                logger.info(`[WebSocket] Processing message emitted to room ${room}`);
+              } catch (procError: any) {
+                logger.error(`[WebSocket] Failed to create/emit processing message: ${procError.message}`);
+              }
             }
             
-            // Process the URL asynchronously
-            logger.info(`[WebSocket] Starting AI processing for URL...`);
+            // Process message through AI companion
+            logger.info(`[WebSocket] Starting AI processing...`);
             try {
               const aiResponse = await AICompanionService.processQuery(
                 socket.userId.toString(),
@@ -227,7 +231,7 @@ export class WebSocketService {
               );
               logger.info(`[WebSocket] AI processing complete. Response: ${aiResponse.message.substring(0, 100)}...`);
               
-              // Send AI response with extracted places
+              // Send AI response
               const aiMessage = await GroupMessageModel.create(
                 tripId,
                 socket.userId, // Use sender's ID
@@ -236,33 +240,37 @@ export class WebSocketService {
                 { 
                   places: aiResponse.places,
                   suggestions: aiResponse.suggestions,
-                  sourceUrl: urls[0],
+                  sourceUrl: hasUrl ? urls[0] : undefined,
                   isAI: true
                 }
               );
               
               this.io.to(room).emit('new_message', {
                 ...aiMessage,
-                sender_name: 'AI Assistant',
+                sender_name: 'TravelPal',
                 sender_email: 'ai@travelagent.app'
               });
               
-              logger.info(`[WebSocket] AI processed URL and found ${aiResponse.places?.length || 0} places`);
+              logger.info(`[WebSocket] AI response sent. Places: ${aiResponse.places?.length || 0}`);
             } catch (aiError: any) {
-              logger.error('[WebSocket] AI URL processing error:', aiError);
+              logger.error('[WebSocket] AI processing error:', aiError);
               logger.error('[WebSocket] AI Error details:', aiError.message);
               
               // Send error message
+              const errorMsg = hasUrl 
+                ? `😅 Sorry, I had trouble processing that link. ${aiError.message || 'Try another link?'}`
+                : `😅 Sorry, I had trouble with that. ${aiError.message || 'Could you try rephrasing?'}`;
+              
               const errorMessage = await GroupMessageModel.create(
                 tripId,
                 socket.userId,
-                `😅 Sorry, I had trouble processing that link. ${aiError.message || 'The video might not contain travel locations, or there was a technical issue.'} Try another link?`,
+                errorMsg,
                 'ai_response',
                 { error: true, isAI: true, errorMessage: aiError.message }
               );
               this.io.to(room).emit('new_message', {
                 ...errorMessage,
-                sender_name: 'AI Assistant',
+                sender_name: 'TravelPal',
                 sender_email: 'ai@travelagent.app'
               });
             }
