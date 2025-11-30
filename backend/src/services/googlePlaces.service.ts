@@ -122,7 +122,6 @@ export class GooglePlacesService {
 
     const locality = getType('locality'); // e.g., "Shibuya City" or "Osaka"
     const sublocality1 = getType('sublocality_level_1'); // e.g., "Chuo Ward" in Osaka
-    const sublocality2 = getType('sublocality_level_2'); 
     const ward = getType('ward'); // Explicit ward type
     const neighborhood = getType('neighborhood');
     const adminArea2 = getType('administrative_area_level_2'); // County/City in some regions
