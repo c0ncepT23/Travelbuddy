@@ -506,6 +506,10 @@ export class AICompanionService {
       
       // Save places if user chose 'places' or 'both'
       if (choice === 'places' || choice === 'both') {
+        // Log places data for debugging
+        logger.info(`[Companion] Guide import - ${places.length} places to save`);
+        logger.info(`[Companion] Sample place: ${JSON.stringify(places[0])}`);
+        
         // Geocode places
         const geocodedPlaces = await GeocodingService.geocodePlaces(
           places.map((p: any) => ({
@@ -517,6 +521,7 @@ export class AICompanionService {
         
         // Save each place and assign to day if day_plans is also selected
         const shouldAssignDays = choice === 'both' || choice === 'day_plans';
+        logger.info(`[Companion] Should assign days: ${shouldAssignDays}`);
         
         for (let i = 0; i < places.length; i++) {
           const place = places[i];
@@ -542,9 +547,12 @@ export class AICompanionService {
             savedCount++;
             
             // Assign to day if importing day plans
+            logger.info(`[Companion] Place "${place.name}" day=${place.day}, shouldAssign=${shouldAssignDays}`);
             if (shouldAssignDays && place.day && savedItem) {
-              await SavedItemModel.assignToDay(savedItem.id, place.day);
-              logger.info(`[Companion] Assigned ${place.name} to Day ${place.day}`);
+              const assigned = await SavedItemModel.assignToDay(savedItem.id, place.day);
+              logger.info(`[Companion] Assigned "${place.name}" to Day ${place.day}, result: ${assigned ? 'success' : 'failed'}`);
+            } else if (shouldAssignDays && !place.day) {
+              logger.warn(`[Companion] Place "${place.name}" has no day number!`);
             }
           } catch (error) {
             logger.error(`[Companion] Error saving guide place: ${place.name}`, error);
