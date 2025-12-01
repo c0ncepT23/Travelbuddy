@@ -41,6 +41,19 @@ interface GeneratedPlan {
   totalDistanceMeters: number;
 }
 
+interface UserAnchor {
+  activity: string;
+  timeHint?: 'morning' | 'afternoon' | 'evening' | 'night';
+  specificTime?: string;
+}
+
+interface ParsedPlanRequest {
+  dayNumber?: number;
+  date?: string;
+  anchors: UserAnchor[];
+  isGenericPlan: boolean;
+}
+
 export class DayPlanningService {
   /**
    * Check if message is a plan request
@@ -65,6 +78,340 @@ export class DayPlanningService {
 
     const lower = message.toLowerCase();
     return planPhrases.some(phrase => lower.includes(phrase));
+  }
+
+  /**
+   * Check if message is adding activities to a specific day
+   * e.g., "Day 2 I want to go to Siam Center morning, Chinatown evening"
+   */
+  static isDayActivityIntent(message: string): boolean {
+    const lower = message.toLowerCase();
+    
+    // Check for day patterns
+    const dayPatterns = [
+      /day\s*\d+/i,                    // "day 2", "day 3"
+      /on\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+      /tomorrow/i,
+      /today.*want.*go/i,
+      /morning.*evening/i,             // time-based planning
+      /want.*go.*to/i,                 // "I want to go to X"
+      /have\s*to\s*(go|visit)/i,       // "I have to go to X"
+    ];
+
+    return dayPatterns.some(pattern => pattern.test(lower));
+  }
+
+  /**
+   * Parse user's day planning request with anchors
+   */
+  static async parseUserPlanRequest(message: string): Promise<ParsedPlanRequest> {
+    const lower = message.toLowerCase();
+    const anchors: UserAnchor[] = [];
+    let dayNumber: number | undefined;
+    let isGenericPlan = false;
+
+    // Extract day number
+    const dayMatch = lower.match(/day\s*(\d+)/i);
+    if (dayMatch) {
+      dayNumber = parseInt(dayMatch[1]);
+    }
+
+    // Check for time-based activities
+    const timePatterns = [
+      { pattern: /morning[^,]*(?:go to|visit|at)\s+([^,\.\n]+)/i, time: 'morning' as const },
+      { pattern: /afternoon[^,]*(?:go to|visit|at)\s+([^,\.\n]+)/i, time: 'afternoon' as const },
+      { pattern: /evening[^,]*(?:go to|visit|at)\s+([^,\.\n]+)/i, time: 'evening' as const },
+      { pattern: /(?:go to|visit)\s+([^,]+)\s+(?:in the\s+)?morning/i, time: 'morning' as const },
+      { pattern: /(?:go to|visit)\s+([^,]+)\s+(?:in the\s+)?afternoon/i, time: 'afternoon' as const },
+      { pattern: /(?:go to|visit)\s+([^,]+)\s+(?:in the\s+)?evening/i, time: 'evening' as const },
+    ];
+
+    for (const { pattern, time } of timePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        anchors.push({
+          activity: match[1].trim(),
+          timeHint: time,
+        });
+      }
+    }
+
+    // Check for general "want to go to X" patterns
+    if (anchors.length === 0) {
+      const goToPattern = /(?:want to|have to|going to|need to)\s+(?:go to|visit)\s+([^,\.\n]+)/gi;
+      let match;
+      while ((match = goToPattern.exec(message)) !== null) {
+        if (match[1]) {
+          anchors.push({
+            activity: match[1].trim(),
+          });
+        }
+      }
+    }
+
+    // Check for "then" pattern: "X then Y"
+    const thenPattern = /([^,]+)\s+then\s+([^,\.\n]+)/i;
+    const thenMatch = message.match(thenPattern);
+    if (thenMatch && anchors.length === 0) {
+      anchors.push({ activity: thenMatch[1].trim(), timeHint: 'morning' });
+      anchors.push({ activity: thenMatch[2].trim(), timeHint: 'evening' });
+    }
+
+    // If no specific anchors found, it's a generic "plan my day" request
+    isGenericPlan = anchors.length === 0;
+
+    return { dayNumber, anchors, isGenericPlan };
+  }
+
+  /**
+   * Generate plan around user's specified activities
+   */
+  static async generatePlanWithAnchors(
+    tripGroupId: string,
+    userId: string,
+    anchors: UserAnchor[],
+    forDate?: Date
+  ): Promise<{ plan: DailyPlan; message: string }> {
+    const targetDate = forDate || new Date();
+    const dateStr = targetDate.toISOString().split('T')[0];
+
+    // Get segment info
+    const segmentInfo = await TripSegmentModel.getCurrentSegment(tripGroupId, targetDate);
+    const trip = await TripGroupModel.findById(tripGroupId);
+
+    if (!trip) {
+      throw new Error('Trip not found');
+    }
+
+    // Get available places
+    let availablePlaces: SavedItem[];
+    if (segmentInfo.segment) {
+      availablePlaces = await SavedItemModel.findByCity(
+        tripGroupId,
+        segmentInfo.segment.city,
+        segmentInfo.segment.id
+      );
+    } else {
+      availablePlaces = await SavedItemModel.findByTrip(tripGroupId, { status: 'saved' as any });
+    }
+
+    // Try to match user's anchors to saved places
+    const matchedAnchors = anchors.map(anchor => {
+      const matchedPlace = availablePlaces.find(p => 
+        p.name.toLowerCase().includes(anchor.activity.toLowerCase()) ||
+        anchor.activity.toLowerCase().includes(p.name.toLowerCase())
+      );
+      return { ...anchor, matchedPlace };
+    });
+
+    // Generate plan with AI, passing the anchors
+    const generatedPlan = await this.generateOptimizedPlanWithAnchors(
+      availablePlaces,
+      segmentInfo,
+      trip.destination,
+      matchedAnchors
+    );
+
+    // Create/update plan in database
+    const stops: DailyPlanStop[] = generatedPlan.stops.map((stop, index) => ({
+      saved_item_id: stop.saved_item_id,
+      order: index,
+      planned_time: stop.planned_time,
+      duration_minutes: stop.duration_minutes,
+      notes: stop.notes,
+    }));
+
+    const plan = await DailyPlanModel.create(tripGroupId, targetDate, userId, {
+      segmentId: segmentInfo.segment?.id,
+      title: generatedPlan.title,
+      stops,
+      totalDurationMinutes: generatedPlan.totalDurationMinutes,
+      totalDistanceMeters: generatedPlan.totalDistanceMeters,
+    });
+
+    // Build response message with plan link
+    const city = segmentInfo.segment?.city || trip.destination;
+    const dayInfo = segmentInfo.dayNumber ? `Day ${segmentInfo.dayNumber}` : dateStr;
+    
+    let message = `📅 **${dayInfo} in ${city}** - ${generatedPlan.title}\n\n`;
+    
+    // Show the plan
+    for (const stop of generatedPlan.stops) {
+      const isUserPick = matchedAnchors.some(a => 
+        a.matchedPlace?.id === stop.saved_item_id
+      );
+      const emoji = this.getCategoryEmoji(stop.category);
+      const userBadge = isUserPick ? ' ⭐' : '';
+      message += `${emoji} **${stop.planned_time}** - ${stop.name}${userBadge}`;
+      if (stop.duration_minutes) {
+        message += ` (${stop.duration_minutes} min)`;
+      }
+      message += '\n';
+    }
+
+    message += `\n✅ Saved to your Day Planner!\n`;
+    message += `📱 Tap below to view/edit`;
+
+    return { plan, message };
+  }
+
+  /**
+   * Generate optimized plan with user's anchors
+   */
+  private static async generateOptimizedPlanWithAnchors(
+    places: SavedItem[],
+    segmentInfo: CurrentSegmentInfo,
+    destination: string,
+    anchors: Array<UserAnchor & { matchedPlace?: SavedItem }>
+  ): Promise<GeneratedPlan> {
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    // Build place list for AI
+    const placeList = places.slice(0, 20).map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      rating: p.rating,
+      area: p.area_name || p.location_name,
+      lat: p.location_lat,
+      lng: p.location_lng,
+      isMustVisit: p.is_must_visit,
+    }));
+
+    // Build anchor info for AI
+    const anchorInfo = anchors.map(a => ({
+      activity: a.activity,
+      timeHint: a.timeHint,
+      matchedPlaceId: a.matchedPlace?.id,
+      matchedPlaceName: a.matchedPlace?.name,
+    }));
+
+    const prompt = `You are a travel planning expert. Create an optimized day plan incorporating the user's specific requests.
+
+CONTEXT:
+- Destination: ${destination}
+${segmentInfo.segment ? `- City: ${segmentInfo.segment.city}
+- Day ${segmentInfo.dayNumber} of ${segmentInfo.totalDays}
+- ${segmentInfo.daysRemaining === 0 ? '⚠️ LAST DAY in this city!' : `${segmentInfo.daysRemaining} days remaining`}
+- Hotel: ${segmentInfo.segment.accommodation_name || 'Unknown'}` : '- No specific segment'}
+- Current time: ${currentHour}:00
+- Available hours: ${currentHour < 10 ? '9am' : `${currentHour}:00`} to 9pm
+
+USER'S SPECIFIC REQUESTS (MUST INCLUDE THESE):
+${JSON.stringify(anchorInfo, null, 2)}
+
+AVAILABLE PLACES:
+${JSON.stringify(placeList, null, 2)}
+
+RULES:
+1. MUST include user's requested activities at their preferred times
+2. Fill gaps with other saved places that make sense
+3. Group nearby places together for efficient routing
+4. Include meal stops aligned with meal times (lunch 12-2pm, dinner 6-8pm)
+5. Total 4-6 stops for a comfortable day
+6. If user's activity isn't in saved places, still include it with best guess timing
+
+Return JSON:
+{
+  "title": "Day title incorporating user's theme",
+  "stops": [
+    {
+      "saved_item_id": "uuid or 'user_request' if not in saved",
+      "name": "Place name",
+      "category": "food|place|shopping|activity",
+      "planned_time": "HH:MM",
+      "duration_minutes": 60,
+      "notes": "Optional tip",
+      "isUserRequest": true/false
+    }
+  ],
+  "summary": "One sentence describing the day",
+  "totalDurationMinutes": 480,
+  "totalDistanceMeters": 5000
+}`;
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4-turbo-preview',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      });
+
+      const result = JSON.parse(response.choices[0]?.message?.content || '{}');
+
+      // Filter valid stops (either from saved places or user requests)
+      const validStops = (result.stops || []).filter((stop: any) => {
+        return stop.saved_item_id === 'user_request' || places.some(p => p.id === stop.saved_item_id);
+      });
+
+      return {
+        title: result.title || 'Day Plan',
+        stops: validStops,
+        summary: result.summary || 'Your customized day plan',
+        totalDurationMinutes: result.totalDurationMinutes || validStops.length * 90,
+        totalDistanceMeters: result.totalDistanceMeters || 5000,
+      };
+    } catch (error) {
+      logger.error('AI plan generation with anchors error:', error);
+      return this.generateSimplePlanWithAnchors(places, segmentInfo, anchors);
+    }
+  }
+
+  /**
+   * Fallback simple plan with user anchors
+   */
+  private static generateSimplePlanWithAnchors(
+    places: SavedItem[],
+    segmentInfo: CurrentSegmentInfo,
+    anchors: Array<UserAnchor & { matchedPlace?: SavedItem }>
+  ): GeneratedPlan {
+    const stops: PlannedStop[] = [];
+    
+    // Add user's anchors first
+    anchors.forEach((anchor, index) => {
+      const time = anchor.timeHint === 'morning' ? '10:00' :
+                   anchor.timeHint === 'afternoon' ? '14:00' :
+                   anchor.timeHint === 'evening' ? '18:00' : `${10 + index * 3}:00`;
+      
+      if (anchor.matchedPlace) {
+        stops.push({
+          saved_item_id: anchor.matchedPlace.id,
+          name: anchor.matchedPlace.name,
+          category: anchor.matchedPlace.category,
+          planned_time: time,
+          duration_minutes: 90,
+          notes: '⭐ Your pick!',
+        });
+      }
+    });
+
+    // Sort by time
+    stops.sort((a, b) => a.planned_time.localeCompare(b.planned_time));
+
+    return {
+      title: 'Your Custom Day',
+      stops,
+      summary: 'Plan built around your preferences',
+      totalDurationMinutes: stops.length * 90,
+      totalDistanceMeters: 3000,
+    };
+  }
+
+  /**
+   * Get emoji for category
+   */
+  private static getCategoryEmoji(category: string): string {
+    const emojis: Record<string, string> = {
+      food: '🍽️',
+      place: '🏛️',
+      shopping: '🛍️',
+      activity: '🎯',
+      accommodation: '🏨',
+      tip: '💡',
+    };
+    return emojis[category] || '📍';
   }
 
   /**

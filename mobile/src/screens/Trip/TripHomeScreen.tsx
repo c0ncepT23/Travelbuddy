@@ -501,12 +501,19 @@ export default function TripHomeScreen({ route, navigation }: any) {
   };
 
   // Render message
+  // Handle View Day Planner button
+  const handleViewDayPlanner = (planId: string) => {
+    // Navigate to day planner screen with the plan ID
+    navigation.navigate('TripDetail', { tripId, viewMode: 'planner', highlightPlanId: planId });
+  };
+
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     // Check message_type for AI responses (they have same sender_id as user but different type)
     const isAgent = item.message_type === 'ai_response' || item.sender_type === 'agent';
     const isCurrentUser = !isAgent && String(item.sender_id) === String(user?.id);
     const content = item.content;
     const senderName = item.sender_name || 'Unknown';
+    const planId = item.metadata?.planId;
 
     return (
       <View style={styles.messageContainer}>
@@ -518,6 +525,17 @@ export default function TripHomeScreen({ route, navigation }: any) {
             <View style={styles.agentBubble}>
               <Text style={styles.agentLabel}>TravelPal</Text>
               <Text style={styles.agentText}>{content}</Text>
+              
+              {/* Show Day Planner button if plan was created */}
+              {planId && (
+                <TouchableOpacity 
+                  style={styles.viewPlanButton}
+                  onPress={() => handleViewDayPlanner(planId)}
+                >
+                  <Text style={styles.viewPlanButtonText}>📅 View Day Planner →</Text>
+                </TouchableOpacity>
+              )}
+              
               <Text style={styles.timestamp}>{formatMessageTime(item.created_at)}</Text>
             </View>
           </View>
@@ -829,6 +847,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: theme.colors.textPrimary,
+  },
+  viewPlanButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+  },
+  viewPlanButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 
   // User messages

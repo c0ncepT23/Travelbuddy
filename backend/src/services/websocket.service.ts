@@ -244,6 +244,7 @@ export class WebSocketService {
                   places: aiResponse.places,
                   suggestions: aiResponse.suggestions,
                   sourceUrl: hasUrl ? urls[0] : undefined,
+                  planId: aiResponse.planId, // Day planner ID if plan was created
                   isAI: true
                 }
               );

@@ -41,6 +41,7 @@ interface CompanionResponse {
     distance?: number;
   }>;
   suggestions?: string[];
+  planId?: string; // Day planner ID for clickable link
 }
 
 interface MorningBriefing {
@@ -122,7 +123,27 @@ export class AICompanionService {
         };
       }
 
-      // Check if this is a "plan my day" request
+      // Check if user is specifying activities for a day (e.g., "Day 2 morning Siam, evening Chinatown")
+      if (DayPlanningService.isDayActivityIntent(query)) {
+        const parsed = await DayPlanningService.parseUserPlanRequest(query);
+        
+        if (parsed.anchors.length > 0) {
+          // User has specific activities - build plan around them
+          const result = await DayPlanningService.generatePlanWithAnchors(
+            tripGroupId,
+            userId,
+            parsed.anchors
+          );
+          
+          return {
+            message: result.message,
+            suggestions: ['View Day Planner', 'Change something', 'Add more activities'],
+            planId: result.plan.id, // Include plan ID for clickable link
+          };
+        }
+      }
+
+      // Check if this is a generic "plan my day" request
       if (DayPlanningService.isPlanIntent(query)) {
         const result = await DayPlanningService.generateDayPlan(
           tripGroupId,
@@ -131,7 +152,8 @@ export class AICompanionService {
         
         return {
           message: result.message,
-          suggestions: ['Lock plan', 'Show on map', 'Modify plan'],
+          suggestions: ['View Day Planner', 'Change something', 'Show on map'],
+          planId: result.plan.id,
         };
       }
 
