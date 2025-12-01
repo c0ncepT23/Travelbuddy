@@ -4,12 +4,17 @@ import { config } from './config/env';
 import logger from './config/logger';
 import { pool } from './config/database';
 import { WebSocketService } from './services/websocket.service';
+import { CronJobService } from './services/cronJobs.service';
 
 const server = http.createServer(app);
 
 // Initialize WebSocket service
 const _websocketService = new WebSocketService(server);
 logger.info('✅ WebSocket service initialized');
+
+// Initialize Cron Jobs for proactive notifications
+CronJobService.initialize();
+logger.info('✅ Cron jobs initialized');
 
 // Export for potential use elsewhere
 export { _websocketService as websocketService };
@@ -54,6 +59,7 @@ const startServer = async () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
+  CronJobService.stop();
   server.close(() => {
     logger.info('HTTP server closed');
     pool.end(() => {
@@ -65,6 +71,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
+  CronJobService.stop();
   server.close(() => {
     logger.info('HTTP server closed');
     pool.end(() => {

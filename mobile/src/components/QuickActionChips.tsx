@@ -145,24 +145,24 @@ interface QuickPromptsProps {
 
 const timeBasedPrompts: Record<string, string[]> = {
   morning: [
+    '🎲 Surprise me!',
     '☕ Best breakfast nearby?',
-    '🌅 Morning activity ideas',
     '📋 Plan my day',
   ],
   afternoon: [
+    '🎲 Surprise me!',
     '🍱 Where to eat lunch?',
-    '🛍️ Shopping recommendations',
     '🎯 Fun activities nearby',
   ],
   evening: [
+    '🎲 Surprise me!',
     '🍽️ Dinner suggestions',
-    '🌆 Evening walk spots',
     '🍻 Good bars nearby?',
   ],
   night: [
+    '🎲 Surprise me!',
     '🌙 Late night eats',
     '📅 Plan tomorrow',
-    '📍 What did I miss today?',
   ],
 };
 

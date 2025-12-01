@@ -23,7 +23,9 @@ import { useLocationStore } from '../../stores/locationStore';
 import { QuickPrompts } from '../../components/QuickActionChips';
 import ImportLocationsModal from '../../components/ImportLocationsModal';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
+import ItinerarySetupModal from '../../components/ItinerarySetupModal';
 import { ImportModalData, MorningBriefing, SavedItem } from '../../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HapticFeedback } from '../../utils/haptics';
 import { format, isToday, isYesterday } from 'date-fns';
 import theme from '../../config/theme';
@@ -116,6 +118,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
+  const [showItinerarySetup, setShowItinerarySetup] = useState(false);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -125,7 +128,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
   useEffect(() => {
     const initScreen = async () => {
       try {
-        await Promise.all([
+        const [tripData] = await Promise.all([
           fetchTripDetails(tripId),
           fetchTripMembers(tripId),
           fetchMessages(tripId),
@@ -141,6 +144,23 @@ export default function TripHomeScreen({ route, navigation }: any) {
         // Connect WebSocket
         await connectWebSocket();
         joinTripChat(tripId);
+
+        // Check if we should show itinerary setup
+        // Show if: user hasn't dismissed it for this trip AND this is a new trip (no messages yet)
+        const dismissedKey = `itinerary_setup_dismissed_${tripId}`;
+        const dismissed = await AsyncStorage.getItem(dismissedKey);
+        
+        if (!dismissed) {
+          // Messages are now in the store after fetchMessages was called above
+          // We use a timeout to check the store state after it's updated
+          setTimeout(() => {
+            // Access the store directly to check message count
+            const currentMessages = useChatStore.getState().messages;
+            if (currentMessages.length === 0) {
+              setShowItinerarySetup(true);
+            }
+          }, 600);
+        }
       } catch (error) {
         console.error('[TripHome] Init error:', error);
       }
@@ -205,6 +225,23 @@ export default function TripHomeScreen({ route, navigation }: any) {
     }, 3000);
   }, [tripId]);
 
+  // Handle itinerary setup modal
+  const handleItinerarySetupComplete = async () => {
+    setShowItinerarySetup(false);
+    // Refresh briefing to get segment info
+    const locationData = location
+      ? { lat: location.coords.latitude, lng: location.coords.longitude }
+      : undefined;
+    await fetchBriefing(tripId, locationData);
+  };
+
+  const handleItinerarySetupSkip = async () => {
+    setShowItinerarySetup(false);
+    // Mark as dismissed for this trip
+    const dismissedKey = `itinerary_setup_dismissed_${tripId}`;
+    await AsyncStorage.setItem(dismissedKey, 'true');
+  };
+
   // Handle send
   const handleSend = async () => {
     if (!inputText.trim()) return;
@@ -232,13 +269,107 @@ export default function TripHomeScreen({ route, navigation }: any) {
   };
 
   // Handle quick prompt press
-  const handlePromptPress = (prompt: string) => {
+  const handlePromptPress = async (prompt: string) => {
+    // Special handling for "Surprise me!"
+    if (prompt.toLowerCase().includes('surprise')) {
+      await handleSurpriseMe();
+      return;
+    }
+    
     setInputText(prompt);
     setShowBriefingCard(false);
     // Auto-focus input after a delay
     setTimeout(() => {
       // Could trigger keyboard focus here
     }, 100);
+  };
+
+  // Handle "Surprise me!" - Find nearest unvisited place
+  const handleSurpriseMe = async () => {
+    HapticFeedback.medium();
+    setShowBriefingCard(false);
+    
+    // Check if we have saved places
+    if (!items || items.length === 0) {
+      Alert.alert(
+        '📍 No places saved yet!',
+        'Share some YouTube videos or links to add places first.',
+        [{ text: 'Got it!' }]
+      );
+      return;
+    }
+    
+    // Filter to unvisited places
+    const unvisitedItems = items.filter(item => item.status !== 'visited');
+    
+    if (unvisitedItems.length === 0) {
+      Alert.alert(
+        '🎉 All done!',
+        "You've visited all your saved places! Add more or explore freely.",
+        [{ text: 'Amazing!' }]
+      );
+      return;
+    }
+    
+    let selectedPlace: SavedItem;
+    
+    // If we have location, find nearest place
+    if (location?.coords) {
+      const placesWithDistance = unvisitedItems.map(item => {
+        if (!item.location_lat || !item.location_lng) {
+          return { ...item, distance: Infinity };
+        }
+        
+        // Calculate distance (simple Haversine)
+        const R = 6371e3; // Earth radius in meters
+        const lat1 = location.coords.latitude * Math.PI / 180;
+        const lat2 = item.location_lat * Math.PI / 180;
+        const deltaLat = (item.location_lat - location.coords.latitude) * Math.PI / 180;
+        const deltaLng = (item.location_lng - location.coords.longitude) * Math.PI / 180;
+        
+        const a = Math.sin(deltaLat/2) ** 2 + 
+                  Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng/2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = R * c;
+        
+        return { ...item, distance };
+      });
+      
+      // Sort by distance
+      placesWithDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+      selectedPlace = placesWithDistance[0];
+      
+      const dist = (selectedPlace as any).distance || 0;
+      const distanceStr = dist < 1000 
+        ? `${Math.round(dist)}m away`
+        : `${(dist / 1000).toFixed(1)}km away`;
+      
+      // Send as AI message to chat
+      const categoryEmoji = getCategoryEmoji(selectedPlace.category);
+      const message = `🎲 **Surprise!** Here's a place near you:\n\n${categoryEmoji} **${selectedPlace.name}**\n📍 ${distanceStr}\n${selectedPlace.description ? `\n${selectedPlace.description.substring(0, 100)}...` : ''}\n\nWant to go?`;
+      
+      // Send a fake "AI response" to show the suggestion
+      if (isConnected) {
+        sendMessageViaSocket(tripId, `Surprise me with a nearby place!`);
+      }
+      
+      // Also open the drawer with this place selected
+      setSelectedPlace(selectedPlace);
+      setIsDrawerOpen(true);
+    } else {
+      // No location - pick a random unvisited place
+      const randomIndex = Math.floor(Math.random() * unvisitedItems.length);
+      selectedPlace = unvisitedItems[randomIndex];
+      
+      // Send request to AI
+      if (isConnected) {
+        sendMessageViaSocket(tripId, `Surprise me with a place to visit!`);
+      }
+      
+      // Open drawer with random place
+      setSelectedPlace(selectedPlace);
+      setIsDrawerOpen(true);
+    }
   };
 
   // Handle category press - open bottom drawer with places
@@ -546,6 +677,17 @@ export default function TripHomeScreen({ route, navigation }: any) {
           onImportComplete={() => setImportModalData(null)}
         />
       )}
+
+      {/* Itinerary Setup Modal - Shows for new trips */}
+      <ItinerarySetupModal
+        visible={showItinerarySetup}
+        tripId={tripId}
+        tripDestination={currentTrip?.destination || ''}
+        tripStartDate={currentTrip?.start_date}
+        tripEndDate={currentTrip?.end_date}
+        onComplete={handleItinerarySetupComplete}
+        onSkip={handleItinerarySetupSkip}
+      />
 
       {/* Bottom Drawer for Places - Like Maps UI */}
       {isDrawerOpen && (
