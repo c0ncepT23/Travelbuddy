@@ -495,6 +495,58 @@ Return JSON:
   }
 
   /**
+   * Create a day plan from a guide video's itinerary
+   */
+  static async createDayPlanFromGuide(
+    tripGroupId: string,
+    userId: string,
+    dayNumber: number,
+    title: string,
+    placeNames: string[],
+    destination: string
+  ): Promise<DailyPlan> {
+    // Calculate the date for this day plan (assuming trip start is today or use trip dates)
+    const trip = await TripGroupModel.findById(tripGroupId);
+    const baseDate = trip?.start_date ? new Date(trip.start_date) : new Date();
+    const planDate = new Date(baseDate);
+    planDate.setDate(planDate.getDate() + dayNumber - 1);
+
+    // Create stops from place names (without saved items)
+    // We'll create placeholder stops that reference the place names
+    const stops: DailyPlanStop[] = placeNames.map((placeName, index) => ({
+      saved_item_id: undefined, // No saved item yet
+      order: index,
+      planned_time: this.getDefaultTimeForSlot(index),
+      duration_minutes: 90,
+      notes: placeName, // Store place name in notes for now
+    }));
+
+    // Create the day plan
+    const plan = await DailyPlanModel.create(tripGroupId, planDate, userId, {
+      title: `Day ${dayNumber}: ${title}`,
+      stops,
+      metadata: {
+        source: 'guide_video',
+        destination,
+        placeNames,
+      },
+    });
+
+    logger.info(`Created guide day plan: Day ${dayNumber} for trip ${tripGroupId}`);
+    return plan;
+  }
+
+  /**
+   * Get default time for a slot in the day
+   */
+  private static getDefaultTimeForSlot(slotIndex: number): string {
+    const times = [
+      '09:00', '10:30', '12:00', '14:00', '16:00', '18:00', '20:00'
+    ];
+    return times[Math.min(slotIndex, times.length - 1)];
+  }
+
+  /**
    * Use AI to generate an optimized plan
    */
   private static async generateOptimizedPlan(

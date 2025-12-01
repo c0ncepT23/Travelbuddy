@@ -404,8 +404,16 @@ export class ContentProcessorService {
     url: string
   ): Promise<{
     summary: string;
-    video_type?: 'places' | 'howto';
-    places: Array<ProcessedContent & { originalContent: any }>;
+    video_type?: 'places' | 'howto' | 'guide';
+    places: Array<ProcessedContent & { originalContent: any; day?: number }>;
+    // Guide-specific fields
+    itinerary?: Array<{
+      day: number;
+      title: string;
+      places: string[];
+    }>;
+    destination?: string;
+    duration_days?: number;
   }> {
     try {
       logger.info('Processing YouTube video metadata...');
@@ -425,6 +433,35 @@ export class ContentProcessorService {
 
       logger.info(`Video type: ${analysis.video_type}`);
       logger.info(`Found ${analysis.places.length} places in video`);
+
+      // Handle GUIDE/ITINERARY videos - return with preview for user choice
+      if (analysis.video_type === 'guide') {
+        logger.info(`Guide video detected: ${analysis.duration_days} days in ${analysis.destination}`);
+
+        const processedPlaces = analysis.places.map((place) => ({
+          name: place.name,
+          category: place.category,
+          description: place.description,
+          location_name: place.location || analysis.destination,
+          location_lat: undefined as number | undefined,
+          location_lng: undefined as number | undefined,
+          source_title: videoData.title,
+          day: place.day,
+          originalContent: {
+            ...videoData,
+            video_type: 'guide',
+          },
+        }));
+
+        return {
+          summary: analysis.summary,
+          video_type: 'guide',
+          places: processedPlaces,
+          itinerary: analysis.itinerary,
+          destination: analysis.destination,
+          duration_days: analysis.duration_days,
+        };
+      }
 
       // Handle HOW-TO videos differently
       if (analysis.video_type === 'howto') {

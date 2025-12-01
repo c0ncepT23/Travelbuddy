@@ -42,6 +42,18 @@ interface CompanionResponse {
   }>;
   suggestions?: string[];
   planId?: string; // Day planner ID for clickable link
+  metadata?: {
+    type: string;
+    url?: string;
+    destination?: string;
+    duration_days?: number;
+    itinerary?: Array<{
+      day: number;
+      title: string;
+      places: string[];
+    }>;
+    places?: any[];
+  };
 }
 
 interface MorningBriefing {
@@ -96,6 +108,12 @@ export class AICompanionService {
       const urls = extractUrls(query);
       if (urls.length > 0) {
         return await this.processContentUrl(userId, tripGroupId, urls[0]);
+      }
+
+      // Check if this is a guide video import choice
+      const guideImportChoice = this.detectGuideImportChoice(query);
+      if (guideImportChoice) {
+        return await this.handleGuideVideoImport(userId, tripGroupId, guideImportChoice);
       }
 
       // Check if user wants to finish itinerary collection
@@ -243,6 +261,43 @@ export class AICompanionService {
         placesToSave = analysis.places;
         summary = analysis.summary;
         logger.info(`[Companion] Extracted ${placesToSave.length} places from YouTube video`);
+        
+        // Handle GUIDE/ITINERARY videos differently - show preview with options
+        if (analysis.video_type === 'guide' && analysis.itinerary && analysis.itinerary.length > 0) {
+          logger.info(`[Companion] Guide video detected: ${analysis.duration_days} days in ${analysis.destination}`);
+          
+          // Build itinerary preview
+          let message = `📅 I found a **${analysis.duration_days}-day ${analysis.destination || ''} itinerary guide**!\n\n`;
+          message += `📝 ${analysis.summary}\n\n`;
+          message += `**Here's the day-by-day plan:**\n\n`;
+          
+          for (const day of analysis.itinerary) {
+            message += `**Day ${day.day}**: ${day.title}\n`;
+            message += day.places.map(p => `  • ${p}`).join('\n');
+            message += '\n\n';
+          }
+          
+          message += `I found **${placesToSave.length} places** mentioned in this guide.\n\n`;
+          message += `**How would you like me to save this?**`;
+          
+          return {
+            message,
+            suggestions: [
+              '📅 Import as Day Plans',
+              '📍 Just save places',
+              '✨ Both'
+            ],
+            // Include guide metadata for follow-up handling
+            metadata: {
+              type: 'guide_video_preview',
+              url,
+              destination: analysis.destination,
+              duration_days: analysis.duration_days,
+              itinerary: analysis.itinerary,
+              places: placesToSave,
+            },
+          };
+        }
       } else if (contentType === 'reddit') {
         // Extract MULTIPLE places from Reddit post
         const analysis = await ContentProcessorService.extractMultiplePlacesFromReddit(url);
@@ -392,6 +447,149 @@ export class AICompanionService {
       logger.error('Content URL processing error:', error);
       return {
         message: `Oops! I had trouble processing that link. ${error.message || 'Please check if the URL is valid and try again.'} 😅`,
+      };
+    }
+  }
+
+  /**
+   * Detect if user's message is a guide video import choice
+   */
+  private static detectGuideImportChoice(query: string): 'day_plans' | 'places' | 'both' | null {
+    const lowerQuery = query.toLowerCase();
+    
+    if (lowerQuery.includes('import as day') || lowerQuery.includes('day plan')) {
+      return 'day_plans';
+    }
+    if (lowerQuery.includes('just save') || lowerQuery.includes('save places') || lowerQuery.includes('only places')) {
+      return 'places';
+    }
+    if (lowerQuery.includes('both') || lowerQuery.includes('✨')) {
+      return 'both';
+    }
+    
+    return null;
+  }
+
+  /**
+   * Handle guide video import based on user's choice
+   */
+  private static async handleGuideVideoImport(
+    userId: string,
+    tripGroupId: string,
+    choice: 'day_plans' | 'places' | 'both'
+  ): Promise<CompanionResponse> {
+    try {
+      // Find the most recent guide video preview message
+      const guideMessage = await GroupMessageModel.getLastMessageWithMetadataType(
+        tripGroupId,
+        'guide_video_preview'
+      );
+      
+      if (!guideMessage || !guideMessage.metadata) {
+        return {
+          message: "I couldn't find a recent guide video to import. Try sharing a video link again! 📺",
+        };
+      }
+      
+      const metadata = guideMessage.metadata;
+      const places = metadata.places || [];
+      const itinerary = metadata.itinerary || [];
+      const destination = metadata.destination || '';
+      
+      // Get trip for geocoding context
+      const trip = await TripGroupModel.findById(tripGroupId);
+      const tripDestination = trip?.destination || destination;
+      
+      let savedCount = 0;
+      let dayPlanCount = 0;
+      
+      // Save places if user chose 'places' or 'both'
+      if (choice === 'places' || choice === 'both') {
+        // Geocode places
+        const geocodedPlaces = await GeocodingService.geocodePlaces(
+          places.map((p: any) => ({
+            name: p.name,
+            location: p.location_name || tripDestination,
+          })),
+          tripDestination
+        );
+        
+        // Save each place
+        for (let i = 0; i < places.length; i++) {
+          const place = places[i];
+          const geocoded = geocodedPlaces[i];
+          
+          try {
+            await SavedItemModel.create(
+              tripGroupId,
+              userId,
+              place.name,
+              place.category,
+              place.description || '',
+              'youtube' as any,
+              geocoded.formatted_address || place.location_name || tripDestination,
+              geocoded.lat,
+              geocoded.lng,
+              metadata.url,
+              `Day ${place.day || '?'} - Guide`,
+              { video_type: 'guide', day: place.day },
+              geocoded.confidence || 'medium',
+              geocoded.confidence_score || 0.5
+            );
+            savedCount++;
+          } catch (error) {
+            logger.error(`[Companion] Error saving guide place: ${place.name}`, error);
+          }
+        }
+      }
+      
+      // Create day plans if user chose 'day_plans' or 'both'
+      if (choice === 'day_plans' || choice === 'both') {
+        // Import itinerary to day planner
+        for (const day of itinerary) {
+          try {
+            await DayPlanningService.createDayPlanFromGuide(
+              tripGroupId,
+              userId,
+              day.day,
+              day.title,
+              day.places,
+              destination
+            );
+            dayPlanCount++;
+          } catch (error) {
+            logger.error(`[Companion] Error creating day plan: Day ${day.day}`, error);
+          }
+        }
+      }
+      
+      // Generate response based on choice
+      let message = '';
+      
+      if (choice === 'places') {
+        message = `✅ Done! I saved **${savedCount} places** from the guide to your list.\n\n`;
+        message += `You can browse them in your saved places. Each place is tagged with the day it was recommended for! 📍`;
+      } else if (choice === 'day_plans') {
+        message = `📅 Done! I created **${dayPlanCount} day plans** from the guide!\n\n`;
+        message += `Check your Day Planner to see the suggested itinerary. You can customize it however you like! ✨`;
+      } else {
+        message = `✨ Done! I imported the complete guide:\n\n`;
+        message += `• 📍 **${savedCount} places** saved to your list\n`;
+        message += `• 📅 **${dayPlanCount} day plans** created\n\n`;
+        message += `The places are saved for reference, and the Day Planner has your itinerary ready to customize!`;
+      }
+      
+      return {
+        message,
+        suggestions: choice === 'places' 
+          ? ['Show my places', 'What should I do today?']
+          : ['View Day Planner', 'Show my places'],
+      };
+      
+    } catch (error: any) {
+      logger.error('Guide video import error:', error);
+      return {
+        message: `Oops! Something went wrong while importing the guide. ${error.message} 😅`,
       };
     }
   }

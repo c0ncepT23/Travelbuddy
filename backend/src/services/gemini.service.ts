@@ -84,13 +84,21 @@ If no specific places are mentioned, return an empty places array but still prov
     transcript?: string
   ): Promise<{
     summary: string;
-    video_type: 'places' | 'howto';
+    video_type: 'places' | 'howto' | 'guide';
     places: Array<{
       name: string;
       category: ItemCategory;
       description: string;
       location?: string;
+      day?: number; // For guide videos - which day this place is recommended for
     }>;
+    itinerary?: Array<{
+      day: number;
+      title: string;
+      places: string[];
+    }>;
+    destination?: string;
+    duration_days?: number;
   }> {
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
@@ -107,43 +115,58 @@ Title: ${title}
 ${contentToAnalyze}
 
 STEP 1 - CLASSIFY VIDEO TYPE:
-First, determine if this is a:
-- **PLACES VIDEO**: Recommends specific restaurants, shops, attractions, hotels, or locations to visit
-- **HOW-TO VIDEO**: Teaches how to do something (etiquette, cultural tips, tutorials, guides) without recommending specific places
+Determine if this is a:
 
-Examples of HOW-TO videos:
-- "How to eat sushi"
-- "Watch THIS Before..." (cultural tips)
-- "Things to avoid in..."
-- "Beginner's guide to..."
-- "Travel etiquette..."
-- Videos focused on general tips/advice rather than specific locations
+- **GUIDE/ITINERARY VIDEO**: Provides a day-by-day travel itinerary or trip plan
+  Examples: "4 days in Bangkok", "Complete Tokyo itinerary", "One week Japan trip", "3 day Bali guide"
+  Key indicators: mentions specific days (Day 1, Day 2), suggests a complete trip plan, has "itinerary" or "X days" in title
+
+- **PLACES VIDEO**: Recommends specific restaurants, shops, attractions without a day-by-day structure
+  Examples: "Best restaurants in Bangkok", "Top 10 things to do", "Hidden gems in Tokyo"
+
+- **HOW-TO VIDEO**: Teaches tips, etiquette, or advice without recommending specific places
+  Examples: "How to eat sushi", "Travel tips for Japan", "Things to avoid"
 
 STEP 2 - EXTRACT INFORMATION:
 
+If GUIDE/ITINERARY VIDEO:
+- Extract the destination and number of days
+- Extract the day-by-day itinerary structure
+- Extract ALL places mentioned with their recommended day
+
 If PLACES VIDEO:
-- Extract ALL specific place names, restaurants, shops, attractions mentioned
-- Include name, category, description, location for EACH place
+- Extract ALL specific place names mentioned
+- No day assignment needed
 
 If HOW-TO VIDEO:
 - Return empty places array
-- Summary should describe what the video teaches
 
 RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
 {
-  "video_type": "places" or "howto",
+  "video_type": "guide" or "places" or "howto",
   "summary": "Brief summary",
+  "destination": "City/Country (for guide videos)",
+  "duration_days": 4,
+  "itinerary": [
+    {
+      "day": 1,
+      "title": "Day theme/title",
+      "places": ["Place 1", "Place 2"]
+    }
+  ],
   "places": [
     {
       "name": "Place Name",
       "category": "food|accommodation|place|shopping|activity|tip",
       "description": "Specific details",
-      "location": "City/Area"
+      "location": "City/Area",
+      "day": 1
     }
   ]
 }
 
-For PLACES videos: Extract each individual place as a separate entry.
+For GUIDE videos: Include both itinerary structure AND individual places with day numbers.
+For PLACES videos: Just include places array, no itinerary.
 For HOW-TO videos: Return empty places array.`;
 
       const result = await model.generateContent(prompt);
@@ -167,10 +190,19 @@ For HOW-TO videos: Return empty places array.`;
       logger.info(`Gemini classified video as: ${videoType}`);
       logger.info(`Gemini extracted ${parsed.places?.length || 0} places from video metadata`);
 
+      // For guide videos, include itinerary structure
+      if (videoType === 'guide') {
+        logger.info(`Guide video detected: ${parsed.duration_days} days in ${parsed.destination}`);
+        logger.info(`Itinerary has ${parsed.itinerary?.length || 0} days`);
+      }
+
       return {
         video_type: videoType,
         summary: parsed.summary || 'No summary available',
         places: parsed.places || [],
+        itinerary: parsed.itinerary,
+        destination: parsed.destination,
+        duration_days: parsed.duration_days,
       };
     } catch (error: any) {
       logger.error('Gemini metadata analysis error:', error);

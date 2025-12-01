@@ -123,6 +123,23 @@ export class GroupMessageModel {
     await pool.query(query, [messageId, userId]);
   }
 
+  // Get the most recent message with specific metadata type
+  static async getLastMessageWithMetadataType(
+    tripGroupId: string,
+    metadataType: string
+  ): Promise<GroupMessage | null> {
+    const query = `
+      SELECT * FROM group_messages_view
+      WHERE trip_group_id = $1 
+        AND metadata->>'type' = $2
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    const result = await pool.query(query, [tripGroupId, metadataType]);
+    return result.rows[0] || null;
+  }
+
   // Mark all messages in a trip as read
   static async markAllAsRead(tripGroupId: string, userId: string): Promise<void> {
     const query = `
