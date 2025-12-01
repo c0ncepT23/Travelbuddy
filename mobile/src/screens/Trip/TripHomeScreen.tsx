@@ -23,7 +23,6 @@ import { useLocationStore } from '../../stores/locationStore';
 import { QuickPrompts } from '../../components/QuickActionChips';
 import ImportLocationsModal from '../../components/ImportLocationsModal';
 import { PlaceListDrawer } from '../../components/PlaceListDrawer';
-import ItinerarySetupModal from '../../components/ItinerarySetupModal';
 import { ImportModalData, MorningBriefing, SavedItem } from '../../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HapticFeedback } from '../../utils/haptics';
@@ -118,7 +117,6 @@ export default function TripHomeScreen({ route, navigation }: any) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
-  const [showItinerarySetup, setShowItinerarySetup] = useState(false);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -145,22 +143,6 @@ export default function TripHomeScreen({ route, navigation }: any) {
         await connectWebSocket();
         joinTripChat(tripId);
 
-        // Check if we should show itinerary setup
-        // Show if: user hasn't dismissed it for this trip AND this is a new trip (no messages yet)
-        const dismissedKey = `itinerary_setup_dismissed_${tripId}`;
-        const dismissed = await AsyncStorage.getItem(dismissedKey);
-        
-        if (!dismissed) {
-          // Messages are now in the store after fetchMessages was called above
-          // We use a timeout to check the store state after it's updated
-          setTimeout(() => {
-            // Access the store directly to check message count
-            const currentMessages = useChatStore.getState().messages;
-            if (currentMessages.length === 0) {
-              setShowItinerarySetup(true);
-            }
-          }, 600);
-        }
       } catch (error) {
         console.error('[TripHome] Init error:', error);
       }
@@ -225,23 +207,6 @@ export default function TripHomeScreen({ route, navigation }: any) {
     }, 3000);
   }, [tripId]);
 
-  // Handle itinerary setup modal
-  const handleItinerarySetupComplete = async () => {
-    setShowItinerarySetup(false);
-    // Refresh briefing to get segment info
-    const locationData = location
-      ? { lat: location.coords.latitude, lng: location.coords.longitude }
-      : undefined;
-    await fetchBriefing(tripId, locationData);
-  };
-
-  const handleItinerarySetupSkip = async () => {
-    setShowItinerarySetup(false);
-    // Mark as dismissed for this trip
-    const dismissedKey = `itinerary_setup_dismissed_${tripId}`;
-    await AsyncStorage.setItem(dismissedKey, 'true');
-  };
-
   // Handle send
   const handleSend = async () => {
     if (!inputText.trim()) return;
@@ -270,18 +235,44 @@ export default function TripHomeScreen({ route, navigation }: any) {
 
   // Handle quick prompt press
   const handlePromptPress = async (prompt: string) => {
+    const lowerPrompt = prompt.toLowerCase();
+    
     // Special handling for "Surprise me!"
-    if (prompt.toLowerCase().includes('surprise')) {
+    if (lowerPrompt.includes('surprise')) {
       await handleSurpriseMe();
       return;
     }
     
+    // Handle welcome prompts - send directly
+    if (lowerPrompt.includes('set up my itinerary')) {
+      setShowBriefingCard(false);
+      if (isConnected) {
+        sendMessageViaSocket(tripId, `I want to set up my itinerary for ${currentTrip?.destination || 'this trip'}`);
+      }
+      return;
+    }
+    
+    if (lowerPrompt.includes('add places from youtube')) {
+      setShowBriefingCard(false);
+      setInputText('');
+      Alert.alert(
+        '📺 Add from YouTube',
+        'Paste a YouTube video link in the chat and I\'ll extract all the places mentioned!',
+        [{ text: 'Got it!' }]
+      );
+      return;
+    }
+    
+    if (lowerPrompt.includes('just explore')) {
+      setShowBriefingCard(false);
+      setInputText('');
+      // Just hide the briefing card and let user explore
+      return;
+    }
+    
+    // Default: set as input text
     setInputText(prompt);
     setShowBriefingCard(false);
-    // Auto-focus input after a delay
-    setTimeout(() => {
-      // Could trigger keyboard focus here
-    }, 100);
   };
 
   // Handle "Surprise me!" - Find nearest unvisited place
@@ -632,10 +623,11 @@ export default function TripHomeScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Quick Prompts */}
+      {/* Quick Prompts - Show welcome prompts for new trips */}
       {briefing && !inputText && (
         <QuickPrompts
           timeOfDay={briefing.timeOfDay}
+          isNewTrip={messages.length === 0}
           onPromptPress={handlePromptPress}
         />
       )}
@@ -678,16 +670,6 @@ export default function TripHomeScreen({ route, navigation }: any) {
         />
       )}
 
-      {/* Itinerary Setup Modal - Shows for new trips */}
-      <ItinerarySetupModal
-        visible={showItinerarySetup}
-        tripId={tripId}
-        tripDestination={currentTrip?.destination || ''}
-        tripStartDate={currentTrip?.start_date}
-        tripEndDate={currentTrip?.end_date}
-        onComplete={handleItinerarySetupComplete}
-        onSkip={handleItinerarySetupSkip}
-      />
 
       {/* Bottom Drawer for Places - Like Maps UI */}
       {isDrawerOpen && (

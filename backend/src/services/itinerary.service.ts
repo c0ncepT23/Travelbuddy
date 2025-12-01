@@ -203,18 +203,20 @@ Respond with JSON only:
       if (!state.pendingSegment?.city) {
         // First interaction or need city
         if (existingSegments.length === 0) {
-          message = `Hey! Your ${trip.destination} trip${trip.start_date ? ` is coming up` : ''}! 🎌\n\n`;
-          message += `Let's map out your itinerary so I can suggest the RIGHT places at the RIGHT time.\n\n`;
-          message += `Where are you staying first? (city + dates)\n`;
-          message += `e.g., "Osaka from Dec 6 to Dec 10"`;
+          message = `Excited for ${trip.destination}! 🎉\n\n`;
+          message += `Just tell me your plans naturally:\n`;
+          message += `• "Bangkok 4 days then Phuket 3 days"\n`;
+          message += `• "Dec 6-10 in Osaka, staying at XYZ Hotel"\n\n`;
+          message += `I'll organize everything for you! 🗺️`;
         } else {
-          message = `Where to next after ${existingSegments[existingSegments.length - 1].city}? 🗺️`;
+          message = `Got it! Anywhere else after ${existingSegments[existingSegments.length - 1].city}? 🗺️\n`;
+          message += `(or say "that's all" if you're done)`;
         }
         state.stage = 'collecting_city';
       } else if (!state.pendingSegment?.startDate || !state.pendingSegment?.endDate) {
         // Have city, need dates
-        message = `When are you in ${state.pendingSegment.city}? 📅\n`;
-        message += `e.g., "Dec 6 to Dec 10" or "6th to 10th"`;
+        message = `Nice! When are you in ${state.pendingSegment.city}? 📅\n`;
+        message += `Just say the dates, like "Dec 6 to 10"`;
         state.stage = 'collecting_dates';
       }
 
@@ -290,6 +292,7 @@ Respond with JSON only:
       'itinerary', 'staying', 'hotel', 'dates', 'when am i',
       'add city', 'add segment', 'plan my trip', 'trip plan',
       'where am i staying', "where we're staying", 'accommodation',
+      'set up', 'setup', 'cities', 'how many days', 'schedule',
       'from', 'to', 'december', 'january', 'february', 'march',
       'april', 'may', 'june', 'july', 'august', 'september',
       'october', 'november', 'dec', 'jan', 'feb', 'mar', 'apr',

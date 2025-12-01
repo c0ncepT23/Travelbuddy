@@ -140,24 +140,25 @@ export function CategoryChips({ categories, onCategoryPress, selectedCategory, s
 interface QuickPromptsProps {
   onPromptPress: (prompt: string) => void;
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
+  isNewTrip?: boolean; // Show welcome prompts for new trips
   style?: any;
 }
 
 const timeBasedPrompts: Record<string, string[]> = {
   morning: [
     '🎲 Surprise me!',
-    '☕ Best breakfast nearby?',
+    '☕ Breakfast nearby?',
     '📋 Plan my day',
   ],
   afternoon: [
     '🎲 Surprise me!',
-    '🍱 Where to eat lunch?',
-    '🎯 Fun activities nearby',
+    '🍱 Lunch spots?',
+    '🎯 Activities nearby',
   ],
   evening: [
     '🎲 Surprise me!',
-    '🍽️ Dinner suggestions',
-    '🍻 Good bars nearby?',
+    '🍽️ Dinner spots?',
+    '🍻 Bars nearby?',
   ],
   night: [
     '🎲 Surprise me!',
@@ -166,8 +167,18 @@ const timeBasedPrompts: Record<string, string[]> = {
   ],
 };
 
-export function QuickPrompts({ onPromptPress, timeOfDay = 'morning', style }: QuickPromptsProps) {
-  const prompts = timeBasedPrompts[timeOfDay] || timeBasedPrompts.morning;
+// Welcome prompts for new trips (no messages yet)
+const welcomePrompts = [
+  '🗺️ Set up my itinerary',
+  '📍 Add places from YouTube',
+  '💬 Just explore',
+];
+
+export function QuickPrompts({ onPromptPress, timeOfDay = 'morning', isNewTrip = false, style }: QuickPromptsProps) {
+  // Show welcome prompts for new trips, otherwise time-based prompts
+  const prompts = isNewTrip 
+    ? welcomePrompts 
+    : (timeBasedPrompts[timeOfDay] || timeBasedPrompts.morning);
 
   const handlePress = (prompt: string) => {
     HapticFeedback.light();
