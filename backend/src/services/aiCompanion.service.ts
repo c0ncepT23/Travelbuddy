@@ -196,6 +196,11 @@ export class AICompanionService {
     try {
       logger.info(`[Companion] Processing content URL: ${url}`);
       
+      // Get trip destination for geocoding context
+      const trip = await TripGroupModel.findById(tripGroupId);
+      const tripDestination = trip?.destination || '';
+      logger.info(`[Companion] Trip destination for context: ${tripDestination}`);
+      
       // Determine content type
       const contentType = ContentProcessorService.detectContentType(url);
       const typeEmojis: Record<string, string> = {
@@ -239,12 +244,14 @@ export class AICompanionService {
       }
       
       // Geocode all places to get lat/lng coordinates
-      logger.info(`[Companion] Geocoding ${placesToSave.length} places...`);
+      // Use trip destination as context to avoid geocoding to wrong city (e.g., "Financial District" -> NYC vs Hyderabad)
+      logger.info(`[Companion] Geocoding ${placesToSave.length} places with context: ${tripDestination}`);
       const geocodedPlaces = await GeocodingService.geocodePlaces(
         placesToSave.map(p => ({
           name: p.name,
           location: p.location || p.location_name,
-        }))
+        })),
+        tripDestination // Pass trip destination as geocoding context
       );
 
       // Merge geocoded coordinates with place data and confidence scores

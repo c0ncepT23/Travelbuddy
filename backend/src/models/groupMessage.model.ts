@@ -68,11 +68,16 @@ export class GroupMessageModel {
     limit: number = 50,
     offset: number = 0
   ): Promise<GroupMessage[]> {
+    // Use subquery to get latest messages, then order ASC for proper chat display
+    // (oldest at top, newest at bottom)
     const query = `
-      SELECT * FROM group_messages_view
-      WHERE trip_group_id = $1
-      ORDER BY created_at DESC
-      LIMIT $2 OFFSET $3
+      SELECT * FROM (
+        SELECT * FROM group_messages_view
+        WHERE trip_group_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+      ) sub
+      ORDER BY created_at ASC
     `;
     
     const result = await pool.query(query, [tripGroupId, limit, offset]);

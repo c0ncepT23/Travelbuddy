@@ -125,9 +125,12 @@ export class GeocodingService {
   /**
    * Geocode multiple places in batch
    * Adds a small delay between requests to avoid rate limiting
+   * @param places - Array of places with name and optional location
+   * @param destinationContext - Optional trip destination to use as fallback context (e.g., "Hyderabad, India")
    */
   static async geocodePlaces(
-    places: Array<{ name: string; location?: string }>
+    places: Array<{ name: string; location?: string }>,
+    destinationContext?: string
   ): Promise<Array<{ 
     name: string; 
     lat: number | null; 
@@ -139,7 +142,11 @@ export class GeocodingService {
     const results = [];
 
     for (const place of places) {
-      const result = await this.geocodePlace(place.name, place.location);
+      // Use place's location if available, otherwise fall back to trip destination
+      const locationContext = place.location || destinationContext;
+      logger.info(`[Geocoding] Using context "${locationContext}" for place "${place.name}"`);
+      
+      const result = await this.geocodePlace(place.name, locationContext);
 
       results.push({
         name: place.name,
