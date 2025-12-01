@@ -245,7 +245,9 @@ export class WebSocketService {
                   suggestions: aiResponse.suggestions,
                   sourceUrl: hasUrl ? urls[0] : undefined,
                   planId: aiResponse.planId, // Day planner ID if plan was created
-                  isAI: true
+                  isAI: true,
+                  // Include full metadata for guide video imports, etc.
+                  ...aiResponse.metadata
                 }
               );
               
