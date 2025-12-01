@@ -4,6 +4,7 @@ import Tesseract from 'tesseract.js';
 import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
+import { YtDlpService } from './ytdlp.service';
 import {
   extractYouTubeVideoId,
   extractInstagramPostId,
@@ -19,13 +20,6 @@ import {
   ProcessedContent,
 } from '../types';
 import logger from '../config/logger';
-
-type YouTubeModule = typeof import('youtubei.js');
-
-const loadYouTubeModule = async (): Promise<YouTubeModule> => {
-  const dynamicImport = new Function('specifier', 'return import(specifier);');
-  return dynamicImport('youtubei.js') as Promise<YouTubeModule>;
-};
 
 export class ContentProcessorService {
   /**
@@ -99,7 +93,7 @@ export class ContentProcessorService {
   }
 
   /**
-   * Fetch YouTube video data with REAL transcripts using Innertube
+   * Fetch YouTube video data using yt-dlp (most reliable method)
    */
   private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData> {
     const videoId = extractYouTubeVideoId(url);
@@ -108,41 +102,21 @@ export class ContentProcessorService {
     }
 
     try {
-      logger.info(`Fetching video info and transcript for ${videoId}...`);
+      logger.info(`[ContentProcessor] Fetching video using yt-dlp: ${videoId}`);
 
-      // Initialize Innertube (dynamic import for ESM module)
-      const ytModule = await loadYouTubeModule();
-      const Innertube = ytModule.Innertube || (ytModule as any).default?.Innertube;
-      if (!Innertube) {
-        throw new Error('Failed to load youtubei.js module (Innertube not found)');
-      }
-      const youtube = await Innertube.create();
-
-      const videoInfo = await youtube.getInfo(videoId);
-
-      let transcript = '';
-      try {
-        const transcriptData = await videoInfo.getTranscript();
-        if (transcriptData?.transcript?.content?.body?.initial_segments) {
-          transcript = transcriptData.transcript.content.body.initial_segments
-            .map((segment: any) => segment.snippet.text)
-            .join(' ');
-        }
-      } catch (e) {
-        logger.warn('Could not fetch transcript for video', videoId);
-      }
+      const videoData = await YtDlpService.getVideoData(url);
 
       return {
-        title: videoInfo.basic_info.title || '',
-        description: videoInfo.basic_info.short_description || '',
-        transcript,
-        thumbnail_url: videoInfo.basic_info.thumbnail?.[0]?.url || '',
-        thumbnail: videoInfo.basic_info.thumbnail?.[0]?.url || '',
-        channel: videoInfo.basic_info.channel?.name || '',
+        title: videoData.title,
+        description: videoData.description,
+        transcript: videoData.transcript,
+        thumbnail_url: videoData.thumbnailUrl,
+        thumbnail: videoData.thumbnailUrl,
+        channel: videoData.channelName,
       };
-    } catch (error) {
-      logger.error('YouTube fetch error:', error);
-      throw new Error('Failed to fetch YouTube video');
+    } catch (error: any) {
+      logger.error('[ContentProcessor] YouTube fetch error:', error.message);
+      throw new Error(`Failed to fetch YouTube video: ${error.message}`);
     }
   }
 

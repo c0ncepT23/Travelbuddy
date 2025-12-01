@@ -1,0 +1,15 @@
+# Nixpacks configuration for Railway
+# Adds Python and yt-dlp for reliable YouTube video processing
+
+[phases.setup]
+nixPkgs = ["python311", "ffmpeg", "yt-dlp"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
+
