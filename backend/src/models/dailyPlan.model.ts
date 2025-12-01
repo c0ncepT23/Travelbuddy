@@ -262,6 +262,7 @@ export class DailyPlanModel {
             name: stop.place_name || stop.notes || `Stop ${stop.order + 1}`,
             category: 'place' as any,
             description: stop.notes || '',
+            original_source_type: 'youtube' as any,
             status: 'saved' as any,
             created_at: new Date(),
             updated_at: new Date(),
