@@ -117,6 +117,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<string[] | null>(null);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -161,6 +162,18 @@ export default function TripHomeScreen({ route, navigation }: any) {
       setShowBriefingCard(false);
     }
   }, [messages.length]);
+
+  // Check for AI suggestions in the latest message
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.metadata?.suggestions && lastMessage.metadata.suggestions.length > 0) {
+        setAiSuggestions(lastMessage.metadata.suggestions);
+      } else {
+        setAiSuggestions(null);
+      }
+    }
+  }, [messages]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -214,6 +227,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
     const text = inputText.trim();
     setInputText('');
     setShowBriefingCard(false);
+    setAiSuggestions(null); // Clear AI suggestions when sending a new message
     
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -641,11 +655,12 @@ export default function TripHomeScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Quick Prompts - Show welcome prompts for new trips */}
+      {/* Quick Prompts - Show AI suggestions or default prompts */}
       {briefing && !inputText && (
         <QuickPrompts
           timeOfDay={briefing.timeOfDay}
           isNewTrip={messages.length === 0}
+          customSuggestions={aiSuggestions}
           onPromptPress={handlePromptPress}
         />
       )}

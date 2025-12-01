@@ -141,6 +141,7 @@ interface QuickPromptsProps {
   onPromptPress: (prompt: string) => void;
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
   isNewTrip?: boolean; // Show welcome prompts for new trips
+  customSuggestions?: string[] | null; // AI-provided suggestions take priority
   style?: any;
 }
 
@@ -174,16 +175,21 @@ const welcomePrompts = [
   '💬 Just explore',
 ];
 
-export function QuickPrompts({ onPromptPress, timeOfDay = 'morning', isNewTrip = false, style }: QuickPromptsProps) {
-  // Show welcome prompts for new trips, otherwise time-based prompts
-  const prompts = isNewTrip 
-    ? welcomePrompts 
-    : (timeBasedPrompts[timeOfDay] || timeBasedPrompts.morning);
+export function QuickPrompts({ onPromptPress, timeOfDay = 'morning', isNewTrip = false, customSuggestions, style }: QuickPromptsProps) {
+  // Priority: customSuggestions (AI) > welcome prompts (new trip) > time-based prompts
+  const prompts = customSuggestions && customSuggestions.length > 0
+    ? customSuggestions
+    : isNewTrip 
+      ? welcomePrompts 
+      : (timeBasedPrompts[timeOfDay] || timeBasedPrompts.morning);
 
   const handlePress = (prompt: string) => {
     HapticFeedback.light();
-    // Remove emoji for the actual query
-    const cleanPrompt = prompt.replace(/^[^\w\s]+\s*/, '');
+    // For custom AI suggestions, send the full prompt (including emoji)
+    // For default prompts, remove emoji
+    const cleanPrompt = customSuggestions 
+      ? prompt 
+      : prompt.replace(/^[^\w\s]+\s*/, '');
     onPromptPress(cleanPrompt);
   };
 
