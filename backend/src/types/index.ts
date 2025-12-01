@@ -259,11 +259,12 @@ export interface CurrentSegmentInfo {
 
 // Daily Plan Types
 export interface DailyPlanStop {
-  saved_item_id: string;
+  saved_item_id?: string; // Optional for guide-imported plans where items aren't saved yet
   order: number;
   planned_time?: string;
   duration_minutes?: number;
   notes?: string;
+  place_name?: string; // For guide-imported plans without saved items
 }
 
 export interface DailyPlan {

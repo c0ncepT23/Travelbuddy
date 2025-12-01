@@ -4,6 +4,7 @@ import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripSegmentModel } from '../models/tripSegment.model';
 import { UserModel } from '../models/user.model';
+import { GroupMessageModel } from '../models/groupMessage.model';
 import { SavedItem, ItemCategory, CompanionContext } from '../types';
 import { ContentProcessorService } from './contentProcessor.service';
 import { GeocodingService } from './geocoding.service';
@@ -528,8 +529,8 @@ export class AICompanionService {
               place.description || '',
               'youtube' as any,
               geocoded.formatted_address || place.location_name || tripDestination,
-              geocoded.lat,
-              geocoded.lng,
+              geocoded.lat ?? undefined,
+              geocoded.lng ?? undefined,
               metadata.url,
               `Day ${place.day || '?'} - Guide`,
               { video_type: 'guide', day: place.day },

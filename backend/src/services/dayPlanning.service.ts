@@ -514,22 +514,17 @@ Return JSON:
     // Create stops from place names (without saved items)
     // We'll create placeholder stops that reference the place names
     const stops: DailyPlanStop[] = placeNames.map((placeName, index) => ({
-      saved_item_id: undefined, // No saved item yet
       order: index,
       planned_time: this.getDefaultTimeForSlot(index),
       duration_minutes: 90,
-      notes: placeName, // Store place name in notes for now
+      notes: `${placeName} (${destination})`, // Store place name and destination
+      place_name: placeName, // Store the place name separately
     }));
 
     // Create the day plan
     const plan = await DailyPlanModel.create(tripGroupId, planDate, userId, {
-      title: `Day ${dayNumber}: ${title}`,
+      title: `Day ${dayNumber}: ${title} [Guide: ${destination}]`,
       stops,
-      metadata: {
-        source: 'guide_video',
-        destination,
-        placeNames,
-      },
     });
 
     logger.info(`Created guide day plan: Day ${dayNumber} for trip ${tripGroupId}`);
@@ -928,7 +923,7 @@ Return JSON:
       lower.includes(p.name.toLowerCase())
     );
 
-    if (replacement) {
+    if (replacement && stopToReplace.saved_item_id) {
       const updatedPlan = await DailyPlanModel.swapStop(
         plan.id,
         stopToReplace.saved_item_id,
@@ -968,7 +963,7 @@ Return JSON:
       lower.includes(s.place.name.toLowerCase())
     );
 
-    if (!stopToRemove) {
+    if (!stopToRemove || !stopToRemove.saved_item_id) {
       return {
         success: false,
         message: "Which place did you want to remove from your plan?",
