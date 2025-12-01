@@ -363,8 +363,8 @@ Return JSON:
    * Fallback simple plan with user anchors
    */
   private static generateSimplePlanWithAnchors(
-    places: SavedItem[],
-    segmentInfo: CurrentSegmentInfo,
+    _places: SavedItem[],
+    _segmentInfo: CurrentSegmentInfo,
     anchors: Array<UserAnchor & { matchedPlace?: SavedItem }>
   ): GeneratedPlan {
     const stops: PlannedStop[] = [];
