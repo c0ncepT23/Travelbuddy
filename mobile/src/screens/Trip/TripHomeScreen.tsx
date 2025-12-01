@@ -257,6 +257,20 @@ export default function TripHomeScreen({ route, navigation }: any) {
       return;
     }
     
+    // Handle "View Day Planner" - navigate directly
+    if (lowerPrompt.includes('view day planner') || lowerPrompt.includes('day planner')) {
+      setAiSuggestions(null);
+      navigation.navigate('TripDetail', { tripId, viewMode: 'planner' });
+      return;
+    }
+    
+    // Handle "Show my places" - navigate to map/browse
+    if (lowerPrompt.includes('show my places') || lowerPrompt.includes('my places')) {
+      setAiSuggestions(null);
+      setIsDrawerOpen(true);
+      return;
+    }
+    
     // Handle welcome prompts - send directly
     if (lowerPrompt.includes('set up my itinerary')) {
       setShowBriefingCard(false);

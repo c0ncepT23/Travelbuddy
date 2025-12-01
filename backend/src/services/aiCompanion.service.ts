@@ -515,13 +515,15 @@ export class AICompanionService {
           tripDestination
         );
         
-        // Save each place
+        // Save each place and assign to day if day_plans is also selected
+        const shouldAssignDays = choice === 'both' || choice === 'day_plans';
+        
         for (let i = 0; i < places.length; i++) {
           const place = places[i];
           const geocoded = geocodedPlaces[i];
           
           try {
-            await SavedItemModel.create(
+            const savedItem = await SavedItemModel.create(
               tripGroupId,
               userId,
               place.name,
@@ -538,31 +540,22 @@ export class AICompanionService {
               geocoded.confidence_score || 0.5
             );
             savedCount++;
+            
+            // Assign to day if importing day plans
+            if (shouldAssignDays && place.day && savedItem) {
+              await SavedItemModel.assignToDay(savedItem.id, place.day);
+              logger.info(`[Companion] Assigned ${place.name} to Day ${place.day}`);
+            }
           } catch (error) {
             logger.error(`[Companion] Error saving guide place: ${place.name}`, error);
           }
         }
+        
+        dayPlanCount = itinerary.length; // Count days from itinerary
       }
       
-      // Create day plans if user chose 'day_plans' or 'both'
-      if (choice === 'day_plans' || choice === 'both') {
-        // Import itinerary to day planner
-        for (const day of itinerary) {
-          try {
-            await DayPlanningService.createDayPlanFromGuide(
-              tripGroupId,
-              userId,
-              day.day,
-              day.title,
-              day.places,
-              destination
-            );
-            dayPlanCount++;
-          } catch (error) {
-            logger.error(`[Companion] Error creating day plan: Day ${day.day}`, error);
-          }
-        }
-      }
+      // Note: We no longer create separate DailyPlan records
+      // The Day Planner UI reads from saved_items.planned_day
       
       // Generate response based on choice
       let message = '';
