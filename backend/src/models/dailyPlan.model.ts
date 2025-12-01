@@ -252,6 +252,22 @@ export class DailyPlanModel {
 
     const populatedStops = await Promise.all(
       plan.stops.map(async (stop) => {
+        // Handle guide-imported plans where saved_item_id might not exist
+        if (!stop.saved_item_id) {
+          // Create a placeholder place from the stop's place_name or notes
+          const placeholderPlace: SavedItem = {
+            id: `placeholder-${stop.order}`,
+            trip_group_id: plan.trip_group_id,
+            added_by: plan.created_by || '',
+            name: stop.place_name || stop.notes || `Stop ${stop.order + 1}`,
+            category: 'place' as any,
+            description: stop.notes || '',
+            status: 'saved' as any,
+            created_at: new Date(),
+            updated_at: new Date(),
+          };
+          return { ...stop, place: placeholderPlace };
+        }
         const place = await SavedItemModel.findById(stop.saved_item_id);
         return { ...stop, place: place! };
       })
