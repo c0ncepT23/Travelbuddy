@@ -519,8 +519,8 @@ export class AICompanionService {
           tripDestination
         );
         
-        // Save each place and assign to day if day_plans is also selected
-        const shouldAssignDays = choice === 'both' || choice === 'day_plans';
+        // Save each place and assign to day if user chose 'both'
+        const shouldAssignDays = choice === 'both';
         logger.info(`[Companion] Should assign days: ${shouldAssignDays}`);
         
         for (let i = 0; i < places.length; i++) {
