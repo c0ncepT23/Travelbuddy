@@ -176,7 +176,7 @@ export class GuideModel {
 
     return {
       ...guide,
-      places: placesResult.rows.map(row => ({
+      places: placesResult.rows.map((row: any) => ({
         saved_item_id: row.saved_item_id,
         guide_day_number: row.guide_day_number,
         order_in_day: row.order_in_day,
@@ -358,7 +358,7 @@ export class GuideModel {
       [savedItemId]
     );
 
-    return result.rows.map(row => ({
+    return result.rows.map((row: any) => ({
       guide: this.parseGuide(row),
       dayNumber: row.guide_day_number,
     }));
