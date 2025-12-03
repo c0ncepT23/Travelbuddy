@@ -562,8 +562,21 @@ export class AICompanionService {
       let dayPlanCount = 0;
       const savedItems: SavedItem[] = [];
       
-      // Save places if user chose 'places' or 'both'
-      if (choice === 'places' || choice === 'both') {
+      // Build a map of place names to their day number from itinerary
+      // This is a fallback in case place.day isn't set
+      const placeNameToDayMap: Record<string, number> = {};
+      for (const day of itinerary) {
+        for (const placeName of day.places) {
+          // Normalize place name for matching
+          const normalizedName = placeName.toLowerCase().trim();
+          placeNameToDayMap[normalizedName] = day.day;
+        }
+      }
+      logger.info(`[Companion] Built place-to-day map from itinerary: ${JSON.stringify(placeNameToDayMap)}`);
+      
+      // Save places if user chose 'places', 'day_plans', or 'both'
+      // Note: 'day_plans' also needs to save places to assign them to days
+      if (choice === 'places' || choice === 'both' || choice === 'day_plans') {
         // Log places data for debugging
         logger.info(`[Companion] Guide import - ${places.length} places to save from ${guideMetadata.creatorName || 'unknown'}`);
         logger.info(`[Companion] Sample place: ${JSON.stringify(places[0])}`);
@@ -577,13 +590,23 @@ export class AICompanionService {
           tripDestination
         );
         
-        // Save each place and assign to day if user chose 'both'
-        const shouldAssignDays = choice === 'both';
+        // Save each place and assign to day if user chose 'both' or 'day_plans'
+        const shouldAssignDays = choice === 'both' || choice === 'day_plans';
         logger.info(`[Companion] Should assign days: ${shouldAssignDays}`);
         
         for (let i = 0; i < places.length; i++) {
           const place = places[i];
           const geocoded = geocodedPlaces[i];
+          
+          // Get day number - prefer place.day, fallback to itinerary lookup
+          let dayNumber = place.day;
+          if (!dayNumber) {
+            const normalizedName = place.name.toLowerCase().trim();
+            dayNumber = placeNameToDayMap[normalizedName];
+            if (dayNumber) {
+              logger.info(`[Companion] Found day ${dayNumber} for "${place.name}" from itinerary lookup`);
+            }
+          }
           
           try {
             const savedItem = await SavedItemModel.create(
@@ -597,8 +620,8 @@ export class AICompanionService {
               geocoded.lat ?? undefined,
               geocoded.lng ?? undefined,
               metadata.url,
-              `Day ${place.day || '?'} - Guide`,
-              { video_type: 'guide', day: place.day },
+              `Day ${dayNumber || '?'} - Guide`,
+              { video_type: 'guide', day: dayNumber },
               geocoded.confidence || 'medium',
               geocoded.confidence_score || 0.5
             );
@@ -606,12 +629,12 @@ export class AICompanionService {
             savedCount++;
             
             // Assign to day if importing day plans
-            logger.info(`[Companion] Place "${place.name}" day=${place.day}, shouldAssign=${shouldAssignDays}`);
-            if (shouldAssignDays && place.day && savedItem) {
-              const assigned = await SavedItemModel.assignToDay(savedItem.id, place.day);
-              logger.info(`[Companion] Assigned "${place.name}" to Day ${place.day}, result: ${assigned ? 'success' : 'failed'}`);
-            } else if (shouldAssignDays && !place.day) {
-              logger.warn(`[Companion] Place "${place.name}" has no day number!`);
+            logger.info(`[Companion] Place "${place.name}" day=${dayNumber}, shouldAssign=${shouldAssignDays}`);
+            if (shouldAssignDays && dayNumber && savedItem) {
+              const assigned = await SavedItemModel.assignToDay(savedItem.id, dayNumber);
+              logger.info(`[Companion] Assigned "${place.name}" to Day ${dayNumber}, result: ${assigned ? 'success' : 'failed'}`);
+            } else if (shouldAssignDays && !dayNumber) {
+              logger.warn(`[Companion] Place "${place.name}" has no day number - couldn't find in itinerary either!`);
             }
           } catch (error) {
             logger.error(`[Companion] Error saving guide place: ${place.name}`, error);
