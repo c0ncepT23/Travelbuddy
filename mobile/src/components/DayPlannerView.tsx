@@ -22,6 +22,7 @@ import DraggableFlatList, {
 import { HapticFeedback } from '../utils/haptics';
 import { SavedItem, DayGroup, Trip } from '../types';
 import { useItemStore } from '../stores/itemStore';
+import { GuideDrawer } from './GuideDrawer';
 import theme from '../config/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -143,6 +144,7 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
   const [selectedDay, setSelectedDay] = useState<number | null>(1);
   const [localDayGroups, setLocalDayGroups] = useState<DayGroup[]>([]);
   const [showAddPlaceModal, setShowAddPlaceModal] = useState(false);
+  const [isGuideDrawerVisible, setIsGuideDrawerVisible] = useState(false);
 
   const tripDays = generateTripDays(trip);
 
@@ -200,6 +202,12 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
       console.error('Failed to add place:', error);
       Alert.alert('Error', 'Failed to add place to day');
     }
+  };
+
+  // Handle place added from guide drawer
+  const handleGuideAddToDay = async (savedItemId: string, day: number) => {
+    // Refresh the day groups to show the newly added place
+    await fetchItemsByDay(tripId);
   };
 
   const renderPlaceCard = ({ item, drag, isActive, getIndex }: RenderItemParams<SavedItem>) => {
@@ -469,6 +477,18 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* Guide Drawer - Shows imported YouTube/Instagram guides */}
+      <GuideDrawer
+        tripId={tripId}
+        selectedUserDay={selectedDay}
+        onAddToDay={handleGuideAddToDay}
+        isVisible={isGuideDrawerVisible}
+        onToggle={() => {
+          HapticFeedback.light();
+          setIsGuideDrawerVisible(!isGuideDrawerVisible);
+        }}
+      />
     </GestureHandlerRootView>
   );
 };

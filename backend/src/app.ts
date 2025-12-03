@@ -19,6 +19,7 @@ import groupMessageRoutes from './routes/groupMessage.routes';
 import notificationRoutes from './routes/notification.routes';
 import segmentRoutes from './routes/segment.routes';
 import dailyPlanRoutes from './routes/dailyPlan.routes';
+import guideRoutes from './routes/guide.routes';
 
 const app: Application = express();
 
@@ -68,6 +69,7 @@ app.use('/api/trips', tripRoutes);        // Trip items and search
 app.use('/api/trips', chatRoutes);       // Chat within trips
 app.use('/api/trips', segmentRoutes);    // Trip segments (itinerary)
 app.use('/api/trips', dailyPlanRoutes);  // Daily plans
+app.use('/api/trips', guideRoutes);      // YouTube/Instagram guides
 app.use('/api/items', itemRoutes);       // Direct item operations
 app.use('/api/location', locationRoutes); // Location services
 app.use('/api/companion', aiCompanionRoutes); // AI Companion queries

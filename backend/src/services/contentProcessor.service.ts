@@ -388,6 +388,15 @@ export class ContentProcessorService {
     }>;
     destination?: string;
     duration_days?: number;
+    // Guide metadata (for creating Guide record)
+    guideMetadata?: {
+      title: string;
+      creatorName: string;
+      creatorChannelId?: string;
+      thumbnailUrl?: string;
+      hasDayStructure: boolean;
+      totalDays: number;
+    };
   }> {
     try {
       logger.info('Processing YouTube video metadata...');
@@ -407,6 +416,15 @@ export class ContentProcessorService {
 
       logger.info(`Video type: ${analysis.video_type}`);
       logger.info(`Found ${analysis.places.length} places in video`);
+
+      // Build guide metadata for creating Guide record
+      const guideMetadata = {
+        title: videoData.title,
+        creatorName: videoData.channel || 'Unknown Creator',
+        thumbnailUrl: videoData.thumbnail_url,
+        hasDayStructure: analysis.video_type === 'guide' && (analysis.duration_days || 0) > 0,
+        totalDays: analysis.duration_days || 0,
+      };
 
       // Handle GUIDE/ITINERARY videos - return with preview for user choice
       if (analysis.video_type === 'guide') {
@@ -434,6 +452,7 @@ export class ContentProcessorService {
           itinerary: analysis.itinerary,
           destination: analysis.destination,
           duration_days: analysis.duration_days,
+          guideMetadata,
         };
       }
 
@@ -457,6 +476,7 @@ export class ContentProcessorService {
               },
             },
           ],
+          guideMetadata,
         };
       }
 
@@ -480,6 +500,7 @@ export class ContentProcessorService {
               },
             },
           ],
+          guideMetadata,
         };
       }
 
@@ -540,6 +561,7 @@ export class ContentProcessorService {
         summary: analysis.summary,
         video_type: 'places',
         places: enrichedPlaces,
+        guideMetadata,
       };
     } catch (error: any) {
       logger.error('Error extracting multiple places:', error);

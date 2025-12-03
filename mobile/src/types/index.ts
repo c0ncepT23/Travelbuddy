@@ -259,6 +259,54 @@ export interface DayGroup {
   items: SavedItem[];
 }
 
+// Guide Types (YouTube/Instagram/Reddit sources)
+export interface Guide {
+  id: string;
+  trip_group_id: string;
+  source_url: string;
+  source_type: 'youtube' | 'instagram' | 'reddit' | 'tiktok' | 'url';
+  title: string;
+  creator_name: string;
+  creator_channel_id?: string;
+  thumbnail_url?: string;
+  has_day_structure: boolean;
+  total_days: number;
+  total_places: number;
+  summary?: string;
+  created_at: string;
+  updated_at: string;
+  added_by: string;
+}
+
+export interface GuidePlace {
+  saved_item_id: string;
+  guide_day_number: number | null;
+  order_in_day: number;
+  guide_notes?: string;
+  // Joined from saved_items
+  name: string;
+  category: ItemCategory;
+  location_name?: string;
+  location_lat?: number;
+  location_lng?: number;
+  rating?: number;
+  area_name?: string;
+  photos_json?: any;
+  // User's plan status
+  planned_day: number | null;
+  day_order: number | null;
+  status: ItemStatus;
+}
+
+export interface GuideWithPlaces extends Guide {
+  places: GuidePlace[];
+}
+
+export interface GuideDayGroup {
+  day: number | null; // null for guides without day structure
+  places: GuidePlace[];
+}
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;

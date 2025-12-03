@@ -5,6 +5,7 @@ import { TripGroupModel } from '../models/tripGroup.model';
 import { TripSegmentModel } from '../models/tripSegment.model';
 import { UserModel } from '../models/user.model';
 import { GroupMessageModel } from '../models/groupMessage.model';
+import { GuideModel } from '../models/guide.model';
 import { SavedItem, ItemCategory, CompanionContext } from '../types';
 import { ContentProcessorService } from './contentProcessor.service';
 import { GeocodingService } from './geocoding.service';
@@ -54,6 +55,15 @@ interface CompanionResponse {
       places: string[];
     }>;
     places?: any[];
+    summary?: string;
+    guideMetadata?: {
+      title?: string;
+      creatorName?: string;
+      creatorChannelId?: string;
+      thumbnailUrl?: string;
+      hasDayStructure?: boolean;
+      totalDays?: number;
+    };
   };
 }
 
@@ -255,20 +265,25 @@ export class AICompanionService {
       let placesToSave: Array<any> = [];
       let summary = '';
       
+      // Variables for guide creation
+      let guideMetadata: any = null;
+      
       // Use appropriate extraction method based on content type
       if (contentType === 'youtube') {
         // Extract MULTIPLE places from YouTube video
         const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
         placesToSave = analysis.places;
         summary = analysis.summary;
-        logger.info(`[Companion] Extracted ${placesToSave.length} places from YouTube video`);
+        guideMetadata = analysis.guideMetadata;
+        logger.info(`[Companion] Extracted ${placesToSave.length} places from YouTube video by ${guideMetadata?.creatorName}`);
         
         // Handle GUIDE/ITINERARY videos differently - show preview with options
         if (analysis.video_type === 'guide' && analysis.itinerary && analysis.itinerary.length > 0) {
           logger.info(`[Companion] Guide video detected: ${analysis.duration_days} days in ${analysis.destination}`);
           
-          // Build itinerary preview
-          let message = `📅 I found a **${analysis.duration_days}-day ${analysis.destination || ''} itinerary guide**!\n\n`;
+          // Build itinerary preview with creator info
+          const creatorName = guideMetadata?.creatorName || 'a creator';
+          let message = `📅 I found a **${analysis.duration_days}-day ${analysis.destination || ''} itinerary guide** by **${creatorName}**!\n\n`;
           message += `📝 ${analysis.summary}\n\n`;
           message += `**Here's the day-by-day plan:**\n\n`;
           
@@ -296,6 +311,7 @@ export class AICompanionService {
               duration_days: analysis.duration_days,
               itinerary: analysis.itinerary,
               places: placesToSave,
+              guideMetadata, // Include for guide record creation
             },
           };
         }
@@ -369,6 +385,44 @@ export class AICompanionService {
         }
       }
       
+      // Create Guide record and link places (for YouTube/Instagram/Reddit sources)
+      let guideRecord = null;
+      if (guideMetadata && savedItems.length > 0) {
+        try {
+          guideRecord = await GuideModel.create(
+            tripGroupId,
+            url,
+            userId,
+            {
+              sourceType: contentType as any,
+              title: guideMetadata.title,
+              creatorName: guideMetadata.creatorName,
+              creatorChannelId: guideMetadata.creatorChannelId,
+              thumbnailUrl: guideMetadata.thumbnailUrl,
+              hasDayStructure: guideMetadata.hasDayStructure,
+              totalDays: guideMetadata.totalDays,
+              summary,
+            }
+          );
+          
+          // Link saved items to guide with day numbers
+          for (let i = 0; i < savedItems.length; i++) {
+            const item = savedItems[i];
+            const place = placesWithCoords[i];
+            await GuideModel.addPlace(
+              guideRecord.id,
+              item.id,
+              place.day || null, // Day number from the guide
+              i // Order
+            );
+          }
+          
+          logger.info(`[Companion] Created guide "${guideRecord.title}" with ${savedItems.length} places`);
+        } catch (error) {
+          logger.error('[Companion] Error creating guide record:', error);
+        }
+      }
+      
       // Generate conversational response based on number of items
       const categoryEmojis: Record<string, string> = {
         food: '🍽️',
@@ -416,7 +470,9 @@ export class AICompanionService {
         })
         .join(', ');
       
-      let message = `${emoji} Got it! I processed that ${contentType === 'youtube' ? 'video' : 'post'} and found ${savedItems.length} amazing place${savedItems.length > 1 ? 's' : ''}!\n\n`;
+      // Include creator info if available
+      const creatorInfo = guideMetadata?.creatorName ? ` by **${guideMetadata.creatorName}**` : '';
+      let message = `${emoji} Got it! I processed that ${contentType === 'youtube' ? 'video' : 'post'}${creatorInfo} and found ${savedItems.length} amazing place${savedItems.length > 1 ? 's' : ''}!\n\n`;
       
       if (summary) {
         message += `📝 ${summary}\n\n`;
@@ -496,6 +552,7 @@ export class AICompanionService {
       const places = metadata.places || [];
       const itinerary = metadata.itinerary || [];
       const destination = metadata.destination || '';
+      const guideMetadata = metadata.guideMetadata || {};
       
       // Get trip for geocoding context
       const trip = await TripGroupModel.findById(tripGroupId);
@@ -503,11 +560,12 @@ export class AICompanionService {
       
       let savedCount = 0;
       let dayPlanCount = 0;
+      const savedItems: SavedItem[] = [];
       
       // Save places if user chose 'places' or 'both'
       if (choice === 'places' || choice === 'both') {
         // Log places data for debugging
-        logger.info(`[Companion] Guide import - ${places.length} places to save`);
+        logger.info(`[Companion] Guide import - ${places.length} places to save from ${guideMetadata.creatorName || 'unknown'}`);
         logger.info(`[Companion] Sample place: ${JSON.stringify(places[0])}`);
         
         // Geocode places
@@ -544,6 +602,7 @@ export class AICompanionService {
               geocoded.confidence || 'medium',
               geocoded.confidence_score || 0.5
             );
+            savedItems.push(savedItem);
             savedCount++;
             
             // Assign to day if importing day plans
@@ -560,6 +619,43 @@ export class AICompanionService {
         }
         
         dayPlanCount = itinerary.length; // Count days from itinerary
+        
+        // Create Guide record and link places
+        if (savedItems.length > 0) {
+          try {
+            const guideRecord = await GuideModel.create(
+              tripGroupId,
+              metadata.url,
+              userId,
+              {
+                sourceType: 'youtube',
+                title: guideMetadata.title || `${destination} Guide`,
+                creatorName: guideMetadata.creatorName || 'Unknown Creator',
+                creatorChannelId: guideMetadata.creatorChannelId,
+                thumbnailUrl: guideMetadata.thumbnailUrl,
+                hasDayStructure: (metadata.duration_days || 0) > 0,
+                totalDays: metadata.duration_days || 0,
+                summary: metadata.summary || '',
+              }
+            );
+            
+            // Link saved items to guide with day numbers
+            for (let i = 0; i < savedItems.length; i++) {
+              const item = savedItems[i];
+              const place = places[i];
+              await GuideModel.addPlace(
+                guideRecord.id,
+                item.id,
+                place.day || null,
+                i
+              );
+            }
+            
+            logger.info(`[Companion] Created guide "${guideRecord.title}" by ${guideRecord.creator_name} with ${savedItems.length} places`);
+          } catch (error) {
+            logger.error('[Companion] Error creating guide record for import:', error);
+          }
+        }
       }
       
       // Note: We no longer create separate DailyPlan records
