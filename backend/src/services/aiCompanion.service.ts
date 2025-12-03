@@ -574,8 +574,9 @@ export class AICompanionService {
       }
       logger.info(`[Companion] Built place-to-day map from itinerary: ${JSON.stringify(placeNameToDayMap)}`);
       
-      // Save places if user chose 'places', 'day_plans', or 'both'
-      // Note: 'day_plans' also needs to save places to assign them to days
+      // Save places to saved_items (without assigning to user's day plan)
+      // The Guide Drawer will show these with the guide's day structure
+      // User can then manually add places to their day plan from the drawer
       if (choice === 'places' || choice === 'both' || choice === 'day_plans') {
         // Log places data for debugging
         logger.info(`[Companion] Guide import - ${places.length} places to save from ${guideMetadata.creatorName || 'unknown'}`);
@@ -590,25 +591,23 @@ export class AICompanionService {
           tripDestination
         );
         
-        // Save each place and assign to day if user chose 'both' or 'day_plans'
-        const shouldAssignDays = choice === 'both' || choice === 'day_plans';
-        logger.info(`[Companion] Should assign days: ${shouldAssignDays}`);
-        
         for (let i = 0; i < places.length; i++) {
           const place = places[i];
           const geocoded = geocodedPlaces[i];
           
-          // Get day number - prefer place.day, fallback to itinerary lookup
-          let dayNumber = place.day;
-          if (!dayNumber) {
+          // Get day number from guide (for linking to guide, NOT for user's plan)
+          let guideDayNumber = place.day;
+          if (!guideDayNumber) {
             const normalizedName = place.name.toLowerCase().trim();
-            dayNumber = placeNameToDayMap[normalizedName];
-            if (dayNumber) {
-              logger.info(`[Companion] Found day ${dayNumber} for "${place.name}" from itinerary lookup`);
+            guideDayNumber = placeNameToDayMap[normalizedName];
+            if (guideDayNumber) {
+              logger.info(`[Companion] Found guide day ${guideDayNumber} for "${place.name}" from itinerary lookup`);
             }
           }
           
           try {
+            // Save place WITHOUT assigning to user's day plan (planned_day = null)
+            // The guide's day structure will be stored in guide_places table
             const savedItem = await SavedItemModel.create(
               tripGroupId,
               userId,
@@ -620,22 +619,18 @@ export class AICompanionService {
               geocoded.lat ?? undefined,
               geocoded.lng ?? undefined,
               metadata.url,
-              `Day ${dayNumber || '?'} - Guide`,
-              { video_type: 'guide', day: dayNumber },
+              `From ${guideMetadata.creatorName || 'Guide'} - Day ${guideDayNumber || '?'}`,
+              { video_type: 'guide', guide_day: guideDayNumber, creator: guideMetadata.creatorName },
               geocoded.confidence || 'medium',
               geocoded.confidence_score || 0.5
             );
+            
+            // Store guideDayNumber for linking to guide later
+            (savedItem as any).guideDayNumber = guideDayNumber;
             savedItems.push(savedItem);
             savedCount++;
             
-            // Assign to day if importing day plans
-            logger.info(`[Companion] Place "${place.name}" day=${dayNumber}, shouldAssign=${shouldAssignDays}`);
-            if (shouldAssignDays && dayNumber && savedItem) {
-              const assigned = await SavedItemModel.assignToDay(savedItem.id, dayNumber);
-              logger.info(`[Companion] Assigned "${place.name}" to Day ${dayNumber}, result: ${assigned ? 'success' : 'failed'}`);
-            } else if (shouldAssignDays && !dayNumber) {
-              logger.warn(`[Companion] Place "${place.name}" has no day number - couldn't find in itinerary either!`);
-            }
+            logger.info(`[Companion] Saved "${place.name}" (guide day ${guideDayNumber}) - NOT assigned to user's plan yet`);
           } catch (error) {
             logger.error(`[Companion] Error saving guide place: ${place.name}`, error);
           }
@@ -662,19 +657,20 @@ export class AICompanionService {
               }
             );
             
-            // Link saved items to guide with day numbers
+            // Link saved items to guide with guide's day numbers
             for (let i = 0; i < savedItems.length; i++) {
-              const item = savedItems[i];
-              const place = places[i];
+              const item = savedItems[i] as any;
+              const guideDayNumber = item.guideDayNumber || null;
               await GuideModel.addPlace(
                 guideRecord.id,
                 item.id,
-                place.day || null,
+                guideDayNumber,
                 i
               );
+              logger.info(`[Companion] Linked "${item.name}" to guide (guide day ${guideDayNumber})`);
             }
             
-            logger.info(`[Companion] Created guide "${guideRecord.title}" by ${guideRecord.creator_name} with ${savedItems.length} places`);
+            logger.info(`[Companion] Created guide "${guideRecord.title}" by ${guideRecord.creator_name} with ${savedItems.length} places linked`);
           } catch (error) {
             logger.error('[Companion] Error creating guide record for import:', error);
           }
@@ -686,18 +682,19 @@ export class AICompanionService {
       
       // Generate response based on choice
       let message = '';
+      const creatorName = guideMetadata.creatorName || 'the guide';
       
       if (choice === 'places') {
-        message = `✅ Done! I saved **${savedCount} places** from the guide to your list.\n\n`;
-        message += `You can browse them in your saved places. Each place is tagged with the day it was recommended for! 📍`;
+        message = `✅ Done! I saved **${savedCount} places** from ${creatorName}'s guide!\n\n`;
+        message += `Browse them in your saved places. 📍`;
       } else if (choice === 'day_plans') {
-        message = `📅 Done! I created **${dayPlanCount} day plans** from the guide!\n\n`;
-        message += `Check your Day Planner to see the suggested itinerary. You can customize it however you like! ✨`;
+        message = `📅 Done! I saved **${creatorName}'s ${dayPlanCount}-day itinerary**!\n\n`;
+        message += `Open the Day Planner and check the **Guide Sources** drawer at the bottom to see their recommendations. Tap [+ Add] to add places to your plan! ✨`;
       } else {
-        message = `✨ Done! I imported the complete guide:\n\n`;
-        message += `• 📍 **${savedCount} places** saved to your list\n`;
-        message += `• 📅 **${dayPlanCount} day plans** created\n\n`;
-        message += `The places are saved for reference, and the Day Planner has your itinerary ready to customize!`;
+        message = `✨ Done! I imported ${creatorName}'s guide:\n\n`;
+        message += `• 📍 **${savedCount} places** saved\n`;
+        message += `• 📅 **${dayPlanCount}-day itinerary** ready\n\n`;
+        message += `Open the Day Planner → **Guide Sources** (at bottom) to see their day-by-day recommendations and add places to your plan!`;
       }
       
       return {
