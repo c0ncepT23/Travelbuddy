@@ -11,25 +11,27 @@ import {
   TextInput,
   Image,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import { useTripStore } from '../../stores/tripStore';
 import { useXPStore } from '../../stores/xpStore';
 import api from '../../config/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout, updateUser } = useAuthStore();
   const { trips, fetchTrips } = useTripStore();
   const { totalXP, level, getLevelTitle, getProgress } = useXPStore();
   
-  // Edit states
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(user?.name || '');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url || null);
-  const [coverUrl, setCoverUrl] = useState<string | null>(user?.cover_url || null);
   
   const nameInputRef = useRef<TextInput>(null);
   
@@ -46,7 +48,6 @@ export default function ProfileScreen({ navigation }: any) {
   useEffect(() => {
     setEditedName(user?.name || '');
     setAvatarUrl(user?.avatar_url || null);
-    setCoverUrl(user?.cover_url || null);
   }, [user]);
 
   const loadProfileData = async () => {
@@ -75,7 +76,6 @@ export default function ProfileScreen({ navigation }: any) {
     });
   }, [trips]);
 
-  // Name editing
   const handleNamePress = () => {
     setIsEditingName(true);
     setTimeout(() => nameInputRef.current?.focus(), 100);
@@ -108,7 +108,6 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-  // Avatar/Profile Picture
   const handleAvatarPress = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -138,40 +137,6 @@ export default function ProfileScreen({ navigation }: any) {
         Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
       } finally {
         setIsUploadingAvatar(false);
-      }
-    }
-  };
-
-  // Cover Photo
-  const handleCoverPress = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions to change your cover photo.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setIsUploadingCover(true);
-      try {
-        const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-        const response = await api.patch('/auth/profile', { cover_url: base64 });
-        if (response.data.success && updateUser) {
-          setCoverUrl(base64);
-          updateUser({ ...user, cover_url: base64 });
-        }
-      } catch (error) {
-        console.error('Failed to upload cover:', error);
-        Alert.alert('Error', 'Failed to upload cover photo. Please try again.');
-      } finally {
-        setIsUploadingCover(false);
       }
     }
   };
@@ -210,345 +175,356 @@ export default function ProfileScreen({ navigation }: any) {
       .substring(0, 2);
   };
 
+  // Get level color
+  const getLevelColor = () => {
+    if (level >= 10) return ['#F59E0B', '#EF4444']; // Gold to red
+    if (level >= 5) return ['#8B5CF6', '#EC4899']; // Purple to pink
+    return ['#3B82F6', '#06B6D4']; // Blue to cyan
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <StatusBar barStyle="light-content" backgroundColor="#1F2937" />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      {/* Header Section with Cover Photo */}
-      <TouchableOpacity 
-        style={styles.header} 
-        onPress={handleCoverPress}
-        activeOpacity={0.9}
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Cover Image */}
-        {coverUrl ? (
-          <Image source={{ uri: coverUrl }} style={styles.coverImage} />
-        ) : (
-          <View style={styles.coverPlaceholder}>
-            <Text style={styles.coverPlaceholderText}>📷 Tap to add cover photo</Text>
-          </View>
-        )}
-        
-        {/* Cover Overlay */}
-        <View style={styles.coverOverlay} />
-        
-        {/* Upload Indicator for Cover */}
-        {isUploadingCover && (
-          <View style={styles.uploadingOverlay}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-            <Text style={styles.uploadingText}>Uploading...</Text>
-          </View>
-        )}
-        
-        {/* Edit Cover Icon */}
-        <View style={styles.editCoverButton}>
-          <Text style={styles.editCoverIcon}>📷</Text>
-        </View>
-
-        {/* Back Button */}
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+        {/* Hero Header with Gradient */}
+        <LinearGradient
+          colors={['#0F172A', '#1E293B', '#334155']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroSection}
         >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
-        
-        {/* Avatar */}
-        <TouchableOpacity 
-          style={styles.avatarContainer}
-          onPress={handleAvatarPress}
-          activeOpacity={0.8}
-        >
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{user ? getInitials(user.name) : '?'}</Text>
-            </View>
-          )}
+          {/* Decorative circles */}
+          <View style={styles.decorCircle1} />
+          <View style={styles.decorCircle2} />
+          <View style={styles.decorCircle3} />
           
-          {/* Upload Indicator for Avatar */}
-          {isUploadingAvatar && (
-            <View style={styles.avatarUploadingOverlay}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            </View>
-          )}
-          
-          {/* Edit Avatar Icon */}
-          <View style={styles.editAvatarButton}>
-            <Text style={styles.editAvatarIcon}>✏️</Text>
-          </View>
-          
-          {/* Level Badge */}
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelBadgeText}>Lv.{level}</Text>
-          </View>
-        </TouchableOpacity>
-        
-        {/* Name - Editable */}
-        {isEditingName ? (
-          <View style={styles.nameEditContainer}>
-            <TextInput
-              ref={nameInputRef}
-              style={styles.nameInput}
-              value={editedName}
-              onChangeText={setEditedName}
-              onBlur={handleNameSave}
-              onSubmitEditing={handleNameSave}
-              placeholder="Your name"
-              placeholderTextColor="rgba(255,255,255,0.5)"
-              autoFocus
-              selectTextOnFocus
-            />
-            <TouchableOpacity style={styles.saveNameButton} onPress={handleNameSave}>
-              <Text style={styles.saveNameText}>✓</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity onPress={handleNamePress} style={styles.nameContainer}>
-            <Text style={styles.name}>{user?.name || 'Unknown User'}</Text>
-            <Text style={styles.editNameHint}>✏️</Text>
+          {/* Back Button */}
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-        )}
-        
-        <Text style={styles.email}>{user?.phone_number || user?.email || ''}</Text>
-        <Text style={styles.levelTitle}>{getLevelTitle()}</Text>
-        
-        {/* XP Progress Bar */}
-        <View style={styles.xpContainer}>
-          <View style={styles.xpBarBackground}>
-            <View style={[styles.xpBarFill, { width: `${getProgress() * 100}%` }]} />
-          </View>
-          <Text style={styles.xpText}>{totalXP} XP</Text>
-        </View>
-      </TouchableOpacity>
 
-      {/* Stats Section */}
-      <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>Your Stats</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.totalTrips}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={[styles.statCard, styles.statCardActive]}>
-            <Text style={[styles.statNumber, styles.statNumberActive]}>{stats.activeTrips}</Text>
-            <Text style={[styles.statLabel, styles.statLabelActive]}>Active</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.pastTrips}</Text>
-            <Text style={styles.statLabel}>Done</Text>
-          </View>
-        </View>
-      </View>
+          {/* Settings Button */}
+          <TouchableOpacity style={styles.settingsButton}>
+            <Ionicons name="settings-outline" size={22} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
 
-      {/* Past Trips Section */}
-      <View style={styles.pastTripsSection}>
-        <Text style={styles.sectionTitle}>Past Trips</Text>
-        {getPastTrips().length > 0 ? (
-          <View style={styles.tripsContainer}>
-            {getPastTrips().map((trip) => (
-              <TouchableOpacity
-                key={trip.id}
-                style={styles.tripCard}
-                onPress={() =>
-                  navigation.navigate('TripDetail', {
-                    tripId: trip.id,
-                    tripName: trip.name,
-                  })
-                }
-                activeOpacity={0.8}
-              >
-                <View style={styles.tripCardHeader}>
-                  <View style={styles.tripEmoji}>
-                    <Text style={styles.tripEmojiText}>
-                      {trip.destination?.includes('Japan') ? '🇯🇵' : '🌍'}
-                    </Text>
-                  </View>
-                  <View style={styles.tripInfo}>
-                    <Text style={styles.tripName}>{trip.name}</Text>
-                    <Text style={styles.tripDestination}>📍 {trip.destination}</Text>
-                  </View>
-                  <View style={styles.tripArrow}>
-                    <Text style={styles.tripArrowText}>›</Text>
-                  </View>
+          {/* Avatar Section */}
+          <TouchableOpacity 
+            style={styles.avatarWrapper}
+            onPress={handleAvatarPress}
+            activeOpacity={0.9}
+          >
+            {/* Glow effect */}
+            <LinearGradient
+              colors={getLevelColor()}
+              style={styles.avatarGlow}
+            />
+            
+            <View style={styles.avatarContainer}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <LinearGradient
+                  colors={['#E2E8F0', '#F8FAFC']}
+                  style={styles.avatarPlaceholder}
+                >
+                  <Text style={styles.avatarText}>{user ? getInitials(user.name) : '?'}</Text>
+                </LinearGradient>
+              )}
+              
+              {isUploadingAvatar && (
+                <View style={styles.avatarUploadingOverlay}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 </View>
-                {trip.end_date && (
-                  <Text style={styles.tripDate}>
-                    Ended: {new Date(trip.end_date).toLocaleDateString()}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconBox}>
-              <Text style={styles.emptyIcon}>🌟</Text>
+              )}
             </View>
-            <Text style={styles.emptyText}>No past trips yet!</Text>
-            <Text style={styles.emptySubtext}>Your completed trips will show up here</Text>
+
+            {/* Camera badge */}
+            <View style={styles.cameraBadge}>
+              <Ionicons name="camera" size={14} color="#FFFFFF" />
+            </View>
+
+            {/* Level badge */}
+            <LinearGradient
+              colors={getLevelColor()}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.levelBadge}
+            >
+              <Text style={styles.levelBadgeText}>Lv.{level}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Name */}
+          {isEditingName ? (
+            <View style={styles.nameEditContainer}>
+              <TextInput
+                ref={nameInputRef}
+                style={styles.nameInput}
+                value={editedName}
+                onChangeText={setEditedName}
+                onBlur={handleNameSave}
+                onSubmitEditing={handleNameSave}
+                placeholder="Your name"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                autoFocus
+                selectTextOnFocus
+              />
+              <TouchableOpacity style={styles.saveNameButton} onPress={handleNameSave}>
+                <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity onPress={handleNamePress} style={styles.nameContainer}>
+              <Text style={styles.name}>{user?.name || 'Unknown User'}</Text>
+              <View style={styles.editNameIcon}>
+                <Ionicons name="pencil" size={14} color="rgba(255,255,255,0.6)" />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Contact Info */}
+          <Text style={styles.contactInfo}>{user?.phone_number || user?.email || ''}</Text>
+
+          {/* Level Title with gradient text effect */}
+          <View style={styles.levelTitleContainer}>
+            <LinearGradient
+              colors={getLevelColor()}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.levelTitleBg}
+            >
+              <Text style={styles.levelTitle}>{getLevelTitle()}</Text>
+            </LinearGradient>
           </View>
-        )}
-      </View>
 
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.9}>
-        <Text style={styles.logoutButtonText}>Log Out</Text>
-      </TouchableOpacity>
+          {/* XP Progress */}
+          <View style={styles.xpSection}>
+            <View style={styles.xpBarContainer}>
+              <View style={styles.xpBarBackground}>
+                <LinearGradient
+                  colors={getLevelColor()}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.xpBarFill, { width: `${getProgress() * 100}%` }]}
+                />
+              </View>
+            </View>
+            <Text style={styles.xpText}>{totalXP} XP</Text>
+          </View>
+        </LinearGradient>
 
-      {/* Footer Spacing */}
-      <View style={styles.footer} />
-    </ScrollView>
+        {/* Stats Section */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Your Journey</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.totalTrips}</Text>
+              <Text style={styles.statLabel}>Total Trips</Text>
+            </View>
+            <LinearGradient
+              colors={['#3B82F6', '#2563EB']}
+              style={[styles.statCard, styles.statCardActive]}
+            >
+              <Text style={styles.statNumberActive}>{stats.activeTrips}</Text>
+              <Text style={styles.statLabelActive}>Active</Text>
+            </LinearGradient>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{stats.pastTrips}</Text>
+              <Text style={styles.statLabel}>Completed</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Past Trips Section */}
+        <View style={styles.pastTripsSection}>
+          <Text style={styles.sectionTitle}>Travel History</Text>
+          {getPastTrips().length > 0 ? (
+            <View style={styles.tripsContainer}>
+              {getPastTrips().map((trip) => (
+                <TouchableOpacity
+                  key={trip.id}
+                  style={styles.tripCard}
+                  onPress={() =>
+                    navigation.navigate('TripDetail', {
+                      tripId: trip.id,
+                      tripName: trip.name,
+                    })
+                  }
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.tripCardContent}>
+                    <View style={styles.tripEmoji}>
+                      <Text style={styles.tripEmojiText}>
+                        {trip.destination?.includes('Japan') ? '🇯🇵' : 
+                         trip.destination?.includes('India') ? '🇮🇳' :
+                         trip.destination?.includes('France') ? '🇫🇷' : '🌍'}
+                      </Text>
+                    </View>
+                    <View style={styles.tripInfo}>
+                      <Text style={styles.tripName}>{trip.name}</Text>
+                      <View style={styles.tripDestinationRow}>
+                        <Ionicons name="location" size={14} color="#6B7280" />
+                        <Text style={styles.tripDestination}>{trip.destination}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="airplane-outline" size={40} color="#3B82F6" />
+              </View>
+              <Text style={styles.emptyText}>No trips yet</Text>
+              <Text style={styles.emptySubtext}>Your travel history will appear here</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Logout Button */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+          <Text style={styles.logoutButtonText}>Log Out</Text>
+        </TouchableOpacity>
+
+        <View style={styles.footer} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
+  },
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
     paddingBottom: 40,
   },
 
-  // Header Section
-  header: {
+  // Hero Section
+  heroSection: {
+    paddingTop: 60,
+    paddingBottom: 40,
     alignItems: 'center',
-    paddingTop: 120,
-    paddingBottom: 32,
-    backgroundColor: '#1F2937',
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
+    overflow: 'hidden',
     position: 'relative',
-    minHeight: 320,
   },
-  coverImage: {
+  decorCircle1: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
   },
-  coverPlaceholder: {
+  decorCircle2: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 140,
-    backgroundColor: '#374151',
+    bottom: -30,
+    left: -30,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+  },
+  decorCircle3: {
+    position: 'absolute',
+    top: 100,
+    left: 30,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(6, 182, 212, 0.06)',
+  },
+
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  coverPlaceholderText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    fontWeight: '500',
-  },
-  coverOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(31, 41, 55, 0.7)',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  uploadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    zIndex: 100,
-  },
-  uploadingText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  editCoverButton: {
+  settingsButton: {
     position: 'absolute',
     top: 50,
     right: 16,
     width: 40,
     height: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  editCoverIcon: {
-    fontSize: 18,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 16,
-    width: 44,
-    height: 44,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  backButtonText: {
-    fontSize: 20,
-    color: '#FFFFFF',
-  },
-  
+
   // Avatar
-  avatarContainer: {
-    marginBottom: 16,
+  avatarWrapper: {
+    marginTop: 20,
+    marginBottom: 20,
     position: 'relative',
   },
-  avatar: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+  avatarGlow: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 70,
+    opacity: 0.4,
+  },
+  avatarContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
     borderWidth: 4,
-    borderColor: '#1F2937',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
+    width: '100%',
+    height: '100%',
   },
-  avatarText: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  avatarUploadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 50,
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  editAvatarButton: {
+  avatarText: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  avatarUploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: 4,
+    right: 4,
     width: 32,
     height: 32,
     backgroundColor: '#3B82F6',
@@ -556,118 +532,125 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#1F2937',
-  },
-  editAvatarIcon: {
-    fontSize: 14,
+    borderColor: '#1E293B',
   },
   levelBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#FCD34D',
-    borderRadius: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
+    borderRadius: 12,
   },
   levelBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#92400E',
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  
-  // Name editing
+
+  // Name
   nameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   name: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 4,
+    letterSpacing: -0.5,
   },
-  editNameHint: {
-    fontSize: 16,
-    opacity: 0.6,
+  editNameIcon: {
+    width: 28,
+    height: 28,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   nameEditContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
-    gap: 8,
+    gap: 12,
   },
   nameInput: {
     fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
     backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 16,
     minWidth: 200,
     textAlign: 'center',
   },
   saveNameButton: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     backgroundColor: '#10B981',
-    borderRadius: 18,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  saveNameText: {
-    fontSize: 18,
+
+  contactInfo: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+
+  levelTitleContainer: {
+    marginBottom: 20,
+  },
+  levelTitleBg: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  levelTitle: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  
-  email: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
+
+  // XP
+  xpSection: {
+    width: '75%',
+    alignItems: 'center',
+  },
+  xpBarContainer: {
+    width: '100%',
     marginBottom: 8,
-  },
-  levelTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FCD34D',
-    marginBottom: 16,
-  },
-  xpContainer: {
-    width: '70%',
-    marginTop: 8,
   },
   xpBarBackground: {
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 4,
     overflow: 'hidden',
   },
   xpBarFill: {
     height: '100%',
-    backgroundColor: '#FCD34D',
     borderRadius: 4,
   },
   xpText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    marginTop: 6,
+    color: 'rgba(255,255,255,0.7)',
   },
 
   // Stats Section
   statsSection: {
     padding: 20,
-    marginBottom: 8,
+    paddingTop: 28,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#0F172A',
     marginBottom: 16,
+    letterSpacing: -0.3,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -677,69 +660,76 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   statCardActive: {
-    backgroundColor: '#3B82F6',
+    transform: [{ scale: 1.02 }],
   },
   statNumber: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '800',
     color: '#3B82F6',
     marginBottom: 4,
   },
   statNumberActive: {
+    fontSize: 32,
+    fontWeight: '800',
     color: '#FFFFFF',
+    marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
     textAlign: 'center',
   },
   statLabelActive: {
+    fontSize: 13,
+    fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
   },
 
   // Past Trips Section
   pastTripsSection: {
     padding: 20,
-    marginBottom: 8,
+    paddingTop: 8,
   },
   tripsContainer: {
     gap: 12,
   },
   tripCard: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
   },
-  tripCardHeader: {
+  tripCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
   },
   tripEmoji: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   tripEmojiText: {
-    fontSize: 24,
+    fontSize: 26,
   },
   tripInfo: {
     flex: 1,
@@ -747,79 +737,72 @@ const styles = StyleSheet.create({
   tripName: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 2,
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  tripDestinationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   tripDestination: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
-  },
-  tripArrow: {
-    width: 32,
-    height: 32,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tripArrowText: {
-    fontSize: 18,
-    color: '#9CA3AF',
-  },
-  tripDate: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#9CA3AF',
-    marginTop: 8,
+    color: '#64748B',
   },
 
   // Empty State
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  emptyIconBox: {
+  emptyIconContainer: {
     width: 80,
     height: 80,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#EFF6FF',
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
-  emptyIcon: {
-    fontSize: 40,
-  },
   emptyText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#1E293B',
     marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
+    color: '#94A3B8',
     textAlign: 'center',
   },
 
   // Logout Button
   logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     marginHorizontal: 20,
-    marginTop: 8,
+    marginTop: 24,
     padding: 16,
     backgroundColor: '#FEF2F2',
-    borderRadius: 14,
-    alignItems: 'center',
+    borderRadius: 16,
   },
   logoutButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#DC2626',
+    color: '#EF4444',
   },
 
-  // Footer
   footer: {
     height: 20,
   },
