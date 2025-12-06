@@ -196,6 +196,47 @@ export class SavedItemModel {
       values.push(updates.user_notes);
     }
 
+    // Google Places enrichment fields
+    if (updates.google_place_id !== undefined) {
+      fields.push(`google_place_id = $${paramCount++}`);
+      values.push(updates.google_place_id);
+    }
+
+    if (updates.rating !== undefined) {
+      fields.push(`rating = $${paramCount++}`);
+      values.push(updates.rating);
+    }
+
+    if (updates.user_ratings_total !== undefined) {
+      fields.push(`user_ratings_total = $${paramCount++}`);
+      values.push(updates.user_ratings_total);
+    }
+
+    if (updates.price_level !== undefined) {
+      fields.push(`price_level = $${paramCount++}`);
+      values.push(updates.price_level);
+    }
+
+    if (updates.formatted_address !== undefined) {
+      fields.push(`formatted_address = $${paramCount++}`);
+      values.push(updates.formatted_address);
+    }
+
+    if (updates.area_name !== undefined) {
+      fields.push(`area_name = $${paramCount++}`);
+      values.push(updates.area_name);
+    }
+
+    if (updates.photos_json !== undefined) {
+      fields.push(`photos_json = $${paramCount++}`);
+      values.push(updates.photos_json);
+    }
+
+    if (updates.opening_hours_json !== undefined) {
+      fields.push(`opening_hours_json = $${paramCount++}`);
+      values.push(updates.opening_hours_json);
+    }
+
     if (fields.length === 0) {
       return null;
     }
