@@ -168,15 +168,48 @@ const SideRail = ({
 };
 
 // Header Component
-const TripHeader = ({ trip, activeTab }: { trip: any; activeTab: TabName }) => {
+const TripHeader = ({ 
+  trip, 
+  activeTab, 
+  onItineraryPress,
+  onProfilePress 
+}: { 
+  trip: any; 
+  activeTab: TabName;
+  onItineraryPress: () => void;
+  onProfilePress: () => void;
+}) => {
   return (
     <View style={styles.header}>
       <View style={styles.headerContent}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {trip?.name || 'Trip'}
-        </Text>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>{TAB_CONFIG[activeTab].label}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {trip?.name || 'Trip'}
+          </Text>
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>{TAB_CONFIG[activeTab].label}</Text>
+          </View>
+        </View>
+        
+        {/* Right Actions */}
+        <View style={styles.headerActions}>
+          {/* Itinerary Button */}
+          <TouchableOpacity
+            style={styles.headerActionButton}
+            onPress={onItineraryPress}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="airplane-outline" size={20} color="#64748B" />
+          </TouchableOpacity>
+          
+          {/* Profile Button */}
+          <TouchableOpacity
+            style={styles.headerActionButton}
+            onPress={onProfilePress}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="person-circle-outline" size={22} color="#64748B" />
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -221,6 +254,16 @@ export default function TripTabScreen({ route, navigation }: any) {
     setActiveTab(tab);
   };
 
+  const handleItineraryPress = () => {
+    HapticFeedback.light();
+    navigation.navigate('ItinerarySetup', { tripId, isInitialSetup: false });
+  };
+
+  const handleProfilePress = () => {
+    HapticFeedback.light();
+    navigation.navigate('Profile');
+  };
+
   // Render active tab content
   const renderTabContent = () => {
     switch (activeTab) {
@@ -252,7 +295,12 @@ export default function TripTabScreen({ route, navigation }: any) {
           {/* Main Content Area */}
           <View style={styles.contentArea}>
             {/* Compact Header */}
-            <TripHeader trip={currentTrip} activeTab={activeTab} />
+            <TripHeader 
+              trip={currentTrip} 
+              activeTab={activeTab} 
+              onItineraryPress={handleItineraryPress}
+              onProfilePress={handleProfilePress}
+            />
             
             {/* Tab Content */}
             <View style={styles.tabContent}>
@@ -402,11 +450,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#0F172A',
-    flex: 1,
+    flexShrink: 1,
   },
   headerBadge: {
     backgroundColor: '#EEF2FF',
@@ -418,6 +472,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#6366F1',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+  },
+  headerActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabContent: {
     flex: 1,

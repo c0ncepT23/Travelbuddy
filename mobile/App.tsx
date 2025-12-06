@@ -37,6 +37,9 @@ import CompanionScreen from './src/screens/Companion/CompanionScreen';
 // Profile
 import ProfileScreen from './src/screens/Profile/ProfileScreen';
 
+// Itinerary
+import ItinerarySetupScreen from './src/screens/Trip/ItinerarySetupScreen';
+
 const Stack = createStackNavigator();
 
 const linking = {
@@ -375,6 +378,11 @@ export default function App() {
                 options={{ 
                   title: 'Profile',
                 }}
+              />
+              <Stack.Screen
+                name="ItinerarySetup"
+                component={ItinerarySetupScreen}
+                options={{ headerShown: false }}
               />
             </>
           )}

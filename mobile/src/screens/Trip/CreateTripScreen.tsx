@@ -61,14 +61,23 @@ export default function CreateTripScreen({ navigation }: any) {
 
       if (Platform.OS === 'web') {
         window.alert('Trip created successfully!');
-        navigation.navigate('TripHome', { tripId: trip.id });
+        navigation.navigate('ItinerarySetup', { tripId: trip.id, isInitialSetup: true });
       } else {
-        Alert.alert('Success', 'Trip created successfully!', [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('TripHome', { tripId: trip.id }),
-          },
-        ]);
+        Alert.alert(
+          '✈️ Trip Created!', 
+          'Now let\'s set up your itinerary - add cities, dates, and hotels!', 
+          [
+            {
+              text: 'Set Up Itinerary',
+              onPress: () => navigation.navigate('ItinerarySetup', { tripId: trip.id, isInitialSetup: true }),
+            },
+            {
+              text: 'Skip for Now',
+              style: 'cancel',
+              onPress: () => navigation.navigate('TripHome', { tripId: trip.id }),
+            },
+          ]
+        );
       }
     } catch (error: any) {
       if (Platform.OS === 'web') {
