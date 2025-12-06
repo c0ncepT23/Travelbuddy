@@ -346,13 +346,24 @@ export const useItemStore = create<ItemState>((set, get) => ({
 
   enrichItemWithGoogle: async (itemId) => {
     try {
+      if (!itemId) {
+        console.warn('[ItemStore] Enrich called with no itemId');
+        return null;
+      }
+      
       const response = await api.post<{ data: SavedItem }>(`/items/${itemId}/enrich`);
-      const enrichedItem = response.data.data;
+      const enrichedItem = response.data?.data;
+      
+      // Check if we got valid data back
+      if (!enrichedItem || !enrichedItem.id) {
+        console.warn('[ItemStore] Enrich returned no data for item:', itemId);
+        return null;
+      }
       
       // Update local items state with enriched data
       set((state) => ({
         items: state.items.map((item) =>
-          item.id === itemId ? enrichedItem : item
+          item && item.id === itemId ? enrichedItem : item
         ),
         currentItem:
           state.currentItem?.id === itemId ? enrichedItem : state.currentItem,
@@ -362,7 +373,7 @@ export const useItemStore = create<ItemState>((set, get) => ({
       return enrichedItem;
     } catch (error: any) {
       console.error('[ItemStore] Enrich error:', error);
-      throw new Error(error.response?.data?.error || 'Failed to enrich item');
+      return null; // Don't throw, just return null
     }
   },
 

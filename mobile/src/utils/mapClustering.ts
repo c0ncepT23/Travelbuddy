@@ -35,8 +35,11 @@ function isValidCoordinate(lat: number | undefined | null, lng: number | undefin
  * Group items by category for map clustering
  */
 export function clusterByCategory(items: SavedItem[]): CategoryCluster[] {
+  // Filter out null/undefined items first
+  const validItems = (items || []).filter(item => item && item.id);
+  
   // Group items by category - with strict coordinate validation
-  const grouped = items.reduce((acc, item) => {
+  const grouped = validItems.reduce((acc, item) => {
     // Strict validation to prevent floating markers at wrong locations
     if (!isValidCoordinate(item.location_lat, item.location_lng)) return acc;
     
@@ -67,7 +70,8 @@ export function clusterByCategory(items: SavedItem[]): CategoryCluster[] {
  * Get category counts for UI display
  */
 export function getCategoryCounts(items: SavedItem[]): Record<ItemCategory, number> {
-  return items.reduce((acc, item) => {
+  const validItems = (items || []).filter(item => item && item.id);
+  return validItems.reduce((acc, item) => {
     acc[item.category] = (acc[item.category] || 0) + 1;
     return acc;
   }, {} as Record<ItemCategory, number>);
@@ -77,7 +81,8 @@ export function getCategoryCounts(items: SavedItem[]): Record<ItemCategory, numb
  * Filter items by category
  */
 export function filterByCategory(items: SavedItem[], category: ItemCategory | 'all'): SavedItem[] {
-  if (category === 'all') return items;
-  return items.filter(item => item.category === category);
+  const validItems = (items || []).filter(item => item && item.id);
+  if (category === 'all') return validItems;
+  return validItems.filter(item => item.category === category);
 }
 

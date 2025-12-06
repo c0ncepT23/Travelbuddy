@@ -201,7 +201,11 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const { PROVIDER_GOOGLE } = require('react-native-maps');
 
   // Memoize clusters to prevent recalculation on every render
-  const clusters = useMemo(() => clusterByCategory(items), [items]);
+  // Filter out null items before clustering
+  const clusters = useMemo(() => {
+    const validItems = (items || []).filter(item => item && item.id);
+    return clusterByCategory(validItems);
+  }, [items]);
 
   return (
     <MapViewNative

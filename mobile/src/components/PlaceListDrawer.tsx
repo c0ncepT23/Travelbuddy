@@ -210,11 +210,14 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
   useEffect(() => {
     const enrichItems = async () => {
       // Only enrich first 5 items to avoid too many API calls
-      const itemsNeedingEnrichment = filteredItems.filter(
-        item => !item.photos_json && !enrichedRef.current.has(item.id)
-      ).slice(0, 5);
+      // Add null checks for safety
+      const itemsNeedingEnrichment = filteredItems
+        .filter(item => item && item.id && !item.photos_json && !enrichedRef.current.has(item.id))
+        .slice(0, 5);
       
       for (const item of itemsNeedingEnrichment) {
+        if (!item || !item.id) continue; // Extra safety check
+        
         enrichedRef.current.add(item.id);
         try {
           await enrichItemWithGoogle(item.id);
@@ -226,7 +229,12 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
       }
     };
     
-    if (filteredItems.some(item => !item.photos_json && !enrichedRef.current.has(item.id))) {
+    // Check with null safety
+    const hasItemsToEnrich = filteredItems.some(
+      item => item && item.id && !item.photos_json && !enrichedRef.current.has(item.id)
+    );
+    
+    if (hasItemsToEnrich) {
       enrichItems();
     }
   }, [filteredItems.length]);
