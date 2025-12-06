@@ -163,6 +163,13 @@ export interface SavedItem {
   // Day planner fields
   planned_day?: number | null;  // Day number (1 = Day 1, null = Unassigned)
   day_order?: number;           // Order within the day
+  // Extra info from source (e.g., guide videos)
+  extra_info?: {
+    video_type?: 'guide' | 'places' | 'howto';
+    guide_day?: number;
+    creator?: string;
+    [key: string]: any;
+  };
 }
 
 // Check-in types

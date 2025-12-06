@@ -870,28 +870,29 @@ ${i + 1}. ${p.name} - ${p.category}
    Source: ${p.source_title || 'Your saved places'}
       `).join('\n');
 
-      const prompt = `You are an excited travel companion helping ${context.userName} with their trip to ${context.destination}.
+      const prompt = `You are a helpful travel companion assisting ${context.userName} with their trip to ${context.destination}.
 
 User query: "${query}"
 Current time: ${context.time.toLocaleTimeString()}
-User location: ${context.location ? 'Known' : 'Unknown'}
 
-Relevant places from their saved items (${places.length} found):
-${placesContext || 'None found matching the query'}
+IMPORTANT RULES:
+- ONLY reference places from the user's saved items list below
+- NEVER suggest or recommend places that are NOT in their saved list
+- If no saved places match, simply say you don't have any saved spots matching their request and suggest they save some places first
 
-Generate an enthusiastic, helpful response:
-- If places found: Suggest 2-3 best options with brief details
-- If near them: Mention distance and directions
-- If multiple good options: Present them conversationally
-- If none found: Suggest they might want to save more or adjust their search
-- Use emojis appropriately but not excessively
-- Keep it conversational and friendly
-- Reference which video/article the place came from when relevant
+User's saved places (${places.length} found):
+${placesContext || 'No saved places match this query'}
+
+Generate a helpful response:
+- ONLY mention places from the list above
+- If places found: Share 2-3 from their saved list with brief details
+- If none found: Let them know you don't have saved spots for that and suggest they add some via YouTube guides or manual search
+- Be friendly but concise
+- Use 1-2 emojis max
 
 Respond with JSON:
 {
-  "message": "Your conversational response here",
-  "suggestions": ["Optional action buttons like 'Show on map', 'Get directions'"]
+  "message": "Your response here - ONLY referencing their saved places"
 }`;
 
       const response = await openai.chat.completions.create({
@@ -903,6 +904,7 @@ Respond with JSON:
 
       const result = JSON.parse(response.choices[0]?.message?.content || '{}');
 
+      // Don't include suggestions - removed per user request
       return {
         message: result.message || "I found some interesting places for you! 🎯",
         places: places.map((p) => ({
@@ -913,7 +915,7 @@ Respond with JSON:
           location_name: p.location_name,
           distance: p.distance,
         })),
-        suggestions: result.suggestions || [],
+        // suggestions removed - AI should not suggest actions
       };
     } catch (error) {
       logger.error('Response generation error:', error);

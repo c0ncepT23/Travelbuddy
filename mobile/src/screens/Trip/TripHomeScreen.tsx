@@ -535,6 +535,17 @@ export default function TripHomeScreen({ route, navigation }: any) {
     navigation.navigate('TripDetail', { tripId, viewMode: 'planner', highlightPlanId: planId });
   };
 
+  // Handle suggestion button press (for guide video preview)
+  const handleSuggestionButtonPress = (suggestion: string) => {
+    HapticFeedback.medium();
+    // Send the suggestion as a message to trigger the action
+    if (isConnected) {
+      sendMessageViaSocket(tripId, suggestion);
+    } else {
+      sendMessage(tripId, suggestion);
+    }
+  };
+
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     // Check message_type for AI responses (they have same sender_id as user but different type)
     const isAgent = item.message_type === 'ai_response' || item.sender_type === 'agent';
@@ -542,6 +553,8 @@ export default function TripHomeScreen({ route, navigation }: any) {
     const content = item.content;
     const senderName = item.sender_name || 'Unknown';
     const planId = item.metadata?.planId;
+    const suggestions = item.metadata?.suggestions;
+    const isGuidePreview = item.metadata?.type === 'guide_video_preview';
 
     return (
       <View style={styles.messageContainer}>
@@ -553,6 +566,29 @@ export default function TripHomeScreen({ route, navigation }: any) {
             <View style={styles.agentBubble}>
               <Text style={styles.agentLabel}>TravelPal</Text>
               <Text style={styles.agentText}>{content}</Text>
+              
+              {/* Show suggestion buttons for guide preview messages */}
+              {isGuidePreview && suggestions && suggestions.length > 0 && (
+                <View style={styles.suggestionButtonsContainer}>
+                  {suggestions.map((suggestion: string, idx: number) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[
+                        styles.suggestionButton,
+                        suggestion.includes('Both') && styles.suggestionButtonPrimary
+                      ]}
+                      onPress={() => handleSuggestionButtonPress(suggestion)}
+                    >
+                      <Text style={[
+                        styles.suggestionButtonText,
+                        suggestion.includes('Both') && styles.suggestionButtonTextPrimary
+                      ]}>
+                        {suggestion}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
               
               {/* Show Day Planner button if plan was created */}
               {planId && (
@@ -889,6 +925,33 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
+  },
+
+  // Suggestion buttons (for guide preview)
+  suggestionButtonsContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  suggestionButton: {
+    backgroundColor: theme.colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  suggestionButtonPrimary: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.borderDark,
+  },
+  suggestionButtonText: {
+    color: theme.colors.textPrimary,
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  suggestionButtonTextPrimary: {
+    color: '#FFFFFF',
   },
 
   // User messages

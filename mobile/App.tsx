@@ -22,6 +22,7 @@ import RegisterScreen from './src/screens/Auth/RegisterScreen';
 import TripListScreen from './src/screens/Trip/TripListScreen';
 import TripDetailScreen from './src/screens/Trip/TripDetailScreen';
 import TripHomeScreen from './src/screens/Trip/TripHomeScreen';
+import TripTabScreen from './src/screens/Trip/TripTabScreen';
 import CreateTripScreen from './src/screens/Trip/CreateTripScreen';
 import JoinTripScreen from './src/screens/Trip/JoinTripScreen';
 
@@ -325,12 +326,17 @@ export default function App() {
               />
               <Stack.Screen
                 name="TripHome"
-                component={TripHomeScreen}
+                component={TripTabScreen}
                 options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="TripDetail"
                 component={TripDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TripHomeOld"
+                component={TripHomeScreen}
                 options={{ headerShown: false }}
               />
               <Stack.Screen

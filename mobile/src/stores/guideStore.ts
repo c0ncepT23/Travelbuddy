@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Guide, GuideWithPlaces, GuideDayGroup, SavedItem } from '../types';
-import { api } from '../services/api';
+import api from '../config/api';
 
 interface GuideState {
   guides: Guide[];

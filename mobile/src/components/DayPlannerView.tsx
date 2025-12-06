@@ -162,7 +162,13 @@ export const DayPlannerView: React.FC<DayPlannerViewProps> = ({
   };
 
   const currentDayItems = getItemsForDay(selectedDay);
-  const unassignedItems = getItemsForDay(null);
+  
+  // Filter out guide places from unassigned - they show in Guide Drawer instead
+  const allUnassignedItems = getItemsForDay(null);
+  const unassignedItems = allUnassignedItems.filter(item => {
+    // If item is from a guide (has video_type: 'guide'), don't show in Unassigned
+    return item.extra_info?.video_type !== 'guide';
+  });
 
   const handleDragEnd = async (items: SavedItem[]) => {
     HapticFeedback.medium();

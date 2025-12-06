@@ -58,10 +58,14 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
   const [expandedDays, setExpandedDays] = useState<Set<number | null>>(new Set([1])); // Day 1 expanded by default
 
   useEffect(() => {
-    if (isVisible) {
-      fetchGuidesWithPlaces(tripId);
-    }
-  }, [tripId, isVisible]);
+    // Always fetch guides on mount to show count in collapsed bar
+    console.log('[GuideDrawer] Fetching guides for trip:', tripId);
+    fetchGuidesWithPlaces(tripId);
+  }, [tripId]);
+
+  useEffect(() => {
+    console.log('[GuideDrawer] Guides loaded:', guidesWithPlaces.length);
+  }, [guidesWithPlaces]);
 
   const currentGuide = guidesWithPlaces[selectedGuideIndex];
 
@@ -153,15 +157,18 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
       transition={{ type: 'spring', damping: 20 }}
       style={styles.container}
     >
-      {/* Header */}
+      {/* Header with drag handle */}
       <TouchableOpacity 
         style={styles.header} 
         onPress={onToggle}
         activeOpacity={0.8}
       >
-        <Text style={styles.headerIcon}>📺</Text>
-        <Text style={styles.headerTitle}>GUIDES</Text>
-        <Text style={styles.headerArrow}>▼</Text>
+        <View style={styles.dragHandle} />
+        <View style={styles.headerContent}>
+          <Text style={styles.headerIcon}>📺</Text>
+          <Text style={styles.headerTitle}>GUIDE SOURCES</Text>
+          <Text style={styles.headerArrow}>▼</Text>
+        </View>
       </TouchableOpacity>
 
       {isLoading ? (
@@ -243,7 +250,9 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
               {/* Places by Day */}
               <ScrollView 
                 style={styles.placesScroll}
-                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.placesScrollContent}
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
               >
                 {getPlacesByDay(currentGuide).map((dayGroup) => (
                   <View key={dayGroup.day ?? 'all'} style={styles.daySection}>
@@ -388,86 +397,116 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: SCREEN_HEIGHT * 0.45,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: SCREEN_HEIGHT * 0.8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 15,
+    zIndex: 100,
   },
   
   // Collapsed bar
   collapsedBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1E293B',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 12,
+    zIndex: 100,
   },
   collapsedIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    fontSize: 18,
+    marginRight: 10,
   },
   collapsedText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   collapsedArrow: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#94A3B8',
-    marginLeft: 8,
+    marginLeft: 10,
   },
 
-  // Header
+  // Header with drag handle
   header: {
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    paddingTop: 10,
+    paddingBottom: 14,
+    paddingHorizontal: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2,
+    marginBottom: 10,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
   },
   headerIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    fontSize: 18,
+    marginRight: 10,
   },
   headerTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   headerArrow: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#94A3B8',
-    marginLeft: 8,
+    marginLeft: 10,
   },
 
   // Loading
   loadingContainer: {
-    padding: 40,
+    flex: 1,
+    padding: 60,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingText: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: 12,
+    fontSize: 15,
     color: '#64748B',
   },
 
   // Empty
   emptyContainer: {
-    padding: 40,
+    flex: 1,
+    padding: 60,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyIcon: {
     fontSize: 40,
@@ -487,36 +526,40 @@ const styles = StyleSheet.create({
 
   // Guide tabs
   tabsContainer: {
-    maxHeight: 56,
+    maxHeight: 64,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
   tabsContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
   },
   guideTab: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
     marginRight: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   guideTabActive: {
     backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   guideTabIcon: {
-    fontSize: 14,
-    marginRight: 6,
+    fontSize: 16,
+    marginRight: 8,
   },
   guideTabName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#475569',
-    maxWidth: 100,
+    maxWidth: 120,
   },
   guideTabNameActive: {
     color: '#FFFFFF',
@@ -524,11 +567,11 @@ const styles = StyleSheet.create({
   guideTabBadge: {
     backgroundColor: '#CBD5E1',
     borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 6,
+    marginLeft: 8,
     paddingHorizontal: 6,
   },
   guideTabBadgeActive: {
@@ -546,100 +589,128 @@ const styles = StyleSheet.create({
   // Guide content
   guideContent: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   guideInfo: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   guideTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1E293B',
+    lineHeight: 22,
   },
   guideDays: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 4,
   },
 
   // Places scroll
   placesScroll: {
     flex: 1,
   },
+  placesScrollContent: {
+    paddingBottom: 100,
+  },
 
   // Day section
   daySection: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    marginBottom: 8,
   },
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#F8FAFC',
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   dayHeaderText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
     color: '#1E293B',
     flex: 1,
   },
   dayHeaderCount: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#64748B',
-    marginRight: 8,
+    fontWeight: '500',
+    marginRight: 10,
   },
   dayHeaderArrow: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#94A3B8',
   },
 
   // Places list
   placesList: {
-    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
     paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   placeItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   placeIndicator: {
     width: 4,
-    height: 32,
+    height: 40,
     borderRadius: 2,
-    marginRight: 12,
+    marginRight: 14,
   },
   placeInfo: {
     flex: 1,
   },
   placeName: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#1E293B',
   },
   placeNameAdded: {
     color: '#94A3B8',
+    textDecorationLine: 'line-through',
   },
   placeCategory: {
     fontSize: 12,
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 3,
   },
   addButton: {
     backgroundColor: theme.colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   addButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   addedBadge: {
