@@ -131,9 +131,10 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
     }
   }, [items, currentTrip?.destination]);
 
-  // Set drawer items to all items when items load
+  // Keep drawer items synced with store items (for enrichment updates)
   useEffect(() => {
-    if (items && items.length > 0 && drawerItems.length === 0) {
+    if (items && items.length > 0) {
+      // Always update drawer items when store items change (includes photo enrichment)
       setDrawerItems(items);
     }
   }, [items]);

@@ -1,7 +1,7 @@
 // Google Maps Configuration
 // Using EXPO_PUBLIC_ prefix makes it available in the app
 // @ts-ignore - process.env is available in Expo
-export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAiWhzrvdNb2NKSyzWpvNrhImz72I395Qo';
 
 // Helper to generate Google Places photo URL
 export const getGooglePhotoUrl = (photoReference: string, maxWidth: number = 400): string => {
