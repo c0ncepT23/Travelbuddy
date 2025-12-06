@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,24 +8,42 @@ import {
   Dimensions,
   Image,
   Modal,
-  FlatList,
+  TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { MotiView } from 'moti';
+import { PanGestureHandler } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedGestureHandler,
+  withSpring,
+} from 'react-native-reanimated';
 import { HapticFeedback } from '../utils/haptics';
 import { GuideWithPlaces, GuidePlace, GuideDayGroup } from '../types';
-import { useGuideStore, getSourceTypeIcon, getGuideCategoryEmoji } from '../stores/guideStore';
+import { useGuideStore, getSourceTypeIcon } from '../stores/guideStore';
+import { getPlacePhotoUrl } from '../config/maps';
 import theme from '../config/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const DRAWER_COLLAPSED = 60;
+const DRAWER_EXPANDED = SCREEN_HEIGHT * 0.75;
 
 interface GuideDrawerProps {
   tripId: string;
-  selectedUserDay: number | null; // Currently selected day in user's plan
+  selectedUserDay: number | null;
   onAddToDay: (savedItemId: string, day: number) => void;
   isVisible: boolean;
   onToggle: () => void;
 }
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  food: '🍽️',
+  place: '📍',
+  shopping: '🛍️',
+  activity: '🎯',
+  accommodation: '🏨',
+  tip: '💡',
+};
 
 const getCategoryColor = (category: string): string => {
   switch (category) {
@@ -55,21 +73,46 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
   const [selectedGuideIndex, setSelectedGuideIndex] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
   const [placeToAdd, setPlaceToAdd] = useState<GuidePlace | null>(null);
-  const [expandedDays, setExpandedDays] = useState<Set<number | null>>(new Set([1])); // Day 1 expanded by default
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedDays, setExpandedDays] = useState<Set<number | null>>(new Set([1]));
+  
+  const drawerHeight = useSharedValue(isVisible ? DRAWER_EXPANDED : DRAWER_COLLAPSED);
 
   useEffect(() => {
-    // Always fetch guides on mount to show count in collapsed bar
+    drawerHeight.value = withSpring(isVisible ? DRAWER_EXPANDED : DRAWER_COLLAPSED, { damping: 20 });
+  }, [isVisible]);
+
+  useEffect(() => {
     console.log('[GuideDrawer] Fetching guides for trip:', tripId);
     fetchGuidesWithPlaces(tripId);
   }, [tripId]);
 
-  useEffect(() => {
-    console.log('[GuideDrawer] Guides loaded:', guidesWithPlaces.length);
-  }, [guidesWithPlaces]);
+  const gestureHandler = useAnimatedGestureHandler({
+    onStart: (_, ctx: any) => {
+      ctx.startHeight = drawerHeight.value;
+    },
+    onActive: (event, ctx: any) => {
+      const newHeight = ctx.startHeight - event.translationY;
+      if (newHeight >= DRAWER_COLLAPSED && newHeight <= DRAWER_EXPANDED) {
+        drawerHeight.value = newHeight;
+      }
+    },
+    onEnd: (event) => {
+      if (event.velocityY > 500 || drawerHeight.value < (DRAWER_COLLAPSED + DRAWER_EXPANDED) / 2) {
+        drawerHeight.value = withSpring(DRAWER_COLLAPSED, { damping: 20 });
+      } else {
+        drawerHeight.value = withSpring(DRAWER_EXPANDED, { damping: 20 });
+      }
+    },
+  });
+
+  const animatedDrawerStyle = useAnimatedStyle(() => ({
+    height: drawerHeight.value,
+  }));
 
   const currentGuide = guidesWithPlaces[selectedGuideIndex];
 
-  // Group places by day for current guide
+  // Group places by day
   const getPlacesByDay = (guide: GuideWithPlaces): GuideDayGroup[] => {
     const dayMap = new Map<number | null, GuidePlace[]>();
     
@@ -81,7 +124,6 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
       dayMap.get(day)!.push(place);
     }
     
-    // Convert to array and sort
     const groups: GuideDayGroup[] = [];
     const sortedDays = Array.from(dayMap.keys()).sort((a, b) => {
       if (a === null) return 1;
@@ -97,6 +139,16 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
     }
     
     return groups;
+  };
+
+  // Filter places by search
+  const filterPlaces = (places: GuidePlace[]): GuidePlace[] => {
+    if (!searchQuery.trim()) return places;
+    const query = searchQuery.toLowerCase();
+    return places.filter(p => 
+      p.name.toLowerCase().includes(query) ||
+      p.category.toLowerCase().includes(query)
+    );
   };
 
   const toggleDayExpanded = (day: number | null) => {
@@ -122,19 +174,73 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
     HapticFeedback.medium();
     setShowAddModal(false);
     
-    // Call the store to update
     const result = await addPlaceToDay(tripId, currentGuide.id, placeToAdd.saved_item_id, day);
     
     if (result) {
-      // Also notify parent
       onAddToDay(placeToAdd.saved_item_id, day);
     }
     
     setPlaceToAdd(null);
   };
 
+  const getPlacePhoto = (place: GuidePlace): string | null => {
+    // Try to get photo from the place's saved item data
+    return getPlacePhotoUrl(place.photos_json, 200);
+  };
+
+  // Render place card (matching PlaceListDrawer style)
+  const renderPlaceCard = (place: GuidePlace, index: number) => {
+    const photoUrl = getPlacePhoto(place);
+    const emoji = CATEGORY_EMOJIS[place.category] || '📍';
+    const isAdded = place.planned_day !== null;
+
+    return (
+      <View key={place.saved_item_id} style={styles.placeCard}>
+        <View style={styles.placeCardLeft}>
+          {/* Photo or emoji icon */}
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.placeIconPhoto} />
+          ) : (
+            <View style={[styles.placeIconContainer, { backgroundColor: getCategoryColor(place.category) + '20' }]}>
+              <Text style={styles.placeIcon}>{emoji}</Text>
+            </View>
+          )}
+          
+          <View style={styles.placeInfo}>
+            <Text style={[styles.placeName, isAdded && styles.placeNameAdded]} numberOfLines={1}>
+              {place.name}
+            </Text>
+            <Text style={styles.placeCategory} numberOfLines={1}>
+              {emoji} {place.category} {place.location_name ? `• ${place.location_name}` : ''}
+            </Text>
+            {place.rating && (
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingStar}>★</Text>
+                <Text style={styles.ratingText}>{Number(place.rating).toFixed(1)}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        {/* Add button or Added badge */}
+        {isAdded ? (
+          <View style={styles.addedBadge}>
+            <Text style={styles.addedText}>✓ Day {place.planned_day}</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => handleAddPress(place)}
+          >
+            <Text style={styles.addButtonText}>+ Add</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  // Collapsed bar
   if (!isVisible) {
-    // Collapsed state - just show a toggle bar
     return (
       <TouchableOpacity 
         style={styles.collapsedBar} 
@@ -143,7 +249,7 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
       >
         <Text style={styles.collapsedIcon}>📺</Text>
         <Text style={styles.collapsedText}>
-          GUIDES {guidesWithPlaces.length > 0 ? `(${guidesWithPlaces.length})` : ''}
+          GUIDE SOURCES {guidesWithPlaces.length > 0 ? `(${guidesWithPlaces.length})` : ''}
         </Text>
         <Text style={styles.collapsedArrow}>▲</Text>
       </TouchableOpacity>
@@ -151,25 +257,21 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
   }
 
   return (
-    <MotiView
-      from={{ translateY: 300 }}
-      animate={{ translateY: 0 }}
-      transition={{ type: 'spring', damping: 20 }}
-      style={styles.container}
-    >
-      {/* Header with drag handle */}
-      <TouchableOpacity 
-        style={styles.header} 
-        onPress={onToggle}
-        activeOpacity={0.8}
-      >
-        <View style={styles.dragHandle} />
-        <View style={styles.headerContent}>
-          <Text style={styles.headerIcon}>📺</Text>
-          <Text style={styles.headerTitle}>GUIDE SOURCES</Text>
-          <Text style={styles.headerArrow}>▼</Text>
-        </View>
-      </TouchableOpacity>
+    <Animated.View style={[styles.drawer, animatedDrawerStyle]}>
+      {/* Drag Handle */}
+      <PanGestureHandler onGestureEvent={gestureHandler}>
+        <Animated.View style={styles.dragHandleArea}>
+          <View style={styles.dragHandle} />
+        </Animated.View>
+      </PanGestureHandler>
+
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Guide Sources</Text>
+        <TouchableOpacity style={styles.closeButton} onPress={onToggle}>
+          <Text style={styles.closeButtonText}>▼</Text>
+        </TouchableOpacity>
+      </View>
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -181,49 +283,66 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
           <Text style={styles.emptyIcon}>📺</Text>
           <Text style={styles.emptyTitle}>No guides yet</Text>
           <Text style={styles.emptyText}>
-            Share YouTube travel videos in chat to add guides!
+            Share YouTube travel videos in chat to import guides!
           </Text>
         </View>
       ) : (
         <>
-          {/* Guide Tabs */}
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search places in guides..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Text style={styles.clearSearch}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Guide Tabs (like category chips) */}
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
-            style={styles.tabsContainer}
-            contentContainerStyle={styles.tabsContent}
+            style={styles.guideTabsScroll}
+            contentContainerStyle={styles.guideTabsContainer}
           >
             {guidesWithPlaces.map((guide, index) => (
               <TouchableOpacity
                 key={guide.id}
                 style={[
-                  styles.guideTab,
-                  selectedGuideIndex === index && styles.guideTabActive
+                  styles.guideChip,
+                  selectedGuideIndex === index && styles.guideChipActive
                 ]}
                 onPress={() => {
                   HapticFeedback.light();
                   setSelectedGuideIndex(index);
                 }}
               >
-                <Text style={styles.guideTabIcon}>
+                <Text style={styles.guideChipIcon}>
                   {getSourceTypeIcon(guide.source_type)}
                 </Text>
                 <Text 
                   style={[
-                    styles.guideTabName,
-                    selectedGuideIndex === index && styles.guideTabNameActive
+                    styles.guideChipText,
+                    selectedGuideIndex === index && styles.guideChipTextActive
                   ]}
                   numberOfLines={1}
                 >
-                  {guide.creator_name}
+                  {guide.creator_name || 'Guide'}
                 </Text>
                 <View style={[
-                  styles.guideTabBadge,
-                  selectedGuideIndex === index && styles.guideTabBadgeActive
+                  styles.guideChipBadge,
+                  selectedGuideIndex === index && styles.guideChipBadgeActive
                 ]}>
                   <Text style={[
-                    styles.guideTabCount,
-                    selectedGuideIndex === index && styles.guideTabCountActive
+                    styles.guideChipCount,
+                    selectedGuideIndex === index && styles.guideChipCountActive
                   ]}>
                     {guide.total_places}
                   </Text>
@@ -232,11 +351,16 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
             ))}
           </ScrollView>
 
-          {/* Selected Guide Content */}
+          {/* Guide Content */}
           {currentGuide && (
-            <View style={styles.guideContent}>
-              {/* Guide Info */}
-              <View style={styles.guideInfo}>
+            <ScrollView 
+              style={styles.placesScroll}
+              contentContainerStyle={styles.placesContainer}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              {/* Guide Info Card */}
+              <View style={styles.guideInfoCard}>
                 <Text style={styles.guideTitle} numberOfLines={2}>
                   {currentGuide.title}
                 </Text>
@@ -247,85 +371,44 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
                 )}
               </View>
 
-              {/* Places by Day */}
-              <ScrollView 
-                style={styles.placesScroll}
-                contentContainerStyle={styles.placesScrollContent}
-                showsVerticalScrollIndicator={true}
-                nestedScrollEnabled={true}
-              >
-                {getPlacesByDay(currentGuide).map((dayGroup) => (
+              {/* Day Sections (like area sections) */}
+              {getPlacesByDay(currentGuide).map((dayGroup) => {
+                const filteredPlaces = filterPlaces(dayGroup.places);
+                if (filteredPlaces.length === 0) return null;
+                
+                const isExpanded = expandedDays.has(dayGroup.day);
+                
+                return (
                   <View key={dayGroup.day ?? 'all'} style={styles.daySection}>
                     {/* Day Header */}
-                    <TouchableOpacity
+                    <TouchableOpacity 
                       style={styles.dayHeader}
                       onPress={() => toggleDayExpanded(dayGroup.day)}
+                      activeOpacity={0.7}
                     >
-                      <Text style={styles.dayHeaderText}>
-                        {dayGroup.day 
-                          ? `Day ${dayGroup.day}` 
-                          : 'All Places'}
-                      </Text>
-                      <Text style={styles.dayHeaderCount}>
-                        {dayGroup.places.length} places
-                      </Text>
-                      <Text style={styles.dayHeaderArrow}>
-                        {expandedDays.has(dayGroup.day) ? '▼' : '▶'}
+                      <View style={styles.dayHeaderLeft}>
+                        <Text style={styles.dayTitle}>
+                          {dayGroup.day ? `Day ${dayGroup.day}` : 'All Places'}
+                        </Text>
+                        <Text style={styles.dayCount}>
+                          {filteredPlaces.length} {filteredPlaces.length === 1 ? 'place' : 'places'}
+                        </Text>
+                      </View>
+                      <Text style={styles.dayChevron}>
+                        {isExpanded ? '▼' : '▶'}
                       </Text>
                     </TouchableOpacity>
 
-                    {/* Places List */}
-                    {expandedDays.has(dayGroup.day) && (
-                      <View style={styles.placesList}>
-                        {dayGroup.places.map((place) => {
-                          const isAdded = place.planned_day !== null;
-                          
-                          return (
-                            <View key={place.saved_item_id} style={styles.placeItem}>
-                              <View style={[
-                                styles.placeIndicator,
-                                { backgroundColor: getCategoryColor(place.category) }
-                              ]} />
-                              
-                              <View style={styles.placeInfo}>
-                                <Text 
-                                  style={[
-                                    styles.placeName,
-                                    isAdded && styles.placeNameAdded
-                                  ]} 
-                                  numberOfLines={1}
-                                >
-                                  {place.name}
-                                </Text>
-                                <Text style={styles.placeCategory}>
-                                  {getGuideCategoryEmoji(place.category)} {place.category}
-                                  {place.area_name ? ` • ${place.area_name}` : ''}
-                                </Text>
-                              </View>
-
-                              {isAdded ? (
-                                <View style={styles.addedBadge}>
-                                  <Text style={styles.addedText}>
-                                    ✓ Day {place.planned_day}
-                                  </Text>
-                                </View>
-                              ) : (
-                                <TouchableOpacity
-                                  style={styles.addButton}
-                                  onPress={() => handleAddPress(place)}
-                                >
-                                  <Text style={styles.addButtonText}>+ Add</Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          );
-                        })}
+                    {/* Places */}
+                    {isExpanded && (
+                      <View style={styles.dayPlaces}>
+                        {filteredPlaces.map((place, idx) => renderPlaceCard(place, idx))}
                       </View>
                     )}
                   </View>
-                ))}
-              </ScrollView>
-            </View>
+                );
+              })}
+            </ScrollView>
           )}
         </>
       )}
@@ -339,12 +422,12 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.addModal}>
-            <Text style={styles.addModalTitle}>Add to your plan?</Text>
+            <Text style={styles.addModalTitle}>Add to Day Plan</Text>
             
             {placeToAdd && (
               <View style={styles.addModalPlace}>
                 <Text style={styles.addModalPlaceEmoji}>
-                  {getGuideCategoryEmoji(placeToAdd.category)}
+                  {CATEGORY_EMOJIS[placeToAdd.category] || '📍'}
                 </Text>
                 <Text style={styles.addModalPlaceName} numberOfLines={1}>
                   {placeToAdd.name}
@@ -353,14 +436,13 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
             )}
 
             <Text style={styles.addModalLabel}>Select day:</Text>
-            
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
               style={styles.dayPicker}
               contentContainerStyle={styles.dayPickerContent}
             >
-              {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+              {[1, 2, 3, 4, 5, 6, 7].map(day => (
                 <TouchableOpacity
                   key={day}
                   style={[
@@ -379,60 +461,91 @@ export const GuideDrawer: React.FC<GuideDrawerProps> = ({
               ))}
             </ScrollView>
 
-            <TouchableOpacity
+            <TouchableOpacity 
               style={styles.cancelButton}
-              onPress={() => {
-                setShowAddModal(false);
-                setPlaceToAdd(null);
-              }}
+              onPress={() => setShowAddModal(false)}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </MotiView>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  // Drawer container (matching PlaceListDrawer)
+  drawer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    height: SCREEN_HEIGHT * 0.8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 15,
-    zIndex: 100,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  
+
+  // Drag Handle
+  dragHandleArea: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    letterSpacing: -0.5,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+
   // Collapsed bar
   collapsedBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    height: 56,
+    backgroundColor: '#1E293B',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
-    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 12,
-    zIndex: 100,
   },
   collapsedIcon: {
     fontSize: 18,
@@ -442,269 +555,228 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
   },
   collapsedArrow: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#94A3B8',
     marginLeft: 10,
   },
 
-  // Header with drag handle
-  header: {
-    alignItems: 'center',
-    backgroundColor: '#1E293B',
-    paddingTop: 10,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
-    marginBottom: 10,
-  },
-  headerContent: {
+  // Search
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerIcon: {
-    fontSize: 18,
-    marginRight: 10,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 1.5,
-  },
-  headerArrow: {
-    fontSize: 14,
-    color: '#94A3B8',
-    marginLeft: 10,
-  },
-
-  // Loading
-  loadingContainer: {
-    flex: 1,
-    padding: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: '#64748B',
-  },
-
-  // Empty
-  emptyContainer: {
-    flex: 1,
-    padding: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyIcon: {
-    fontSize: 40,
+    marginHorizontal: 20,
     marginBottom: 12,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-
-  // Guide tabs
-  tabsContainer: {
-    maxHeight: 64,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  tabsContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  guideTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
     paddingHorizontal: 14,
     paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
-    marginRight: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  guideTabActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  guideTabIcon: {
+  searchIcon: {
     fontSize: 16,
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    padding: 0,
+  },
+  clearSearch: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    padding: 4,
+  },
+
+  // Guide Tabs (like category chips)
+  guideTabsScroll: {
+    maxHeight: 50,
+    marginBottom: 12,
+  },
+  guideTabsContainer: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  guideChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
     marginRight: 8,
   },
-  guideTabName: {
+  guideChipActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  guideChipIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  guideChipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#475569',
-    maxWidth: 120,
+    color: '#6B7280',
+    maxWidth: 100,
   },
-  guideTabNameActive: {
+  guideChipTextActive: {
     color: '#FFFFFF',
   },
-  guideTabBadge: {
-    backgroundColor: '#CBD5E1',
+  guideChipBadge: {
+    backgroundColor: '#E5E7EB',
     borderRadius: 10,
-    minWidth: 22,
-    height: 22,
+    minWidth: 20,
+    height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: 6,
     paddingHorizontal: 6,
   },
-  guideTabBadgeActive: {
+  guideChipBadgeActive: {
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
-  guideTabCount: {
+  guideChipCount: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#475569',
+    color: '#6B7280',
   },
-  guideTabCountActive: {
+  guideChipCountActive: {
     color: '#FFFFFF',
   },
 
-  // Guide content
-  guideContent: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  guideInfo: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  guideTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-    lineHeight: 22,
-  },
-  guideDays: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 4,
-  },
-
-  // Places scroll
+  // Places List
   placesScroll: {
     flex: 1,
   },
-  placesScrollContent: {
-    paddingBottom: 100,
+  placesContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
 
-  // Day section
+  // Guide Info Card
+  guideInfoCard: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  guideTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    lineHeight: 20,
+  },
+  guideDays: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+
+  // Day Section (like area section)
   daySection: {
     marginBottom: 8,
   },
   dayHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 8,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F3F4F6',
   },
-  dayHeaderText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
+  dayHeaderLeft: {
     flex: 1,
   },
-  dayHeaderCount: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
-    marginRight: 10,
+  dayTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 2,
   },
-  dayHeaderArrow: {
-    fontSize: 12,
-    color: '#94A3B8',
+  dayCount: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  dayChevron: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '300',
+  },
+  dayPlaces: {
+    paddingTop: 8,
   },
 
-  // Places list
-  placesList: {
-    marginHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    paddingBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  placeItem: {
+  // Place Card (matching PlaceListDrawer)
+  placeCard: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#F9FAFB',
   },
-  placeIndicator: {
-    width: 4,
-    height: 40,
-    borderRadius: 2,
-    marginRight: 14,
+  placeCardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  placeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  placeIconPhoto: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  placeIcon: {
+    fontSize: 22,
   },
   placeInfo: {
     flex: 1,
+    marginRight: 12,
   },
   placeName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#1F2937',
+    marginBottom: 2,
   },
   placeNameAdded: {
-    color: '#94A3B8',
-    textDecorationLine: 'line-through',
+    color: '#9CA3AF',
   },
   placeCategory: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 3,
+    fontSize: 13,
+    color: '#6B7280',
   },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  ratingStar: {
+    fontSize: 12,
+    color: '#FBBF24',
+    marginRight: 3,
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+
+  // Add Button
   addButton: {
     backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
   },
@@ -716,13 +788,49 @@ const styles = StyleSheet.create({
   addedBadge: {
     backgroundColor: '#DCFCE7',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   addedText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#16A34A',
+  },
+
+  // Loading & Empty States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+    opacity: 0.5,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
 
   // Add Modal
@@ -735,77 +843,78 @@ const styles = StyleSheet.create({
   },
   addModal: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 340,
   },
   addModalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#1F2937',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   addModalPlace: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 16,
+    backgroundColor: '#F3F4F6',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 20,
   },
   addModalPlaceEmoji: {
-    fontSize: 20,
-    marginRight: 10,
+    fontSize: 24,
+    marginRight: 12,
   },
   addModalPlaceName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#1F2937',
     flex: 1,
   },
   addModalLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#64748B',
-    marginBottom: 10,
+    color: '#6B7280',
+    marginBottom: 12,
   },
   dayPicker: {
     maxHeight: 50,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   dayPickerContent: {
     gap: 8,
   },
   dayPickerItem: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
     marginRight: 8,
   },
   dayPickerItemSelected: {
     backgroundColor: theme.colors.primary,
   },
   dayPickerText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#475569',
+    color: '#6B7280',
   },
   dayPickerTextSelected: {
     color: '#FFFFFF',
   },
   cancelButton: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
   },
   cancelButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#6B7280',
   },
 });
 
 export default GuideDrawer;
-
