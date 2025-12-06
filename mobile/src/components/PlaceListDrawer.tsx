@@ -20,6 +20,8 @@ import Animated, {
 import * as Location from 'expo-location';
 import { SavedItem, ItemCategory, Trip } from '../types';
 import { PlaceDetailCard } from './PlaceDetailCard';
+import { getPlacePhotoUrl } from '../config/maps';
+import { useItemStore } from '../stores/itemStore';
 import theme from '../config/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -117,18 +119,80 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
     height: drawerHeight.value,
   }));
 
-  // Filter items by search and category
+  // Get enrichment function from store
+  const { enrichItemWithGoogle } = useItemStore();
+
+  // Fuzzy search helper - checks if query characters appear in order in text
+  const fuzzyMatch = (text: string, query: string): { matches: boolean; score: number } => {
+    if (!text || !query) return { matches: false, score: 0 };
+    
+    const textLower = text.toLowerCase();
+    const queryLower = query.toLowerCase();
+    
+    // Exact match or contains - highest score
+    if (textLower.includes(queryLower)) {
+      return { matches: true, score: 100 - textLower.indexOf(queryLower) };
+    }
+    
+    // Fuzzy match - characters appear in order
+    let queryIndex = 0;
+    let consecutiveMatches = 0;
+    let maxConsecutive = 0;
+    let lastMatchIndex = -2;
+    
+    for (let i = 0; i < textLower.length && queryIndex < queryLower.length; i++) {
+      if (textLower[i] === queryLower[queryIndex]) {
+        if (i === lastMatchIndex + 1) {
+          consecutiveMatches++;
+          maxConsecutive = Math.max(maxConsecutive, consecutiveMatches);
+        } else {
+          consecutiveMatches = 1;
+        }
+        lastMatchIndex = i;
+        queryIndex++;
+      }
+    }
+    
+    if (queryIndex === queryLower.length) {
+      // All query characters found in order
+      const score = 50 + (maxConsecutive * 10) - (lastMatchIndex - queryLower.length);
+      return { matches: true, score };
+    }
+    
+    return { matches: false, score: 0 };
+  };
+
+  // Filter items by search and category with fuzzy matching
   const filteredItems = useMemo(() => {
     let result = items || [];
     
-    // Filter by search
+    // Filter by search with fuzzy matching
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(item => 
-        item.name.toLowerCase().includes(query) ||
-        item.area_name?.toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query)
-      );
+      const query = searchQuery.trim();
+      
+      const scoredItems = result.map(item => {
+        const nameMatch = fuzzyMatch(item.name, query);
+        const areaMatch = fuzzyMatch(item.area_name || '', query);
+        const descMatch = fuzzyMatch(item.description || '', query);
+        const locationMatch = fuzzyMatch(item.location_name || '', query);
+        
+        const bestScore = Math.max(
+          nameMatch.score * 2, // Name matches weighted higher
+          areaMatch.score,
+          descMatch.score,
+          locationMatch.score
+        );
+        
+        const matches = nameMatch.matches || areaMatch.matches || descMatch.matches || locationMatch.matches;
+        
+        return { item, score: bestScore, matches };
+      });
+      
+      // Filter to matching items and sort by score
+      result = scoredItems
+        .filter(({ matches }) => matches)
+        .sort((a, b) => b.score - a.score)
+        .map(({ item }) => item);
     }
     
     // Filter by category
@@ -138,6 +202,34 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
     
     return result;
   }, [items, searchQuery, activeCategory]);
+
+  // Track which items we've tried to enrich
+  const enrichedRef = useRef<Set<string>>(new Set());
+
+  // Auto-enrich items without photos (runs once when items change)
+  useEffect(() => {
+    const enrichItems = async () => {
+      // Only enrich first 5 items to avoid too many API calls
+      const itemsNeedingEnrichment = filteredItems.filter(
+        item => !item.photos_json && !enrichedRef.current.has(item.id)
+      ).slice(0, 5);
+      
+      for (const item of itemsNeedingEnrichment) {
+        enrichedRef.current.add(item.id);
+        try {
+          await enrichItemWithGoogle(item.id);
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          // Silently fail - item just won't have photo
+        }
+      }
+    };
+    
+    if (filteredItems.some(item => !item.photos_json && !enrichedRef.current.has(item.id))) {
+      enrichItems();
+    }
+  }, [filteredItems.length]);
 
   // Extract city from formatted address
   const extractCity = (address: string | undefined): string => {
@@ -198,22 +290,12 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
     });
   };
 
+  // Get photo URL using helper from config/maps
   const getPlacePhoto = (item: SavedItem): string | null => {
-    if (!item.photos_json) return null;
-    try {
-      const photos = Array.isArray(item.photos_json)
-        ? item.photos_json
-        : JSON.parse(item.photos_json);
-      if (photos.length > 0 && photos[0].photo_reference) {
-        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=200&photoreference=${photos[0].photo_reference}&key=AIzaSyAiWhzrvdNb2NKSyzWpvNrhImz72I395Qo`;
-      }
-    } catch {
-      return null;
-    }
-    return null;
+    return getPlacePhotoUrl(item.photos_json, 200);
   };
 
-  // Render a place card
+  // Render a place card with photo support
   const renderPlaceCard = (item: SavedItem) => {
     const photoUrl = getPlacePhoto(item);
     const emoji = CATEGORY_EMOJIS[item.category] || '📍';
@@ -239,9 +321,14 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
           activeOpacity={0.7}
         >
           <View style={styles.placeCardLeft}>
-            <View style={styles.placeIconContainer}>
-              <Text style={styles.placeIcon}>{emoji}</Text>
-            </View>
+            {/* Show photo as icon if available, otherwise emoji */}
+            {photoUrl ? (
+              <Image source={{ uri: photoUrl }} style={styles.placeIconPhoto} />
+            ) : (
+              <View style={styles.placeIconContainer}>
+                <Text style={styles.placeIcon}>{emoji}</Text>
+              </View>
+            )}
             <View style={styles.placeInfo}>
               <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
               <Text style={styles.placeDescription} numberOfLines={2}>
@@ -251,11 +338,15 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
                 <View style={styles.ratingRow}>
                   <Text style={styles.ratingStar}>★</Text>
                   <Text style={styles.ratingText}>{Number(item.rating).toFixed(1)}</Text>
+                  {item.user_ratings_total && (
+                    <Text style={styles.ratingCount}>({item.user_ratings_total})</Text>
+                  )}
                 </View>
               )}
             </View>
           </View>
           
+          {/* Large photo on right side */}
           {photoUrl ? (
             <Image source={{ uri: photoUrl }} style={styles.placePhoto} />
           ) : (
@@ -626,6 +717,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  ratingCount: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginLeft: 4,
+  },
+  placeIconPhoto: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    marginRight: 12,
   },
   placePhoto: {
     width: 72,

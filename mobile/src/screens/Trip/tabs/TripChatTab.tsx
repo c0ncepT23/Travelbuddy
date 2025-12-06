@@ -154,7 +154,7 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     stopTyping(tripId);
 
     try {
-      await sendMessageViaSocket(tripId, textToSend, 'text');
+      await sendMessageViaSocket(tripId, textToSend);
     } catch (error) {
       console.error('[ChatTab] Send error:', error);
     }
@@ -238,7 +238,7 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     const isAI = item.metadata?.isAI || item.sender_email === 'ai@travelagent.app';
     const isOwnMessage = item.sender_id === user?.id && !isAI;
     const showDateSeparator = index === messages.length - 1 || 
-      formatMessageDate(item.created_at) !== formatMessageDate(messages[index + 1]?.created_at);
+      formatMessageDate(new Date(item.created_at)) !== formatMessageDate(new Date(messages[index + 1]?.created_at));
 
     return (
       <View>
@@ -316,7 +316,7 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
 
   // Typing indicator
   const renderTypingIndicator = () => {
-    const otherTypingUsers = typingUsers.filter(u => u !== user?.id);
+    const otherTypingUsers = typingUsers.filter(u => String(u.userId) !== user?.id);
     if (otherTypingUsers.length === 0) return null;
 
     return (
@@ -445,9 +445,16 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
         <ImportLocationsModal
           visible={!!importModalData}
           onClose={() => setImportModalData(null)}
-          locations={importModalData.locations}
-          source={importModalData.source}
+          sourceUrl={importModalData.sourceUrl}
+          sourceType={importModalData.sourceType}
+          sourceTitle={importModalData.sourceTitle}
+          summary={importModalData.summary}
+          places={importModalData.places}
           tripId={tripId}
+          onImportComplete={(count) => {
+            console.log(`[ChatTab] Imported ${count} places`);
+            setImportModalData(null);
+          }}
         />
       )}
     </KeyboardAvoidingView>

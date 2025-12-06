@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types';
 import { SavedItemService } from '../services/savedItem.service';
+import { GooglePlacesService } from '../services/googlePlaces.service';
+import { SavedItemModel } from '../models/savedItem.model';
 import logger from '../config/logger';
 
 export class SavedItemController {
@@ -402,6 +404,93 @@ export class SavedItemController {
       res.status(400).json({
         success: false,
         error: error.message || 'Failed to reorder items',
+      });
+    }
+  }
+
+  /**
+   * Enrich item with Google Places data (photos, rating, etc.)
+   */
+  static async enrichWithGoogle(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { id } = req.params;
+      
+      // Get the item first
+      const item = await SavedItemService.getItem(id, req.user.id);
+      
+      if (!item) {
+        res.status(404).json({ success: false, error: 'Item not found' });
+        return;
+      }
+
+      // Skip if already enriched with photos
+      if (item.photos_json && item.photos_json.length > 0) {
+        res.status(200).json({
+          success: true,
+          data: item,
+          message: 'Item already enriched',
+        });
+        return;
+      }
+
+      // Build search query with location hint
+      const locationHint = item.location_name || item.formatted_address || '';
+      logger.info(`[Enrich] Enriching "${item.name}" with hint: ${locationHint}`);
+
+      const googleData = await GooglePlacesService.enrichPlace(item.name, locationHint);
+
+      if (!googleData) {
+        res.status(200).json({
+          success: true,
+          data: item,
+          message: 'No Google data found for this place',
+        });
+        return;
+      }
+
+      // Update the item with Google data
+      const updates: any = {};
+      
+      if (googleData.place_id) updates.google_place_id = googleData.place_id;
+      if (googleData.rating) updates.rating = googleData.rating;
+      if (googleData.user_ratings_total) updates.user_ratings_total = googleData.user_ratings_total;
+      if (googleData.price_level !== undefined) updates.price_level = googleData.price_level;
+      if (googleData.formatted_address) updates.formatted_address = googleData.formatted_address;
+      if (googleData.area_name) updates.area_name = googleData.area_name;
+      if (googleData.photos && googleData.photos.length > 0) {
+        updates.photos_json = JSON.stringify(googleData.photos);
+      }
+      if (googleData.opening_hours) {
+        updates.opening_hours_json = JSON.stringify(googleData.opening_hours);
+      }
+      if (googleData.geometry?.location) {
+        // Only update location if not already set
+        if (!item.location_lat || !item.location_lng) {
+          updates.location_lat = googleData.geometry.location.lat;
+          updates.location_lng = googleData.geometry.location.lng;
+        }
+      }
+
+      // Update in database
+      const updatedItem = await SavedItemModel.update(id, updates);
+
+      logger.info(`[Enrich] Successfully enriched "${item.name}" - Rating: ${googleData.rating}, Photos: ${googleData.photos?.length || 0}`);
+
+      res.status(200).json({
+        success: true,
+        data: updatedItem,
+        message: 'Item enriched with Google data',
+      });
+    } catch (error: any) {
+      logger.error('Enrich item error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to enrich item',
       });
     }
   }

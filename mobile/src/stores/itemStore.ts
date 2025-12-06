@@ -54,6 +54,9 @@ interface ItemState {
   fetchItemsByDay: (tripId: string) => Promise<DayGroup[]>;
   assignItemToDay: (itemId: string, day: number | null) => Promise<SavedItem>;
   reorderItemsInDay: (tripId: string, day: number | null, itemIds: string[]) => Promise<void>;
+  // Enrichment
+  enrichItemWithGoogle: (itemId: string) => Promise<SavedItem>;
+  enrichAllItems: (tripId: string) => Promise<void>;
   setItems: (items: SavedItem[]) => void;
   clearItems: () => void;
 }
@@ -339,6 +342,48 @@ export const useItemStore = create<ItemState>((set, get) => ({
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to reorder items');
     }
+  },
+
+  enrichItemWithGoogle: async (itemId) => {
+    try {
+      const response = await api.post<{ data: SavedItem }>(`/items/${itemId}/enrich`);
+      const enrichedItem = response.data.data;
+      
+      // Update local items state with enriched data
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === itemId ? enrichedItem : item
+        ),
+        currentItem:
+          state.currentItem?.id === itemId ? enrichedItem : state.currentItem,
+      }));
+      
+      console.log(`[ItemStore] Enriched item: ${enrichedItem.name}, Photos: ${enrichedItem.photos_json ? 'Yes' : 'No'}`);
+      return enrichedItem;
+    } catch (error: any) {
+      console.error('[ItemStore] Enrich error:', error);
+      throw new Error(error.response?.data?.error || 'Failed to enrich item');
+    }
+  },
+
+  enrichAllItems: async (tripId) => {
+    const { items, enrichItemWithGoogle } = get();
+    const itemsToEnrich = items.filter(item => !item.photos_json);
+    
+    console.log(`[ItemStore] Enriching ${itemsToEnrich.length} items without photos`);
+    
+    // Enrich items sequentially with delay to avoid rate limiting
+    for (const item of itemsToEnrich) {
+      try {
+        await enrichItemWithGoogle(item.id);
+        // Small delay between API calls
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`[ItemStore] Failed to enrich ${item.name}:`, error);
+      }
+    }
+    
+    console.log(`[ItemStore] Enrichment complete`);
   },
 
   setItems: (items) => {

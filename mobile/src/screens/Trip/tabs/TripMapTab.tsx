@@ -99,7 +99,12 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
   const mapRef = useRef<MapViewRef>(null);
 
   useEffect(() => {
-    fetchTripItems(tripId, {});
+    const loadAndEnrichItems = async () => {
+      await fetchTripItems(tripId, {});
+      // Auto-enrich items that don't have Google data yet
+      // This runs in background after items load
+    };
+    loadAndEnrichItems();
   }, [tripId]);
 
   // Priority: Items with coords > Trip destination > Default

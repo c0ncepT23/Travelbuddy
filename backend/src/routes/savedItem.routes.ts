@@ -111,5 +111,12 @@ router.post(
   SavedItemController.markAsVisited
 );
 
+// Enrich item with Google Places data
+router.post(
+  '/:id/enrich',
+  validate([param('id').isUUID().withMessage('Invalid item ID')]),
+  SavedItemController.enrichWithGoogle
+);
+
 export default router;
 
