@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,15 +34,6 @@ interface TripChatTabProps {
   navigation: any;
 }
 
-// Quick prompt suggestions
-const QUICK_PROMPTS = [
-  { icon: '🎲', label: 'Surprise me!', prompt: 'Surprise me with a hidden gem nearby!' },
-  { icon: '🍜', label: 'Food spots', prompt: 'What are the best local food spots here?' },
-  { icon: '📸', label: 'Photo spots', prompt: 'Where can I get the best photos?' },
-  { icon: '🌙', label: 'Nightlife', prompt: 'What\'s the nightlife like here?' },
-  { icon: '🏛️', label: 'Culture', prompt: 'Tell me about local culture and customs' },
-  { icon: '💰', label: 'Budget tips', prompt: 'How can I save money on this trip?' },
-];
 
 // Helper functions
 const formatMessageTime = (date: Date): string => {
@@ -169,11 +160,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     }
   };
 
-  // Handle quick prompt
-  const handleQuickPrompt = (prompt: string) => {
-    HapticFeedback.light();
-    handleSendMessage(prompt);
-  };
 
   // Pull to refresh
   const handleRefresh = async () => {
@@ -244,32 +230,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
         </View>
       </MotiView>
 
-      {/* Quick Prompts */}
-      <MotiView
-        from={{ translateY: 20, opacity: 0 }}
-        animate={{ translateY: 0, opacity: 1 }}
-        transition={{ type: 'timing', duration: 400, delay: 800 }}
-        style={styles.quickPromptsSection}
-      >
-        <Text style={styles.quickPromptsTitle}>Try asking:</Text>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickPromptsScroll}
-        >
-          {QUICK_PROMPTS.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.quickPromptCard}
-              onPress={() => handleQuickPrompt(item.prompt)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.quickPromptIcon}>{item.icon}</Text>
-              <Text style={styles.quickPromptLabel}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </MotiView>
     </View>
   );
 
@@ -439,28 +399,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
 
       {/* Input Area */}
       <View style={styles.inputContainer}>
-        {/* Quick Actions Row when there are messages */}
-        {hasMessages && (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.inlineQuickPrompts}
-            contentContainerStyle={styles.inlineQuickPromptsContent}
-          >
-            {QUICK_PROMPTS.slice(0, 4).map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.inlinePromptChip}
-                onPress={() => handleQuickPrompt(item.prompt)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.inlinePromptIcon}>{item.icon}</Text>
-                <Text style={styles.inlinePromptText}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.textInput}
@@ -620,47 +558,6 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontWeight: '500',
   },
-  quickPromptsSection: {
-    marginTop: 32,
-    width: '100%',
-  },
-  quickPromptsTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#94A3B8',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  quickPromptsScroll: {
-    paddingHorizontal: 4,
-  },
-  quickPromptCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 12,
-    alignItems: 'center',
-    minWidth: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  quickPromptIcon: {
-    fontSize: 28,
-    marginBottom: 8,
-  },
-  quickPromptLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    textAlign: 'center',
-  },
 
   // Messages
   messagesList: {
@@ -801,30 +698,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 12,
     paddingTop: 8,
-  },
-  inlineQuickPrompts: {
-    marginBottom: 10,
-  },
-  inlineQuickPromptsContent: {
-    paddingRight: 8,
-  },
-  inlinePromptChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  inlinePromptIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  inlinePromptText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
   },
   inputWrapper: {
     flexDirection: 'row',

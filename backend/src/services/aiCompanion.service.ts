@@ -811,28 +811,39 @@ Respond with JSON:
   ): Promise<Array<SavedItem & { distance?: number }>> {
     let filtered: Array<SavedItem & { distance?: number }> = [...allPlaces];
 
-    // Filter by category if specified
-    if (intent.category) {
-      filtered = filtered.filter((p) => p.category === intent.category);
+    logger.info(`[FilterPlaces] Intent: ${JSON.stringify(intent)}`);
+    logger.info(`[FilterPlaces] All places count: ${allPlaces.length}`);
+    logger.info(`[FilterPlaces] Place categories: ${allPlaces.map(p => `${p.name}:${p.category}`).join(', ')}`);
+
+    // Filter by category if specified (case-insensitive)
+    if (intent.category && intent.category !== 'null' && intent.category !== null) {
+      const targetCategory = intent.category.toLowerCase();
+      filtered = filtered.filter((p) => p.category?.toLowerCase() === targetCategory);
+      logger.info(`[FilterPlaces] After category filter (${targetCategory}): ${filtered.length} places`);
     }
 
-    // Filter by keywords
-    if (intent.keywords.length > 0) {
-      filtered = filtered.filter((place) => {
+    // Filter by keywords (only if we still have results)
+    if (intent.keywords && intent.keywords.length > 0 && filtered.length > 0) {
+      const keywordFiltered = filtered.filter((place) => {
         const searchText = `${place.name} ${place.description} ${place.location_name}`.toLowerCase();
         return intent.keywords.some((keyword: string) =>
           searchText.includes(keyword.toLowerCase())
         );
       });
+      // Only apply keyword filter if it doesn't eliminate all results
+      if (keywordFiltered.length > 0) {
+        filtered = keywordFiltered;
+      }
+      logger.info(`[FilterPlaces] After keyword filter: ${filtered.length} places`);
     }
 
     // Filter by location if user has location and wants nearby
-    if (context.location && intent.distance !== 'any') {
-      const maxDistance = intent.distance === 'nearby' ? 500 : 2000; // meters
+    // Only apply if user explicitly wants nearby places
+    if (context.location && intent.distance === 'nearby') {
+      const placesWithCoords = filtered.filter((place) => place.location_lat && place.location_lng);
       
-      const withDistance = filtered
-        .filter((place) => place.location_lat && place.location_lng)
-        .map((place) => ({
+      if (placesWithCoords.length > 0) {
+        const withDistance = placesWithCoords.map((place) => ({
           ...place,
           distance: this.calculateDistance(
             context.location!.lat,
@@ -840,14 +851,17 @@ Respond with JSON:
             place.location_lat!,
             place.location_lng!
           ),
-        }))
-        .filter((place) => place.distance! <= maxDistance);
-      
-      // Sort by distance
-      withDistance.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-      filtered = withDistance;
+        }));
+        
+        // Sort by distance
+        withDistance.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        filtered = withDistance;
+        logger.info(`[FilterPlaces] After distance sort: ${filtered.length} places`);
+      }
     }
 
+    logger.info(`[FilterPlaces] Final result: ${filtered.length} places`);
+    
     // Limit results to top 5
     return filtered.slice(0, 5);
   }
