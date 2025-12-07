@@ -7,25 +7,36 @@ import {
   TouchableOpacity,
   RefreshControl,
   Platform,
+  StatusBar,
+  SafeAreaView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useCheckInStore } from '../../stores/checkInStore';
 import { CATEGORY_EMOJIS } from '../../config/maps';
 import { format } from 'date-fns';
 import { ShareStoryModal } from './ShareStoryModal';
 
+const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0;
+
 interface TimelineScreenProps {
-  tripId: string;
+  route?: any;
+  navigation?: any;
+  tripId?: string;
   tripName?: string;
   destination?: string;
   onClose?: () => void;
 }
 
 export const TimelineScreen: React.FC<TimelineScreenProps> = ({ 
-  tripId, 
+  route,
+  navigation,
+  tripId: propTripId, 
   tripName = 'My Trip', 
   destination = 'Adventure',
   onClose 
 }) => {
+  // Support both standalone and navigation usage
+  const tripId = propTripId || route?.params?.tripId;
   const { timeline, fetchTimeline, isLoading, stats, fetchStats } = useCheckInStore();
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -87,54 +98,60 @@ export const TimelineScreen: React.FC<TimelineScreenProps> = ({
     return Object.entries(grouped).filter(([_, items]) => items.length > 0);
   };
 
+  const handleBack = () => {
+    if (onClose) {
+      onClose();
+    } else if (navigation) {
+      navigation.goBack();
+    }
+  };
+
   if (timeline.length === 0 && !isLoading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Timeline</Text>
-          {onClose && (
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.closeButton}>✕</Text>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+              <Ionicons name="chevron-back" size={24} color="#0F172A" />
             </TouchableOpacity>
-          )}
+            <Text style={styles.headerTitle}>Timeline</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📍</Text>
+            <Text style={styles.emptyTitle}>No Check-Ins Yet</Text>
+            <Text style={styles.emptyText}>
+              Start checking in at places to build your travel timeline!
+            </Text>
+          </View>
         </View>
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📍</Text>
-          <Text style={styles.emptyTitle}>No Check-Ins Yet</Text>
-          <Text style={styles.emptyText}>
-            Start checking in at places to build your travel timeline!
-          </Text>
-        </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Timeline</Text>
-          {stats && stats.total_checkins > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{stats.total_checkins}</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.headerRight}>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <Ionicons name="chevron-back" size={24} color="#0F172A" />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Timeline</Text>
+            {stats && stats.total_checkins > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{stats.total_checkins}</Text>
+              </View>
+            )}
+          </View>
           <TouchableOpacity 
             style={styles.shareButton}
             onPress={() => setShowShareModal(true)}
           >
-            <Text style={styles.shareButtonText}>Share Journey 📤</Text>
+            <Ionicons name="share-outline" size={22} color="#3B82F6" />
           </TouchableOpacity>
-          {onClose && (
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.closeButton}>✕</Text>
-            </TouchableOpacity>
-          )}
         </View>
-      </View>
 
       {/* Timeline Content */}
       <ScrollView
@@ -264,18 +281,24 @@ export const TimelineScreen: React.FC<TimelineScreenProps> = ({
       </ScrollView>
 
       {/* Share Story Modal */}
-      <ShareStoryModal
-        visible={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        tripId={tripId}
-        tripName={tripName}
-        destination={destination}
-      />
-    </View>
+        <ShareStoryModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          tripId={tripId}
+          tripName={tripName}
+          destination={destination}
+        />
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -284,11 +307,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  headerSpacer: {
+    width: 40,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -317,10 +358,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   shareButton: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
   },
   shareButtonText: {
     color: '#FFFFFF',
