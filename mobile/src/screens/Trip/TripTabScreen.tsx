@@ -219,7 +219,7 @@ const TripHeader = ({
 export default function TripTabScreen({ route, navigation }: any) {
   const { tripId } = route.params;
   const { currentTrip, fetchTripDetails, fetchTripMembers } = useTripStore();
-  const { initializeNotifications } = useLocationStore();
+  const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking } = useLocationStore();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabName>('Chat');
   const [showShareModal, setShowShareModal] = useState(false);
@@ -232,8 +232,12 @@ export default function TripTabScreen({ route, navigation }: any) {
           fetchTripMembers(tripId),
         ]);
         
-        // Initialize location services
+        // Initialize location services & notifications
         await initializeNotifications();
+        
+        // Start background location tracking for proximity alerts
+        console.log('[TripTab] Starting background tracking for trip:', tripId);
+        await startBackgroundTracking(tripId);
         
         setIsLoading(false);
       } catch (error) {
@@ -243,6 +247,12 @@ export default function TripTabScreen({ route, navigation }: any) {
     };
 
     initTrip();
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[TripTab] Stopping background tracking');
+      stopBackgroundTracking();
+    };
   }, [tripId]);
 
   const handleBack = () => {

@@ -3,6 +3,7 @@ import { TripGroupModel } from '../models/tripGroup.model';
 import { SavedItemModel } from '../models/savedItem.model';
 import { ChatMessageModel } from '../models/chatMessage.model';
 import { UserModel } from '../models/user.model';
+import { PushNotificationService } from './pushNotification.service';
 import { MessageSenderType, MessageType } from '../types';
 import logger from '../config/logger';
 
@@ -53,8 +54,8 @@ export class LocationService {
   }
 
   /**
-   * Check for nearby saved items and send suggestions
-   * Enhanced: Detects area changes and sends comprehensive summaries
+   * Check for nearby saved items and send PUSH NOTIFICATIONS
+   * Sends real push notifications (like WhatsApp) when user is near a saved place
    */
   private static async checkNearbyItems(
     userId: string,
@@ -63,48 +64,131 @@ export class LocationService {
     longitude: number
   ): Promise<void> {
     try {
-      // Get items within larger radius (5km) to detect area-level presence
-      const areaItems = await SavedItemModel.findNearby(
+      // Get items within 500m - close enough to be actionable
+      const nearbyItems = await SavedItemModel.findNearby(
         tripGroupId,
         latitude,
         longitude,
-        5000 // 5km radius for area detection
+        500 // 500m radius
       );
 
-      if (areaItems.length === 0) {
+      if (nearbyItems.length === 0) {
         return;
       }
 
       // Filter out already checked-in items
-      const unvisitedItems = areaItems.filter((item: any) => item.status === 'saved');
+      const unvisitedItems = nearbyItems.filter((item: any) => item.status === 'saved');
 
       if (unvisitedItems.length === 0) {
         return;
       }
 
-      // Determine the area name from the closest items
-      const areaName = this.extractAreaName(unvisitedItems);
-      
-      // Check if we've recently sent alert for this area (avoid spam - 4 hours)
-      const recentAlert = await this.hasRecentAreaAlert(tripGroupId, areaName);
-      if (recentAlert) {
-        // Still check for very close items (within 200m)
-        const veryCloseItems = unvisitedItems.filter((item: any) => item.distance < 200);
-        if (veryCloseItems.length > 0) {
-          const hasRecentCloseAlert = await this.hasRecentLocationAlert(tripGroupId, latitude, longitude);
-          if (!hasRecentCloseAlert) {
-            await this.sendLocationAlert(tripGroupId, veryCloseItems.slice(0, 1));
-          }
-        }
+      // Check if we've recently sent alert for this location (avoid spam - 30 mins)
+      const hasRecentAlert = await this.hasRecentProximityAlert(userId, tripGroupId);
+      if (hasRecentAlert) {
+        logger.info(`[Location] Skipping proximity alert - recent alert exists for user ${userId}`);
         return;
       }
 
-      // Send comprehensive area summary
-      await this.sendAreaSummaryAlert(userId, tripGroupId, areaName, unvisitedItems);
+      // Get the closest unvisited place
+      const closestPlace = unvisitedItems[0];
+      const distanceText = closestPlace.distance < 100 
+        ? 'right here!' 
+        : `${Math.round(closestPlace.distance)}m away`;
 
-      logger.info(`Area summary sent to trip ${tripGroupId}: ${unvisitedItems.length} places in ${areaName}`);
+      // Get category emoji
+      const emoji = CATEGORY_EMOJI[closestPlace.category] || '📍';
+
+      // SEND REAL PUSH NOTIFICATION 🔔
+      await PushNotificationService.sendToUser(userId, {
+        title: `${emoji} ${closestPlace.name} is ${distanceText}`,
+        body: unvisitedItems.length > 1 
+          ? `You have ${unvisitedItems.length} saved spots nearby. Tap to explore!`
+          : `One of your saved spots! Tap to check in.`,
+        data: {
+          type: 'nearby_alert',
+          tripId: tripGroupId,
+          placeId: closestPlace.id,
+          placeName: closestPlace.name,
+          screen: 'TripHome',
+        },
+        channelId: 'nearby',
+      });
+
+      // Record that we sent an alert
+      await this.recordProximityAlert(userId, tripGroupId, closestPlace.id);
+
+      logger.info(`[Location] 🔔 Push notification sent to user ${userId}: Near ${closestPlace.name}`);
+
+      // Also send to chat for visibility when they open the app
+      if (unvisitedItems.length > 1) {
+        await this.sendLocationAlert(tripGroupId, unvisitedItems.slice(0, 3));
+      }
     } catch (error) {
       logger.error('Check nearby items error:', error);
+    }
+  }
+
+  /**
+   * Check if we've recently sent a proximity alert to this user (within 30 mins)
+   */
+  private static async hasRecentProximityAlert(
+    userId: string,
+    tripGroupId: string
+  ): Promise<boolean> {
+    try {
+      const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
+      
+      const result = await query(
+        `SELECT COUNT(*) as count FROM proximity_alerts
+         WHERE user_id = $1
+         AND trip_group_id = $2
+         AND created_at > $3`,
+        [userId, tripGroupId, thirtyMinsAgo]
+      );
+
+      return parseInt(result.rows[0].count) > 0;
+    } catch (error) {
+      // Table might not exist yet - that's ok
+      logger.debug('Proximity alert check (table may not exist):', error);
+      return false;
+    }
+  }
+
+  /**
+   * Record that we sent a proximity alert
+   */
+  private static async recordProximityAlert(
+    userId: string,
+    tripGroupId: string,
+    placeId: string
+  ): Promise<void> {
+    try {
+      await query(
+        `INSERT INTO proximity_alerts (user_id, trip_group_id, place_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [userId, tripGroupId, placeId]
+      );
+    } catch (error) {
+      // Table might not exist - create it
+      try {
+        await query(`
+          CREATE TABLE IF NOT EXISTS proximity_alerts (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            trip_group_id INTEGER NOT NULL,
+            place_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        await query(
+          `INSERT INTO proximity_alerts (user_id, trip_group_id, place_id) VALUES ($1, $2, $3)`,
+          [userId, tripGroupId, placeId]
+        );
+      } catch (createError) {
+        logger.error('Record proximity alert error:', createError);
+      }
     }
   }
 

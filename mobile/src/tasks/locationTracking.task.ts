@@ -1,57 +1,18 @@
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import notificationService from '../services/notification.service';
 import api from '../config/api';
 
 const LOCATION_TASK_NAME = 'background-location-task';
-const NEARBY_RADIUS = 500; // 500 meters
-const NOTIFICATION_COOLDOWN = 3600000; // 1 hour in milliseconds
 
 // Define the location task data type
 interface LocationTaskData {
   locations: Location.LocationObject[];
 }
 
-// Track when we last notified for each place to avoid spam
-const notificationHistory: Map<string, number> = new Map();
-
-/**
- * Calculate distance between two coordinates (Haversine formula)
- */
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // Distance in meters
-}
-
-/**
- * Check if we should send notification (cooldown check)
- */
-function shouldNotify(itemId: string): boolean {
-  const lastNotified = notificationHistory.get(itemId);
-  if (!lastNotified) return true;
-  
-  const timeSince = Date.now() - lastNotified;
-  return timeSince > NOTIFICATION_COOLDOWN;
-}
-
 /**
  * Background location tracking task
+ * Reports location to backend, which handles push notifications
  */
 TaskManager.defineTask(
   LOCATION_TASK_NAME,
@@ -71,9 +32,8 @@ TaskManager.defineTask(
       }
 
       console.log('[BackgroundLocation] Location update:', {
-        lat: location.coords.latitude,
-        lng: location.coords.longitude,
-        timestamp: new Date(location.timestamp).toISOString(),
+        lat: location.coords.latitude.toFixed(5),
+        lng: location.coords.longitude.toFixed(5),
       });
 
       try {
@@ -85,58 +45,17 @@ TaskManager.defineTask(
           return;
         }
 
-        // Fetch nearby items from backend
-        const response = await api.get(
-          `/location/${currentTripId}/nearby`,
-          {
-            params: {
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              radius: NEARBY_RADIUS,
-            },
-          }
-        );
-
-        const nearbyItems = response.data?.data || [];
-        console.log('[BackgroundLocation] Nearby items:', nearbyItems.length);
-
-        // Check each nearby item
-        for (const item of nearbyItems) {
-          if (!item.location_lat || !item.location_lng) continue;
-
-          // Calculate precise distance
-          const distance = calculateDistance(
-            location.coords.latitude,
-            location.coords.longitude,
-            item.location_lat,
-            item.location_lng
-          );
-
-          // Only notify if within radius and cooldown passed
-          if (distance <= NEARBY_RADIUS && shouldNotify(item.id)) {
-            console.log('[BackgroundLocation] Sending notification for:', item.name);
-            
-            await notificationService.notifyNearbyPlace(
-              item.name,
-              distance,
-              currentTripId,
-              item.id
-            );
-
-            // Update notification history
-            notificationHistory.set(item.id, Date.now());
-          }
-        }
-
-        // Update user's location on backend
+        // Send location to backend - backend handles push notifications
         await api.post('/location/update', {
           tripGroupId: currentTripId,
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
 
+        console.log('[BackgroundLocation] Location sent to backend');
+
       } catch (error) {
-        console.error('[BackgroundLocation] Processing error:', error);
+        console.error('[BackgroundLocation] Error:', error);
       }
     }
   }
