@@ -110,8 +110,6 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
   onUpdateNotes,
 }) => {
   const [showDayPicker, setShowDayPicker] = useState(false);
-  const [showNotesModal, setShowNotesModal] = useState(false);
-  const [notesText, setNotesText] = useState(place.user_notes || '');
   const tripDays = generateTripDays(trip);
 
   // Share place function
@@ -133,15 +131,6 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
     } catch (error) {
       console.error('Share error:', error);
     }
-  };
-
-  // Save notes function
-  const handleSaveNotes = () => {
-    if (onUpdateNotes) {
-      onUpdateNotes(place, notesText);
-    }
-    setShowNotesModal(false);
-    HapticFeedback.light();
   };
 
   const openInGoogleMaps = () => {
@@ -282,23 +271,6 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
           <Text style={styles.description}>{place.description}</Text>
         )}
 
-        {/* Personal Notes Section */}
-        <TouchableOpacity 
-          style={styles.notesSection}
-          onPress={() => setShowNotesModal(true)}
-        >
-          <View style={styles.notesSectionHeader}>
-            <Text style={styles.notesSectionIcon}>📝</Text>
-            <Text style={styles.notesSectionTitle}>Your Notes</Text>
-            <Text style={styles.notesSectionEdit}>Edit →</Text>
-          </View>
-          {place.user_notes ? (
-            <Text style={styles.notesText} numberOfLines={3}>{place.user_notes}</Text>
-          ) : (
-            <Text style={styles.notesPlaceholder}>Tap to add personal notes...</Text>
-          )}
-        </TouchableOpacity>
-
         {/* Assign to Day Button */}
         {onAssignToDay && (
           <TouchableOpacity
@@ -383,62 +355,6 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Notes Modal */}
-      <Modal
-        visible={showNotesModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowNotesModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowNotesModal(false)}
-        >
-          <View style={styles.notesModal} onStartShouldSetResponder={() => true}>
-            <View style={styles.notesModalHeader}>
-              <Text style={styles.notesModalTitle}>📝 Your Notes</Text>
-              <TouchableOpacity onPress={() => setShowNotesModal(false)}>
-                <Text style={styles.notesModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <TextInput
-              style={styles.notesInput}
-              value={notesText}
-              onChangeText={setNotesText}
-              placeholder="Add your personal notes about this place..."
-              placeholderTextColor={theme.colors.textTertiary}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-            />
-            
-            <Text style={styles.notesHint}>
-              💡 Tip: Add reminders like "Ask for extra garlic" or "Bob recommended this!"
-            </Text>
-            
-            <View style={styles.notesModalActions}>
-              <TouchableOpacity
-                style={styles.notesCancelButton}
-                onPress={() => {
-                  setNotesText(place.user_notes || '');
-                  setShowNotesModal(false);
-                }}
-              >
-                <Text style={styles.notesCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.notesSaveButton}
-                onPress={handleSaveNotes}
-              >
-                <Text style={styles.notesSaveText}>Save Notes</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </TouchableOpacity>
       </Modal>

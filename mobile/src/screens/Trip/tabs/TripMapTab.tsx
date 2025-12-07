@@ -12,7 +12,6 @@ import { useTripStore } from '../../../stores/tripStore';
 import { useCheckInStore } from '../../../stores/checkInStore';
 import { MapView, MapViewRef } from '../../../components/MapView';
 import { PlaceListDrawer } from '../../../components/PlaceListDrawer';
-import { EnhancedCheckInModal } from '../../../components/EnhancedCheckInModal';
 import { SavedItem, ItemCategory } from '../../../types';
 import { HapticFeedback } from '../../../utils/haptics';
 import theme from '../../../config/theme';
@@ -26,14 +25,12 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
   const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, updateNotes, isLoading } = useItemStore();
   const { location } = useLocationStore();
   const { currentTrip, currentTripMembers } = useTripStore();
-  const { isPlaceCheckedIn } = useCheckInStore();
+  const { isPlaceCheckedIn, createCheckIn, fetchCheckIns } = useCheckInStore();
   
   const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'food' | 'accommodation' | 'place' | 'shopping' | 'activity' | 'tip'>('all');
   const [drawerItems, setDrawerItems] = useState<SavedItem[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(true); // Open by default
-  const [checkInPlace, setCheckInPlace] = useState<SavedItem | null>(null);
-  const [showCheckInModal, setShowCheckInModal] = useState(false);
   // Known destination coordinates
   const DESTINATION_COORDS: Record<string, { lat: number; lng: number }> = {
     'mumbai': { lat: 19.0760, lng: 72.8777 },
@@ -258,19 +255,15 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
     }
   };
 
-  // Check-in handler - opens the EnhancedCheckInModal
-  const handleCheckIn = (place: SavedItem) => {
-    HapticFeedback.medium();
-    setCheckInPlace(place);
-    setShowCheckInModal(true);
-  };
-
-  // Handle check-in completion
-  const handleCheckInComplete = async () => {
-    setShowCheckInModal(false);
-    setCheckInPlace(null);
-    // Refresh items after check-in
-    await fetchTripItems(tripId, {});
+  // Instant check-in handler
+  const handleCheckIn = async (place: SavedItem) => {
+    HapticFeedback.success();
+    try {
+      await createCheckIn(tripId, { savedItemId: place.id });
+      await fetchCheckIns(tripId);
+    } catch (error) {
+      console.error('Check-in error:', error);
+    }
   };
 
   if (isLoading && (!items || items.length === 0)) {
@@ -336,19 +329,7 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
         </TouchableOpacity>
       )}
 
-      {/* Check-in Modal */}
-      {showCheckInModal && checkInPlace && (
-        <EnhancedCheckInModal
-          visible={showCheckInModal}
-          place={checkInPlace}
-          onClose={() => {
-            setShowCheckInModal(false);
-            setCheckInPlace(null);
-          }}
-          onCheckInComplete={handleCheckInComplete}
-        />
-      )}
-    </View>
+      </View>
   );
 }
 
