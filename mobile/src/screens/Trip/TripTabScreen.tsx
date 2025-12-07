@@ -172,12 +172,10 @@ const TripHeader = ({
   trip, 
   activeTab, 
   onItineraryPress,
-  onProfilePress 
 }: { 
   trip: any; 
   activeTab: TabName;
   onItineraryPress: () => void;
-  onProfilePress: () => void;
 }) => {
   return (
     <View style={styles.header}>
@@ -191,26 +189,14 @@ const TripHeader = ({
           </View>
         </View>
         
-        {/* Right Actions */}
-        <View style={styles.headerActions}>
-          {/* Itinerary Button */}
-          <TouchableOpacity
-            style={styles.headerActionButton}
-            onPress={onItineraryPress}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="airplane-outline" size={20} color="#64748B" />
-          </TouchableOpacity>
-          
-          {/* Profile Button */}
-          <TouchableOpacity
-            style={styles.headerActionButton}
-            onPress={onProfilePress}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="person-circle-outline" size={22} color="#64748B" />
-          </TouchableOpacity>
-        </View>
+        {/* Itinerary Button */}
+        <TouchableOpacity
+          style={styles.headerActionButton}
+          onPress={onItineraryPress}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="git-branch-outline" size={20} color="#64748B" />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -259,11 +245,6 @@ export default function TripTabScreen({ route, navigation }: any) {
     navigation.navigate('ItinerarySetup', { tripId, isInitialSetup: false });
   };
 
-  const handleProfilePress = () => {
-    HapticFeedback.light();
-    navigation.navigate('Profile');
-  };
-
   // Render active tab content
   const renderTabContent = () => {
     switch (activeTab) {
@@ -299,7 +280,6 @@ export default function TripTabScreen({ route, navigation }: any) {
               trip={currentTrip} 
               activeTab={activeTab} 
               onItineraryPress={handleItineraryPress}
-              onProfilePress={handleProfilePress}
             />
             
             {/* Tab Content */}
@@ -473,13 +453,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#6366F1',
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginLeft: 12,
-  },
   headerActionButton: {
+    marginLeft: 12,
     width: 36,
     height: 36,
     borderRadius: 10,
