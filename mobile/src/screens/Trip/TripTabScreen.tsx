@@ -12,23 +12,24 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { MotiView } from 'moti';
 import * as Clipboard from 'expo-clipboard';
 import { useTripStore } from '../../stores/tripStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { HapticFeedback } from '../../utils/haptics';
-import theme from '../../config/theme';
 
 // Tab Screens
 import TripChatTab from './tabs/TripChatTab';
 import TripMapTab from './tabs/TripMapTab';
 import TripPlannerTab from './tabs/TripPlannerTab';
+import ProfileScreen from '../Profile/ProfileScreen';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0;
+const BOTTOM_TAB_HEIGHT = 80;
 
-type TabName = 'Chat' | 'Map' | 'Planner';
+type TabName = 'Chat' | 'Map' | 'Planner' | 'Profile';
 
 interface TabConfig {
   icon: keyof typeof Ionicons.glyphMap;
@@ -40,143 +41,58 @@ const TAB_CONFIG: Record<TabName, TabConfig> = {
   Chat: { icon: 'chatbubble-outline', activeIcon: 'chatbubble', label: 'Chat' },
   Map: { icon: 'map-outline', activeIcon: 'map', label: 'Map' },
   Planner: { icon: 'calendar-outline', activeIcon: 'calendar', label: 'Planner' },
+  Profile: { icon: 'person-outline', activeIcon: 'person', label: 'Profile' },
 };
 
-const TAB_ORDER: TabName[] = ['Chat', 'Map', 'Planner'];
+const TAB_ORDER: TabName[] = ['Chat', 'Map', 'Planner', 'Profile'];
 
-// Modern Side Rail Component
-const SideRail = ({ 
+// Glassmorphic Bottom Tab Bar
+const BottomTabBar = ({ 
   activeTab, 
-  onTabPress, 
-  trip, 
-  onBack,
-  onSharePress,
-  onTimelinePress,
+  onTabPress 
 }: { 
   activeTab: TabName; 
   onTabPress: (tab: TabName) => void;
-  trip: any;
-  onBack: () => void;
-  onSharePress: () => void;
-  onTimelinePress: () => void;
 }) => {
-  const getDestinationInitial = () => {
-    if (!trip?.destination) return '✈️';
-    return trip.destination.charAt(0).toUpperCase();
-  };
-
   return (
-    <View style={styles.sideRail}>
-      {/* Back Button */}
-      <TouchableOpacity
-        style={styles.railBackButton}
-        onPress={onBack}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="chevron-back" size={22} color="#94A3B8" />
-      </TouchableOpacity>
+    <View style={styles.bottomTabContainer}>
+      <BlurView intensity={80} tint="light" style={styles.bottomTabBlur}>
+        <View style={styles.bottomTabInner}>
+          {TAB_ORDER.map((tabName) => {
+            const config = TAB_CONFIG[tabName];
+            const isActive = activeTab === tabName;
 
-      {/* Trip Avatar */}
-      <MotiView
-        from={{ scale: 0.9 }}
-        animate={{ scale: 1 }}
-        transition={{ type: 'spring', damping: 15 }}
-      >
-        <LinearGradient
-          colors={['#3B82F6', '#8B5CF6']}
-          style={styles.tripAvatar}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Text style={styles.tripAvatarText}>{getDestinationInitial()}</Text>
-        </LinearGradient>
-      </MotiView>
-
-      {/* Divider */}
-      <View style={styles.railDivider} />
-
-      {/* Tab Items */}
-      <View style={styles.railTabs}>
-        {TAB_ORDER.map((tabName, index) => {
-          const config = TAB_CONFIG[tabName];
-          const isActive = activeTab === tabName;
-
-          return (
-            <MotiView
-              key={tabName}
-              from={{ opacity: 0, translateX: -10 }}
-              animate={{ opacity: 1, translateX: 0 }}
-              transition={{ type: 'timing', duration: 300, delay: index * 100 }}
-            >
+            return (
               <TouchableOpacity
-                style={styles.railTabItem}
+                key={tabName}
+                style={styles.tabItem}
                 onPress={() => onTabPress(tabName)}
                 activeOpacity={0.7}
               >
-                {/* Active Indicator */}
                 {isActive && (
                   <MotiView
-                    from={{ opacity: 0, scaleY: 0 }}
-                    animate={{ opacity: 1, scaleY: 1 }}
+                    from={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: 'spring', damping: 15 }}
-                    style={styles.railActiveIndicator}
+                    style={styles.activeTabIndicator}
                   />
                 )}
-                
-                {/* Icon Container */}
-                {isActive ? (
-                  <LinearGradient
-                    colors={['#3B82F6', '#6366F1']}
-                    style={styles.railIconContainer}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <Ionicons 
-                      name={config.activeIcon} 
-                      size={22} 
-                      color="#FFFFFF" 
-                    />
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.railIconContainer}>
-                    <Ionicons 
-                      name={config.icon} 
-                      size={22} 
-                      color="#64748B" 
-                    />
-                  </View>
-                )}
-                
-                {/* Label */}
-                <Text style={[styles.railLabel, isActive && styles.railLabelActive]}>
+                <Ionicons 
+                  name={isActive ? config.activeIcon : config.icon} 
+                  size={24} 
+                  color={isActive ? '#3B82F6' : '#94A3B8'} 
+                />
+                <Text style={[
+                  styles.tabLabel,
+                  isActive && styles.tabLabelActive
+                ]}>
                   {config.label}
                 </Text>
               </TouchableOpacity>
-            </MotiView>
-          );
-        })}
-      </View>
-
-      {/* Bottom Actions */}
-      <View style={styles.railBottom}>
-        {/* Timeline/Story Button */}
-        <TouchableOpacity
-          style={styles.railBottomButton}
-          onPress={onTimelinePress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="time-outline" size={20} color="#64748B" />
-        </TouchableOpacity>
-
-        {/* Share/Invite Button */}
-        <TouchableOpacity
-          style={styles.railBottomButton}
-          onPress={onSharePress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="share-social-outline" size={20} color="#64748B" />
-        </TouchableOpacity>
-      </View>
+            );
+          })}
+        </View>
+      </BlurView>
     </View>
   );
 };
@@ -184,34 +100,26 @@ const SideRail = ({
 // Header Component
 const TripHeader = ({ 
   trip, 
-  activeTab, 
-  onItineraryPress,
+  onBack,
+  onShare,
 }: { 
-  trip: any; 
-  activeTab: TabName;
-  onItineraryPress: () => void;
+  trip: any;
+  onBack: () => void;
+  onShare: () => void;
 }) => {
   return (
     <View style={styles.header}>
-      <View style={styles.headerContent}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {trip?.name || 'Trip'}
-          </Text>
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>{TAB_CONFIG[activeTab].label}</Text>
-          </View>
-        </View>
-        
-        {/* Itinerary Button */}
-        <TouchableOpacity
-          style={styles.headerActionButton}
-          onPress={onItineraryPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="git-branch-outline" size={20} color="#64748B" />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={styles.headerBackButton} onPress={onBack}>
+        <Ionicons name="chevron-back" size={24} color="#1F2937" />
+      </TouchableOpacity>
+      
+      <Text style={styles.headerTitle} numberOfLines={1}>
+        {trip?.name || 'Trip'}
+      </Text>
+      
+      <TouchableOpacity style={styles.headerShareButton} onPress={onShare}>
+        <Ionicons name="share-outline" size={22} color="#1F2937" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -265,46 +173,12 @@ export default function TripTabScreen({ route, navigation }: any) {
     setActiveTab(tab);
   };
 
-  const handleItineraryPress = () => {
+  const handleShare = async () => {
     HapticFeedback.light();
-    navigation.navigate('ItinerarySetup', { tripId, isInitialSetup: false });
-  };
-
-  const handleSharePress = () => {
-    HapticFeedback.light();
-    setShowShareModal(true);
-  };
-
-  const handleTimelinePress = () => {
-    HapticFeedback.light();
-    navigation.navigate('Timeline', { tripId });
-  };
-
-  const handleCopyCode = async () => {
-    if (currentTrip?.invite_code) {
-      await Clipboard.setStringAsync(currentTrip.invite_code);
-      HapticFeedback.success();
-      setShowShareModal(false);
-      Alert.alert('✅ Copied!', `Invite code "${currentTrip.invite_code}" copied!`);
-    }
-  };
-
-  const handleCopyLink = async () => {
-    if (currentTrip?.invite_code) {
-      const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
-      await Clipboard.setStringAsync(inviteLink);
-      HapticFeedback.success();
-      setShowShareModal(false);
-      Alert.alert('✅ Copied!', 'Invite link copied to clipboard');
-    }
-  };
-
-  const handleShareInvite = async () => {
     if (currentTrip) {
       const inviteCode = currentTrip.invite_code;
       const inviteLink = `https://travelagent.app/join/${inviteCode}`;
       const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}! 🌍✈️\n\n📱 Invite Code: ${inviteCode}\n\n🔗 Or tap: ${inviteLink}`;
-      setShowShareModal(false);
       try {
         await Share.share({
           message: shareMessage,
@@ -325,6 +199,8 @@ export default function TripTabScreen({ route, navigation }: any) {
         return <TripMapTab tripId={tripId} navigation={navigation} />;
       case 'Planner':
         return <TripPlannerTab tripId={tripId} navigation={navigation} />;
+      case 'Profile':
+        return <ProfileScreen navigation={navigation} embedded />;
       default:
         return null;
     }
@@ -332,366 +208,134 @@ export default function TripTabScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.mainLayout}>
-          {/* Side Rail Navigation */}
-          <SideRail
-            activeTab={activeTab}
-            onTabPress={handleTabPress}
-            trip={currentTrip}
+        {/* Header - Only show for non-profile tabs */}
+        {activeTab !== 'Profile' && (
+          <TripHeader 
+            trip={currentTrip} 
             onBack={handleBack}
-            onSharePress={handleSharePress}
-            onTimelinePress={handleTimelinePress}
+            onShare={handleShare}
           />
-
-          {/* Main Content Area */}
-          <View style={styles.contentArea}>
-            {/* Compact Header */}
-            <TripHeader 
-              trip={currentTrip} 
-              activeTab={activeTab} 
-              onItineraryPress={handleItineraryPress}
-            />
-            
-            {/* Tab Content */}
-            <View style={styles.tabContent}>
-              {renderTabContent()}
-            </View>
-          </View>
+        )}
+        
+        {/* Tab Content */}
+        <View style={styles.contentArea}>
+          {renderTabContent()}
         </View>
+        
+        {/* Bottom Tab Bar */}
+        <BottomTabBar 
+          activeTab={activeTab} 
+          onTabPress={handleTabPress} 
+        />
       </SafeAreaView>
-
-      {/* Share Invite Modal */}
-      {showShareModal && currentTrip && (
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={styles.modalBackdrop} 
-            activeOpacity={1} 
-            onPress={() => setShowShareModal(false)} 
-          />
-          <MotiView
-            from={{ translateY: 300, opacity: 0 }}
-            animate={{ translateY: 0, opacity: 1 }}
-            transition={{ type: 'spring', damping: 20 }}
-            style={styles.shareModal}
-          >
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Invite Friends</Text>
-              <TouchableOpacity onPress={() => setShowShareModal(false)}>
-                <Ionicons name="close" size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Invite Code Display */}
-            <View style={styles.inviteCodeContainer}>
-              <Text style={styles.inviteCodeLabel}>INVITE CODE</Text>
-              <View style={styles.inviteCodeBox}>
-                <Text style={styles.inviteCodeText}>{currentTrip.invite_code}</Text>
-              </View>
-              <Text style={styles.inviteCodeHint}>Share this code with friends to join your trip</Text>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.shareActions}>
-              <TouchableOpacity style={styles.shareActionButton} onPress={handleCopyCode}>
-                <LinearGradient
-                  colors={['#3B82F6', '#2563EB']}
-                  style={styles.shareActionGradient}
-                >
-                  <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.shareActionText}>Copy Code</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.shareActionButton} onPress={handleCopyLink}>
-                <View style={styles.shareActionSecondary}>
-                  <Ionicons name="link-outline" size={20} color="#3B82F6" />
-                  <Text style={styles.shareActionSecondaryText}>Copy Link</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.shareActionButton} onPress={handleShareInvite}>
-                <View style={styles.shareActionSecondary}>
-                  <Ionicons name="share-outline" size={20} color="#3B82F6" />
-                  <Text style={styles.shareActionSecondaryText}>Share...</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </MotiView>
-        </View>
-      )}
     </View>
   );
 }
 
-const RAIL_WIDTH = 76;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
   },
   safeArea: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
   },
-  mainLayout: {
-    flex: 1,
+
+  // Header
+  header: {
     flexDirection: 'row',
-  },
-
-  // Side Rail - Modern Dark Theme
-  sideRail: {
-    width: RAIL_WIDTH,
-    backgroundColor: '#0F172A',
     alignItems: 'center',
-    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT + 16 : 16,
-    paddingBottom: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
-  railBackButton: {
+  headerBackButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
   },
-  tripAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  tripAvatarText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  railDivider: {
-    width: 32,
-    height: 2,
-    backgroundColor: '#1E293B',
-    borderRadius: 1,
-    marginBottom: 20,
-  },
-  railTabs: {
+  headerTitle: {
     flex: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  railTabItem: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    position: 'relative',
-  },
-  railActiveIndicator: {
-    position: 'absolute',
-    left: -4,
-    top: '50%',
-    marginTop: -16,
-    width: 3,
-    height: 32,
-    backgroundColor: '#3B82F6',
-    borderRadius: 2,
-  },
-  railIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#1E293B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  railLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  railLabelActive: {
-    color: '#FFFFFF',
+    fontSize: 18,
     fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginHorizontal: 12,
   },
-  railBottom: {
-    marginTop: 'auto',
-    paddingTop: 16,
-    alignItems: 'center',
-    gap: 12,
-  },
-  railBottomButton: {
+  headerShareButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
-  // Content Area
+  // Content
   contentArea: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    borderTopLeftRadius: 24,
-    borderBottomLeftRadius: 24,
-    overflow: 'hidden',
-    marginTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
-    shadowColor: '#000',
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 10,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-    flexShrink: 1,
-  },
-  headerBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  headerBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6366F1',
-  },
-  headerActionButton: {
-    marginLeft: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tabContent: {
-    flex: 1,
   },
 
-  // Share Modal Styles
-  modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    zIndex: 1000,
+  // Bottom Tab Bar - Glassmorphic
+  bottomTabContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: BOTTOM_TAB_HEIGHT,
   },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  shareModal: {
-    backgroundColor: '#FFFFFF',
+  bottomTabBlur: {
+    flex: 1,
+    overflow: 'hidden',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
   },
-  modalHeader: {
+  bottomTabInner: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  inviteCodeContainer: {
+  tabItem: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'center',
+    paddingVertical: 8,
+    position: 'relative',
   },
-  inviteCodeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    letterSpacing: 1,
-    marginBottom: 12,
+  activeTabIndicator: {
+    position: 'absolute',
+    top: 0,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
   },
-  inviteCodeBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    marginBottom: 8,
-  },
-  inviteCodeText: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: 4,
-  },
-  inviteCodeHint: {
-    fontSize: 13,
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: '500',
     color: '#94A3B8',
-    marginTop: 8,
+    marginTop: 4,
   },
-  shareActions: {
-    gap: 12,
-  },
-  shareActionButton: {
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  shareActionGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 10,
-  },
-  shareActionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  shareActionSecondary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 10,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 14,
-  },
-  shareActionSecondaryText: {
-    fontSize: 16,
-    fontWeight: '600',
+  tabLabelActive: {
     color: '#3B82F6',
+    fontWeight: '600',
   },
 });

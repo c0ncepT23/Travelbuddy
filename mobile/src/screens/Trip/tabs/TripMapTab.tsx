@@ -1,20 +1,53 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
-  StyleSheet,
-  ActivityIndicator,
   Text,
+  StyleSheet,
   TouchableOpacity,
+  TextInput,
+  ScrollView,
+  Dimensions,
+  Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  useAnimatedGestureHandler,
+  runOnJS,
+} from 'react-native-reanimated';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 import { useItemStore } from '../../../stores/itemStore';
 import { useLocationStore } from '../../../stores/locationStore';
 import { useTripStore } from '../../../stores/tripStore';
 import { useCheckInStore } from '../../../stores/checkInStore';
 import { MapView, MapViewRef } from '../../../components/MapView';
-import { PlaceListDrawer } from '../../../components/PlaceListDrawer';
 import { SavedItem, ItemCategory } from '../../../types';
 import { HapticFeedback } from '../../../utils/haptics';
-import theme from '../../../config/theme';
+import { getPlacePhotoUrl } from '../../../config/maps';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const BOTTOM_TAB_HEIGHT = 80;
+const HEADER_HEIGHT = 56;
+
+// Snap points for the bottom sheet
+const SNAP_POINTS = {
+  PEEKING: SCREEN_HEIGHT * 0.15,   // 15% - Just search bar visible
+  ANCHORED: SCREEN_HEIGHT * 0.45,  // 45% - Half screen
+  EXPANDED: SCREEN_HEIGHT * 0.85,  // 85% - Full screen (under header)
+};
+
+// Category filters
+const CATEGORY_FILTERS = [
+  { key: 'all', label: 'All', icon: '📍' },
+  { key: 'food', label: 'Food', icon: '🍽️' },
+  { key: 'place', label: 'Sightseeing', icon: '🏛️' },
+  { key: 'shopping', label: 'Shopping', icon: '🛍️' },
+  { key: 'activity', label: 'Activities', icon: '🎯' },
+];
 
 interface TripMapTabProps {
   tripId: string;
@@ -22,151 +55,91 @@ interface TripMapTabProps {
 }
 
 export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
-  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, updateNotes, isLoading } = useItemStore();
+  const { items, fetchTripItems, isLoading } = useItemStore();
   const { location } = useLocationStore();
-  const { currentTrip, currentTripMembers } = useTripStore();
+  const { currentTrip } = useTripStore();
   const { isPlaceCheckedIn, createCheckIn, fetchCheckIns } = useCheckInStore();
   
   const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'food' | 'accommodation' | 'place' | 'shopping' | 'activity' | 'tip'>('all');
-  const [drawerItems, setDrawerItems] = useState<SavedItem[]>([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(true); // Open by default
-  // Known destination coordinates
-  const DESTINATION_COORDS: Record<string, { lat: number; lng: number }> = {
-    'mumbai': { lat: 19.0760, lng: 72.8777 },
-    'india': { lat: 20.5937, lng: 78.9629 },
-    'tokyo': { lat: 35.6762, lng: 139.6503 },
-    'japan': { lat: 36.2048, lng: 138.2529 },
-    'paris': { lat: 48.8566, lng: 2.3522 },
-    'france': { lat: 46.2276, lng: 2.2137 },
-    'bangkok': { lat: 13.7563, lng: 100.5018 },
-    'thailand': { lat: 15.8700, lng: 100.9925 },
-    'london': { lat: 51.5074, lng: -0.1278 },
-    'new york': { lat: 40.7128, lng: -74.0060 },
-    'dubai': { lat: 25.2048, lng: 55.2708 },
-    'singapore': { lat: 1.3521, lng: 103.8198 },
-    'bali': { lat: -8.3405, lng: 115.0920 },
-    'sydney': { lat: -33.8688, lng: 151.2093 },
-  };
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sheetState, setSheetState] = useState<'peeking' | 'anchored' | 'expanded'>('peeking');
+  
+  const mapRef = useRef<MapViewRef>(null);
+  const sheetHeight = useSharedValue(SNAP_POINTS.PEEKING);
 
-  // Get region based on destination string
-  const getRegionForDestination = (destination: string | undefined) => {
-    if (destination) {
-      const dest = destination.toLowerCase();
-      for (const [key, coords] of Object.entries(DESTINATION_COORDS)) {
-        if (dest.includes(key)) {
-          return {
-            latitude: coords.lat,
-            longitude: coords.lng,
-            latitudeDelta: 0.15,
-            longitudeDelta: 0.15,
-          };
-        }
-      }
+  // Filter items
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    
+    let filtered = items;
+    
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(item => item.category === selectedCategory);
     }
-    return null;
-  };
+    
+    // Filter by search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(query) ||
+        item.area_name?.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [items, selectedCategory, searchQuery]);
 
-  // Get region based on items with coordinates
-  const getRegionForItems = (itemsList: SavedItem[]) => {
-    const itemsWithLocation = itemsList.filter(item => item.location_lat && item.location_lng);
+  // Get initial map region
+  const getInitialRegion = () => {
+    const itemsWithLocation = items?.filter(item => item.location_lat && item.location_lng) || [];
     if (itemsWithLocation.length > 0) {
       const lats = itemsWithLocation.map(item => item.location_lat!);
       const lngs = itemsWithLocation.map(item => item.location_lng!);
-      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-      const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-      const latDelta = Math.max(0.08, (Math.max(...lats) - Math.min(...lats)) * 1.5);
-      const lngDelta = Math.max(0.08, (Math.max(...lngs) - Math.min(...lngs)) * 1.5);
-      
       return {
-        latitude: centerLat,
-        longitude: centerLng,
-        latitudeDelta: latDelta,
-        longitudeDelta: lngDelta,
+        latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
+        longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
+        latitudeDelta: Math.max(0.08, (Math.max(...lats) - Math.min(...lats)) * 1.5),
+        longitudeDelta: Math.max(0.08, (Math.max(...lngs) - Math.min(...lngs)) * 1.5),
       };
     }
-    return null;
+    return {
+      latitude: 19.0760,
+      longitude: 72.8777,
+      latitudeDelta: 0.15,
+      longitudeDelta: 0.15,
+    };
   };
 
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 19.0760, // Default to Mumbai as fallback
-    longitude: 72.8777,
-    latitudeDelta: 0.15,
-    longitudeDelta: 0.15,
-  });
-  const [regionSet, setRegionSet] = useState(false);
-  
-  const mapRef = useRef<MapViewRef>(null);
-
   useEffect(() => {
-    const loadAndEnrichItems = async () => {
-      await fetchTripItems(tripId, {});
-      // Auto-enrich items that don't have Google data yet
-      // This runs in background after items load
-    };
-    loadAndEnrichItems();
+    fetchTripItems(tripId, {});
+    fetchCheckIns(tripId);
   }, [tripId]);
 
-  // Priority: Items with coords > Trip destination > Default
-  useEffect(() => {
-    // First priority: center on items if they have coordinates
-    if (items && items.length > 0) {
-      const itemRegion = getRegionForItems(items);
-      if (itemRegion) {
-        console.log('[MapTab] Setting region from items:', itemRegion);
-        setMapRegion(itemRegion);
-        setRegionSet(true);
-        return;
-      }
-    }
+  // Snap to point
+  const snapTo = (point: number) => {
+    sheetHeight.value = withSpring(point, {
+      damping: 20,
+      stiffness: 150,
+    });
     
-    // Second priority: use trip destination
-    if (currentTrip?.destination && !regionSet) {
-      const destRegion = getRegionForDestination(currentTrip.destination);
-      if (destRegion) {
-        console.log('[MapTab] Setting region from destination:', currentTrip.destination, destRegion);
-        setMapRegion(destRegion);
-        setRegionSet(true);
-      }
-    }
-  }, [items, currentTrip?.destination]);
-
-  // Keep drawer items synced with store items (for enrichment updates)
-  useEffect(() => {
-    if (items && items.length > 0) {
-      // Always update drawer items when store items change (includes photo enrichment)
-      setDrawerItems(items);
-    }
-  }, [items]);
-
-  // Get user name from trip members
-  const getUserName = (userId: string) => {
-    const member = currentTripMembers?.find(m => m.id === userId);
-    return member?.name || member?.email || 'Someone';
+    if (point === SNAP_POINTS.PEEKING) setSheetState('peeking');
+    else if (point === SNAP_POINTS.ANCHORED) setSheetState('anchored');
+    else setSheetState('expanded');
   };
 
-  // Handle marker press on map
+  // Handle marker press - snap to anchored and scroll to item
   const handleMarkerPress = (item: SavedItem) => {
     HapticFeedback.medium();
     setSelectedPlace(item);
-    
-    if (item.location_lat && item.location_lng && mapRef.current) {
-      mapRef.current.animateToRegion(item.location_lat, item.location_lng, 15);
-    }
+    snapTo(SNAP_POINTS.ANCHORED);
   };
 
-  // Handle cluster press - opens drawer with category items
-  const handleClusterPress = (category: ItemCategory, clusterItems: SavedItem[]) => {
-    HapticFeedback.medium();
-    setSelectedCategory(category as any);
-    setDrawerItems(clusterItems);
-    setSelectedPlace(null);
-    setIsDrawerOpen(true);
-  };
-
-  // Handle place select from drawer
-  const handlePlaceSelectFromDrawer = (item: SavedItem) => {
-    HapticFeedback.medium();
+  // Handle place select from list
+  const handlePlaceSelect = (item: SavedItem) => {
+    HapticFeedback.light();
     setSelectedPlace(item);
     
     if (item.location_lat && item.location_lng && mapRef.current) {
@@ -174,88 +147,7 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
     }
   };
 
-  // Back to list in drawer
-  const handleBackToList = () => {
-    HapticFeedback.light();
-    setSelectedPlace(null);
-  };
-
-  // Close drawer
-  const handleDrawerClose = () => {
-    setSelectedPlace(null);
-    setDrawerItems([]);
-    setSelectedCategory('all');
-    setIsDrawerOpen(false);
-  };
-
-  // Toggle favorite
-  const handleToggleFavorite = async (place: SavedItem) => {
-    try {
-      HapticFeedback.light();
-      const updatedPlace = await toggleFavorite(place.id);
-      
-      if (selectedPlace?.id === place.id) {
-        setSelectedPlace(updatedPlace);
-      }
-      
-      setDrawerItems(prev => prev.map(item => 
-        item.id === place.id ? { ...item, is_favorite: updatedPlace.is_favorite } : item
-      ));
-    } catch (error) {
-      console.error('Toggle favorite error:', error);
-    }
-  };
-
-  // Toggle must visit
-  const handleToggleMustVisit = async (place: SavedItem) => {
-    try {
-      HapticFeedback.medium();
-      const updatedPlace = await toggleMustVisit(place.id);
-      
-      if (selectedPlace?.id === place.id) {
-        setSelectedPlace(updatedPlace);
-      }
-      
-      setDrawerItems(prev => prev.map(item => 
-        item.id === place.id ? { ...item, is_must_visit: updatedPlace.is_must_visit } : item
-      ));
-    } catch (error) {
-      console.error('Toggle must visit error:', error);
-    }
-  };
-
-  // Delete item
-  const handleDeleteItem = async (itemId: string) => {
-    try {
-      await deleteItem(itemId);
-      setDrawerItems(prev => prev.filter(item => item.id !== itemId));
-      if (selectedPlace?.id === itemId) {
-        setSelectedPlace(null);
-      }
-    } catch (error) {
-      console.error('Delete item error:', error);
-    }
-  };
-
-  // Update notes
-  const handleUpdateNotes = async (place: SavedItem, notes: string) => {
-    try {
-      await updateNotes(place.id, notes);
-    } catch (error) {
-      console.error('Update notes error:', error);
-    }
-  };
-
-  // Assign to day
-  const handleAssignToDay = async (place: SavedItem, day: number | null) => {
-    try {
-      await assignItemToDay(place.id, day);
-    } catch (error) {
-      console.error('Assign to day error:', error);
-    }
-  };
-
-  // Instant check-in handler
+  // Handle check-in
   const handleCheckIn = async (place: SavedItem) => {
     HapticFeedback.success();
     try {
@@ -266,10 +158,122 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
     }
   };
 
+  // Gesture handler for drag
+  const gestureHandler = useAnimatedGestureHandler({
+    onStart: (_, ctx: any) => {
+      ctx.startY = sheetHeight.value;
+    },
+    onActive: (event, ctx) => {
+      const newHeight = ctx.startY - event.translationY;
+      sheetHeight.value = Math.min(SNAP_POINTS.EXPANDED, Math.max(SNAP_POINTS.PEEKING, newHeight));
+    },
+    onEnd: (event) => {
+      const velocity = event.velocityY;
+      const currentHeight = sheetHeight.value;
+      
+      // Determine which snap point to go to
+      if (velocity > 500) {
+        // Swiping down fast
+        if (currentHeight > SNAP_POINTS.ANCHORED) {
+          runOnJS(snapTo)(SNAP_POINTS.ANCHORED);
+        } else {
+          runOnJS(snapTo)(SNAP_POINTS.PEEKING);
+        }
+      } else if (velocity < -500) {
+        // Swiping up fast
+        if (currentHeight < SNAP_POINTS.ANCHORED) {
+          runOnJS(snapTo)(SNAP_POINTS.ANCHORED);
+        } else {
+          runOnJS(snapTo)(SNAP_POINTS.EXPANDED);
+        }
+      } else {
+        // Find closest snap point
+        const distances = [
+          { point: SNAP_POINTS.PEEKING, dist: Math.abs(currentHeight - SNAP_POINTS.PEEKING) },
+          { point: SNAP_POINTS.ANCHORED, dist: Math.abs(currentHeight - SNAP_POINTS.ANCHORED) },
+          { point: SNAP_POINTS.EXPANDED, dist: Math.abs(currentHeight - SNAP_POINTS.EXPANDED) },
+        ];
+        const closest = distances.reduce((a, b) => a.dist < b.dist ? a : b);
+        runOnJS(snapTo)(closest.point);
+      }
+    },
+  });
+
+  // Animated style for sheet
+  const animatedSheetStyle = useAnimatedStyle(() => ({
+    height: sheetHeight.value,
+  }));
+
+  // Render place card
+  const renderPlaceCard = (item: SavedItem, isHighlighted: boolean = false) => {
+    const photoUrl = getPlacePhotoUrl(item);
+    const isCheckedIn = isPlaceCheckedIn(tripId, item.id);
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[styles.placeCard, isHighlighted && styles.placeCardHighlighted]}
+        onPress={() => handlePlaceSelect(item)}
+        activeOpacity={0.7}
+      >
+        {/* Photo */}
+        <View style={styles.placeCardImage}>
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.placeImage} />
+          ) : (
+            <View style={styles.placeImagePlaceholder}>
+              <Text style={styles.placeImageEmoji}>
+                {item.category === 'food' ? '🍽️' : 
+                 item.category === 'shopping' ? '🛍️' : '📍'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Info */}
+        <View style={styles.placeCardInfo}>
+          <Text style={styles.placeCardName} numberOfLines={1}>{item.name}</Text>
+          
+          {item.rating && (
+            <View style={styles.placeCardRating}>
+              <Ionicons name="star" size={12} color="#F59E0B" />
+              <Text style={styles.placeCardRatingText}>
+                {Number(item.rating).toFixed(1)}
+              </Text>
+              {item.user_ratings_total && (
+                <Text style={styles.placeCardReviews}>
+                  ({item.user_ratings_total})
+                </Text>
+              )}
+            </View>
+          )}
+          
+          {item.area_name && (
+            <Text style={styles.placeCardArea} numberOfLines={1}>{item.area_name}</Text>
+          )}
+        </View>
+
+        {/* Check-in Status */}
+        {isCheckedIn ? (
+          <View style={styles.checkedInBadge}>
+            <Ionicons name="checkmark" size={14} color="#10B981" />
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.checkInButton}
+            onPress={() => handleCheckIn(item)}
+          >
+            <Ionicons name="location" size={16} color="#3B82F6" />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
   if (isLoading && (!items || items.length === 0)) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color="#3B82F6" />
         <Text style={styles.loadingText}>Loading map...</Text>
       </View>
     );
@@ -281,55 +285,92 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
-          items={items || []}
-          region={mapRegion}
+          items={filteredItems}
+          region={getInitialRegion()}
           selectedPlace={selectedPlace}
           onMarkerPress={handleMarkerPress}
-          onClusterPress={handleClusterPress}
         />
       </View>
 
-      {/* Place List Drawer - Only shows when drawer is open */}
-      {isDrawerOpen && (
-        <PlaceListDrawer
-          items={drawerItems}
-          selectedCategory={selectedCategory}
-          selectedPlace={selectedPlace}
-          onPlaceSelect={handlePlaceSelectFromDrawer}
-          onBackToList={handleBackToList}
-          onClose={handleDrawerClose}
-          onCheckIn={handleCheckIn}
-          isPlaceCheckedIn={(placeId: string) => isPlaceCheckedIn(tripId, placeId)}
-          getUserName={getUserName}
-          onToggleFavorite={handleToggleFavorite}
-          onToggleMustVisit={handleToggleMustVisit}
-          onDeleteItem={handleDeleteItem}
-          onUpdateNotes={handleUpdateNotes}
-          userLocation={location?.coords ? { 
-            latitude: location.coords.latitude, 
-            longitude: location.coords.longitude 
-          } : null}
-          trip={currentTrip || undefined}
-          onAssignToDay={handleAssignToDay}
-        />
-      )}
+      {/* Draggable Bottom Sheet */}
+      <PanGestureHandler onGestureEvent={gestureHandler}>
+        <Animated.View style={[styles.bottomSheet, animatedSheetStyle]}>
+          {/* Handle */}
+          <View style={styles.sheetHandle}>
+            <View style={styles.sheetHandleBar} />
+          </View>
 
-      {/* Floating button to reopen drawer when closed */}
-      {!isDrawerOpen && (
-        <TouchableOpacity
-          style={styles.floatingButton}
-          onPress={() => {
-            setDrawerItems(items || []);
-            setIsDrawerOpen(true);
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.floatingButtonIcon}>📍</Text>
-          <Text style={styles.floatingButtonText}>{items?.length || 0} Places</Text>
-        </TouchableOpacity>
-      )}
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search" size={18} color="#94A3B8" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search places..."
+                placeholderTextColor="#94A3B8"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => snapTo(SNAP_POINTS.ANCHORED)}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
-      </View>
+          {/* Category Filters */}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersContainer}
+          >
+            {CATEGORY_FILTERS.map((filter) => (
+              <TouchableOpacity
+                key={filter.key}
+                style={[
+                  styles.filterChip,
+                  selectedCategory === filter.key && styles.filterChipActive,
+                ]}
+                onPress={() => {
+                  HapticFeedback.light();
+                  setSelectedCategory(filter.key);
+                }}
+              >
+                <Text style={styles.filterIcon}>{filter.icon}</Text>
+                <Text style={[
+                  styles.filterLabel,
+                  selectedCategory === filter.key && styles.filterLabelActive,
+                ]}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Places List */}
+          <ScrollView 
+            style={styles.placesList}
+            contentContainerStyle={styles.placesListContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredItems.length > 0 ? (
+              filteredItems.map((item) => renderPlaceCard(item, selectedPlace?.id === item.id))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}>📍</Text>
+                <Text style={styles.emptyTitle}>No places found</Text>
+                <Text style={styles.emptyText}>
+                  {searchQuery ? 'Try a different search term' : 'Add places via chat to see them here'}
+                </Text>
+              </View>
+            )}
+            <View style={{ height: BOTTOM_TAB_HEIGHT + 20 }} />
+          </ScrollView>
+        </Animated.View>
+      </PanGestureHandler>
+    </View>
   );
 }
 
@@ -345,35 +386,210 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 15,
+    fontSize: 14,
     color: '#64748B',
   },
+
+  // Map
   mapContainer: {
     flex: 1,
   },
-  floatingButton: {
+
+  // Bottom Sheet
+  bottomSheet: {
     position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 20,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  sheetHandle: {
+    alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 24,
+  },
+  sheetHandleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+  },
+
+  // Search
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+
+  // Filters
+  filtersContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#3B82F6',
+  },
+  filterIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  filterLabelActive: {
+    color: '#3B82F6',
+  },
+
+  // Places List
+  placesList: {
+    flex: 1,
+  },
+  placesListContent: {
+    paddingHorizontal: 16,
+  },
+
+  // Place Card
+  placeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  floatingButtonIcon: {
-    fontSize: 16,
+  placeCardHighlighted: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#F8FAFF',
   },
-  floatingButtonText: {
-    color: '#fff',
+  placeCardImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F1F5F9',
+  },
+  placeImage: {
+    width: '100%',
+    height: '100%',
+  },
+  placeImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeImageEmoji: {
+    fontSize: 24,
+  },
+  placeCardInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  placeCardName: {
     fontSize: 15,
     fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  placeCardRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  placeCardRatingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F59E0B',
+    marginLeft: 4,
+  },
+  placeCardReviews: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginLeft: 4,
+  },
+  placeCardArea: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  checkedInBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#D1FAE5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkInButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

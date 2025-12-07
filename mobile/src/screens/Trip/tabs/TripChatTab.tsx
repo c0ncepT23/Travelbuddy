@@ -14,33 +14,39 @@ import {
   Dimensions,
 } from 'react-native';
 import { MotiView } from 'moti';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
 import { useChatStore } from '../../../stores/chatStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useTripStore } from '../../../stores/tripStore';
 import { useItemStore } from '../../../stores/itemStore';
-import { useBriefingStore } from '../../../stores/briefingStore';
-import { useLocationStore } from '../../../stores/locationStore';
 import ImportLocationsModal from '../../../components/ImportLocationsModal';
 import { ImportModalData, SavedItem } from '../../../types';
 import { HapticFeedback } from '../../../utils/haptics';
 import { format, isToday, isYesterday } from 'date-fns';
-import theme from '../../../config/theme';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const BOTTOM_TAB_HEIGHT = 80;
 
 interface TripChatTabProps {
   tripId: string;
   navigation: any;
 }
 
+// Quick Action Chips
+const QUICK_ACTIONS = [
+  { id: 'youtube', label: '🎥 Paste YouTube Link', placeholder: 'Paste a YouTube travel guide link...' },
+  { id: 'attractions', label: '📍 Find Attractions', message: 'What are the must-see attractions here?' },
+  { id: 'food', label: '🍽️ Food Spots', message: 'Find me the best food spots' },
+  { id: 'plan', label: '📅 Plan My Day', message: 'Help me plan my day' },
+];
 
 // Helper functions
 const formatMessageTime = (date: Date): string => {
   return format(new Date(date), 'h:mm a');
 };
 
-const formatMessageDate = (date: Date): string => {
+const formatMessageDate = (date: Date | string): string => {
   const d = new Date(date);
   if (isToday(d)) return 'Today';
   if (isYesterday(d)) return 'Yesterday';
@@ -56,17 +62,63 @@ const getInitials = (name: string): string => {
     .substring(0, 2);
 };
 
-const getAvatarColor = (name: string): string => {
-  const colors = [
-    '#3B82F6',
-    '#10B981',
-    '#F59E0B',
-    '#EC4899',
-    '#8B5CF6',
-    '#06B6D4',
-  ];
-  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return colors[hash % colors.length];
+// Processing Card Component (for link parsing)
+const ProcessingCard = ({ 
+  status, 
+  placesFound, 
+  onViewMap 
+}: { 
+  status: 'parsing' | 'done' | 'error';
+  placesFound: string[];
+  onViewMap: () => void;
+}) => {
+  return (
+    <MotiView
+      from={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      style={styles.processingCard}
+    >
+      <View style={styles.processingHeader}>
+        {status === 'parsing' ? (
+          <>
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text style={styles.processingTitle}>Parsing video...</Text>
+          </>
+        ) : status === 'done' ? (
+          <>
+            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+            <Text style={styles.processingTitle}>Found {placesFound.length} places!</Text>
+          </>
+        ) : (
+          <>
+            <Ionicons name="alert-circle" size={20} color="#EF4444" />
+            <Text style={styles.processingTitle}>Couldn't parse link</Text>
+          </>
+        )}
+      </View>
+      
+      {status === 'done' && placesFound.length > 0 && (
+        <>
+          <View style={styles.processingPlaces}>
+            {placesFound.slice(0, 3).map((place, idx) => (
+              <View key={idx} style={styles.processingPlaceItem}>
+                <Ionicons name="checkmark" size={16} color="#10B981" />
+                <Text style={styles.processingPlaceText}>{place}</Text>
+              </View>
+            ))}
+            {placesFound.length > 3 && (
+              <Text style={styles.processingMore}>+{placesFound.length - 3} more</Text>
+            )}
+          </View>
+          
+          <TouchableOpacity style={styles.viewMapButton} onPress={onViewMap}>
+            <Ionicons name="map" size={18} color="#FFFFFF" />
+            <Text style={styles.viewMapText}>View on Map</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </MotiView>
+  );
 };
 
 export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
@@ -86,13 +138,12 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     startTyping,
     stopTyping,
   } = useChatStore();
-  const { briefing, fetchBriefing } = useBriefingStore();
-  const { location } = useLocationStore();
   const { fetchTripItems } = useItemStore();
 
   const [inputText, setInputText] = useState('');
   const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(true);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -100,22 +151,9 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
   // Initialize chat
   useEffect(() => {
     const initChat = async () => {
-      try {
-        await fetchMessages(tripId);
-        await fetchTripItems(tripId, {});
-        
-        // Fetch briefing with location
-        const locationData = location
-          ? { lat: location.coords.latitude, lng: location.coords.longitude }
-          : undefined;
-        await fetchBriefing(tripId, locationData);
-        
-        // Connect WebSocket
-        await connectWebSocket();
-        joinTripChat(tripId);
-      } catch (error) {
-        console.error('[ChatTab] Init error:', error);
-      }
+      await fetchMessages(tripId);
+      connectWebSocket();
+      joinTripChat(tripId);
     };
 
     initChat();
@@ -128,14 +166,14 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
   // Handle input change with typing indicator
   const handleInputChange = (text: string) => {
     setInputText(text);
-    
+    setShowQuickActions(text.length === 0);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
     if (text.length > 0) {
       startTyping(tripId);
-      
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
       typingTimeoutRef.current = setTimeout(() => {
         stopTyping(tripId);
       }, 2000);
@@ -144,109 +182,61 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     }
   };
 
-  // Send message
-  const handleSendMessage = async (messageText?: string) => {
-    const textToSend = messageText || inputText.trim();
-    if (!textToSend || isSending) return;
+  // Check if text is a URL
+  const isURL = (text: string): boolean => {
+    return text.includes('youtube.com') || 
+           text.includes('youtu.be') || 
+           text.includes('instagram.com') || 
+           text.includes('reddit.com');
+  };
 
-    HapticFeedback.medium();
+  // Handle send message
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || isSending) return;
+
+    const messageText = inputText.trim();
     setInputText('');
-    stopTyping(tripId);
+    setShowQuickActions(true);
+    HapticFeedback.light();
 
     try {
-      await sendMessageViaSocket(tripId, textToSend);
+      await sendMessageViaSocket(tripId, messageText);
+      await fetchTripItems(tripId, {});
     } catch (error) {
-      console.error('[ChatTab] Send error:', error);
+      console.error('Send message error:', error);
     }
   };
 
+  // Handle quick action
+  const handleQuickAction = (action: typeof QUICK_ACTIONS[0]) => {
+    HapticFeedback.light();
+    if (action.message) {
+      setInputText(action.message);
+    } else if (action.placeholder) {
+      setInputText('');
+    }
+    setShowQuickActions(false);
+  };
 
-  // Pull to refresh
+  // Refresh messages
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchMessages(tripId);
     setRefreshing(false);
   };
 
-  // Empty state with welcome message
-  const renderEmptyState = () => (
-    <View style={styles.emptyStateContainer}>
-      {/* AI Avatar */}
-      <MotiView
-        from={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', damping: 15 }}
-        style={styles.welcomeAvatar}
-      >
-        <LinearGradient
-          colors={['#3B82F6', '#8B5CF6']}
-          style={styles.welcomeAvatarGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Text style={styles.welcomeAvatarEmoji}>🤖</Text>
-        </LinearGradient>
-      </MotiView>
-
-      {/* Welcome Text */}
-      <MotiView
-        from={{ translateY: 20, opacity: 0 }}
-        animate={{ translateY: 0, opacity: 1 }}
-        transition={{ type: 'timing', duration: 400, delay: 200 }}
-      >
-        <Text style={styles.welcomeTitle}>Hey there! 👋</Text>
-        <Text style={styles.welcomeSubtitle}>
-          I'm your AI travel companion for{'\n'}
-          <Text style={styles.welcomeDestination}>{currentTrip?.destination || 'this trip'}</Text>
-        </Text>
-      </MotiView>
-
-      {/* What I can help with */}
-      <MotiView
-        from={{ translateY: 20, opacity: 0 }}
-        animate={{ translateY: 0, opacity: 1 }}
-        transition={{ type: 'timing', duration: 400, delay: 400 }}
-        style={styles.helpSection}
-      >
-        <Text style={styles.helpTitle}>I can help you with:</Text>
-        <View style={styles.helpItems}>
-          {[
-            { icon: '📍', text: 'Find amazing places' },
-            { icon: '🗓️', text: 'Plan your days' },
-            { icon: '🎥', text: 'Import YouTube guides' },
-            { icon: '💡', text: 'Local tips & insights' },
-          ].map((item, index) => (
-            <MotiView
-              key={index}
-              from={{ translateX: -20, opacity: 0 }}
-              animate={{ translateX: 0, opacity: 1 }}
-              transition={{ type: 'timing', duration: 300, delay: 500 + index * 100 }}
-              style={styles.helpItem}
-            >
-              <Text style={styles.helpItemIcon}>{item.icon}</Text>
-              <Text style={styles.helpItemText}>{item.text}</Text>
-            </MotiView>
-          ))}
-        </View>
-      </MotiView>
-
-    </View>
-  );
-
-  // Render message
+  // Render message bubble
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
-    const isAI = item.metadata?.isAI || item.sender_email === 'ai@travelagent.app';
-    const isOwnMessage = item.sender_id === user?.id && !isAI;
-    const showDateSeparator = index === messages.length - 1 || 
-      formatMessageDate(new Date(item.created_at)) !== formatMessageDate(new Date(messages[index + 1]?.created_at));
+    const isOwnMessage = item.sender_id === user?.id;
+    const isAI = item.sender_type === 'agent';
+    const showDate = index === messages.length - 1 || 
+      formatMessageDate(messages[index + 1]?.created_at) !== formatMessageDate(item.created_at);
 
     return (
       <View>
-        {showDateSeparator && (
-          <View style={styles.dateSeparator}>
-            <View style={styles.dateLine} />
-            <Text style={styles.dateText}>{formatMessageDate(item.created_at)}</Text>
-            <View style={styles.dateLine} />
+        {showDate && (
+          <View style={styles.dateHeader}>
+            <Text style={styles.dateHeaderText}>{formatMessageDate(item.created_at)}</Text>
           </View>
         )}
         
@@ -256,25 +246,17 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
           transition={{ type: 'timing', duration: 200 }}
           style={[
             styles.messageContainer,
-            isOwnMessage && styles.ownMessageContainer,
+            isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
           ]}
         >
-          {/* Avatar */}
+          {/* Avatar for AI/Others */}
           {!isOwnMessage && (
             <View style={[
               styles.avatar,
               isAI && styles.aiAvatar,
-              !isAI && { backgroundColor: getAvatarColor(item.sender_name || 'User') }
             ]}>
               {isAI ? (
-                <LinearGradient
-                  colors={['#3B82F6', '#8B5CF6']}
-                  style={styles.aiAvatarGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.avatarText}>🤖</Text>
-                </LinearGradient>
+                <Text style={styles.avatarEmoji}>🤖</Text>
               ) : (
                 <Text style={styles.avatarText}>
                   {getInitials(item.sender_name || 'U')}
@@ -289,10 +271,8 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
             isOwnMessage && styles.ownMessageBubble,
             isAI && styles.aiMessageBubble,
           ]}>
-            {!isOwnMessage && (
-              <Text style={[styles.senderName, isAI && styles.aiSenderName]}>
-                {isAI ? '✨ TravelPal' : item.sender_name}
-              </Text>
+            {!isOwnMessage && !isAI && (
+              <Text style={styles.senderName}>{item.sender_name}</Text>
             )}
             <Text style={[
               styles.messageText,
@@ -306,8 +286,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
             ]}>
               {formatMessageTime(item.created_at)}
             </Text>
-            
-            {/* AI Suggestions - Disabled for now */}
           </View>
         </MotiView>
       </View>
@@ -337,10 +315,28 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
             />
           ))}
         </View>
-        <Text style={styles.typingText}>TravelPal is thinking...</Text>
+        <Text style={styles.typingText}>AI is thinking...</Text>
       </View>
     );
   };
+
+  // Empty state with robot mascot
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <MotiView
+        from={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', damping: 15 }}
+        style={styles.emptyMascot}
+      >
+        <Text style={styles.emptyMascotEmoji}>🤖</Text>
+      </MotiView>
+      <Text style={styles.emptyTitle}>Hey there!</Text>
+      <Text style={styles.emptySubtitle}>
+        I'm your AI travel assistant. Paste a YouTube guide, ask for recommendations, or let me help plan your trip!
+      </Text>
+    </View>
+  );
 
   const hasMessages = messages && messages.length > 0;
 
@@ -350,47 +346,27 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Background */}
-      <View style={styles.backgroundPattern}>
-        {[...Array(20)].map((_, i) => (
-          <View 
-            key={i} 
-            style={[
-              styles.patternDot,
-              { 
-                left: `${(i % 5) * 25}%`, 
-                top: `${Math.floor(i / 5) * 25}%`,
-                opacity: 0.03 + (i % 3) * 0.02,
-              }
-            ]} 
-          />
-        ))}
-      </View>
-
       {hasMessages ? (
-        <>
-          {/* Messages List */}
-          <FlatList
-            ref={flatListRef}
-            data={[...messages].reverse()}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-            contentContainerStyle={styles.messagesList}
-            inverted
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={theme.colors.primary}
-              />
-            }
-            ListHeaderComponent={renderTypingIndicator}
-          />
-        </>
+        <FlatList
+          ref={flatListRef}
+          data={[...messages].reverse()}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          contentContainerStyle={[styles.messagesList, { paddingBottom: BOTTOM_TAB_HEIGHT + 80 }]}
+          inverted
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#3B82F6"
+            />
+          }
+          ListHeaderComponent={renderTypingIndicator}
+        />
       ) : (
         <ScrollView 
           style={styles.emptyScrollView}
-          contentContainerStyle={styles.emptyScrollContent}
+          contentContainerStyle={[styles.emptyScrollContent, { paddingBottom: BOTTOM_TAB_HEIGHT + 100 }]}
           showsVerticalScrollIndicator={false}
         >
           {renderEmptyState()}
@@ -398,36 +374,54 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
       )}
 
       {/* Input Area */}
-      <View style={styles.inputContainer}>
-        <View style={styles.inputWrapper}>
+      <View style={styles.inputArea}>
+        {/* Quick Action Chips */}
+        {showQuickActions && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickActionsContainer}
+          >
+            {QUICK_ACTIONS.map((action) => (
+              <TouchableOpacity
+                key={action.id}
+                style={styles.quickActionChip}
+                onPress={() => handleQuickAction(action)}
+              >
+                <Text style={styles.quickActionText}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Input Bar */}
+        <View style={styles.inputBar}>
+          <TouchableOpacity style={styles.linkButton}>
+            <Ionicons name="link" size={20} color="#94A3B8" />
+          </TouchableOpacity>
+          
           <TextInput
             style={styles.textInput}
             value={inputText}
             onChangeText={handleInputChange}
-            placeholder="Ask me anything..."
+            placeholder="Paste a link or ask..."
             placeholderTextColor="#94A3B8"
             multiline
             maxLength={1000}
           />
+          
           <TouchableOpacity
             style={[
               styles.sendButton,
               (!inputText.trim() || isSending) && styles.sendButtonDisabled,
             ]}
-            onPress={() => handleSendMessage()}
+            onPress={handleSendMessage}
             disabled={!inputText.trim() || isSending}
           >
             {isSending ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <LinearGradient
-                colors={inputText.trim() ? ['#3B82F6', '#8B5CF6'] : ['#CBD5E1', '#CBD5E1']}
-                style={styles.sendButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Text style={styles.sendButtonText}>↑</Text>
-              </LinearGradient>
+              <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>
@@ -466,16 +460,124 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  backgroundPattern: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
+
+  // Messages
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
-  patternDot: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  dateHeader: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dateHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  messageContainer: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    maxWidth: '85%',
+  },
+  ownMessageContainer: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row-reverse',
+  },
+  otherMessageContainer: {
+    alignSelf: 'flex-start',
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  aiAvatar: {
+    backgroundColor: '#EEF2FF',
+  },
+  avatarEmoji: {
+    fontSize: 18,
+  },
+  avatarText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  messageBubble: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderTopLeftRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    maxWidth: SCREEN_WIDTH * 0.7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  ownMessageBubble: {
     backgroundColor: '#3B82F6',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 4,
+  },
+  aiMessageBubble: {
+    backgroundColor: '#F1F5F9',
+    borderTopLeftRadius: 4,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  messageText: {
+    fontSize: 15,
+    color: '#1F2937',
+    lineHeight: 20,
+  },
+  ownMessageText: {
+    color: '#FFFFFF',
+  },
+  messageTime: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  ownMessageTime: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+
+  // Typing Indicator
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    gap: 4,
+    marginRight: 8,
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#94A3B8',
+  },
+  typingText: {
+    fontSize: 12,
+    color: '#94A3B8',
   },
 
   // Empty State
@@ -485,271 +587,164 @@ const styles = StyleSheet.create({
   emptyScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingBottom: 40,
-  },
-  emptyStateContainer: {
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
   },
-  welcomeAvatar: {
+  emptyState: {
+    alignItems: 'center',
+  },
+  emptyMascot: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 24,
   },
-  welcomeAvatarGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+  emptyMascotEmoji: {
+    fontSize: 48,
   },
-  welcomeAvatarEmoji: {
-    fontSize: 36,
-  },
-  welcomeTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1E293B',
-    textAlign: 'center',
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 8,
   },
-  welcomeSubtitle: {
-    fontSize: 16,
+  emptySubtitle: {
+    fontSize: 15,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
   },
-  welcomeDestination: {
-    color: '#3B82F6',
-    fontWeight: '700',
-  },
-  helpSection: {
-    marginTop: 32,
-    width: '100%',
-  },
-  helpTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#94A3B8',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  helpItems: {
+
+  // Input Area
+  inputArea: {
+    position: 'absolute',
+    bottom: BOTTOM_TAB_HEIGHT,
+    left: 0,
+    right: 0,
     backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 12,
+  },
+  quickActionsContainer: {
+    paddingBottom: 12,
+    gap: 8,
+  },
+  quickActionChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  helpItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  helpItemIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  helpItemText: {
-    fontSize: 15,
-    color: '#334155',
-    fontWeight: '500',
-  },
-
-  // Messages
-  messagesList: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-
-  // Date Separator
-  dateSeparator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  dateLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
-  },
-  dateText: {
-    paddingHorizontal: 12,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-
-  // Message
-  messageContainer: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    alignItems: 'flex-end',
-  },
-  ownMessageContainer: {
-    justifyContent: 'flex-end',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 8,
-    overflow: 'hidden',
   },
-  aiAvatar: {
-    backgroundColor: 'transparent',
+  quickActionText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#475569',
   },
-  aiAvatarGradient: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  messageBubble: {
-    maxWidth: '75%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderBottomLeftRadius: 4,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  ownMessageBubble: {
-    backgroundColor: '#3B82F6',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 4,
-  },
-  aiMessageBubble: {
-    backgroundColor: '#FFFFFF',
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  aiSenderName: {
-    color: '#8B5CF6',
-  },
-  messageText: {
-    fontSize: 15,
-    color: '#1E293B',
-    lineHeight: 22,
-  },
-  ownMessageText: {
-    color: '#FFFFFF',
-  },
-  messageTime: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 6,
-    alignSelf: 'flex-end',
-  },
-  ownMessageTime: {
-    color: 'rgba(255,255,255,0.7)',
-  },
-
-
-  // Typing Indicator
-  typingContainer: {
-    flexDirection: 'row',
+  linkButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  typingDots: {
-    flexDirection: 'row',
-    marginRight: 8,
-  },
-  typingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#8B5CF6',
-    marginHorizontal: 2,
-  },
-  typingText: {
-    fontSize: 12,
-    color: '#8B5CF6',
-    fontWeight: '500',
-  },
-
-  // Input
-  inputContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    paddingTop: 8,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 24,
-    paddingLeft: 18,
-    paddingRight: 4,
-    paddingVertical: 4,
   },
   textInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1E293B',
+    color: '#1F2937',
     maxHeight: 100,
-    paddingVertical: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendButtonGradient: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#3B82F6',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  sendButtonDisabled: {
+    backgroundColor: '#CBD5E1',
   },
   connectionStatus: {
     alignItems: 'center',
-    paddingTop: 8,
+    paddingVertical: 4,
   },
   connectionText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#F59E0B',
-    fontWeight: '500',
+  },
+
+  // Processing Card
+  processingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  processingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  processingTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  processingPlaces: {
+    marginBottom: 12,
+  },
+  processingPlaceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  processingPlaceText: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  processingMore: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 4,
+  },
+  viewMapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  viewMapText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

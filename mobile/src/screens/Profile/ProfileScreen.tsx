@@ -23,7 +23,12 @@ import api from '../../config/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function ProfileScreen({ navigation }: any) {
+interface ProfileScreenProps {
+  navigation: any;
+  embedded?: boolean;
+}
+
+export default function ProfileScreen({ navigation, embedded = false }: ProfileScreenProps) {
   const { user, logout, updateUser } = useAuthStore();
   const { trips, fetchTrips } = useTripStore();
   const { totalXP, level, getLevelTitle, getProgress } = useXPStore();
