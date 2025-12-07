@@ -191,25 +191,8 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Header Row with Close, Favorite, and Share buttons */}
+      {/* Header Row - Clean with just close button */}
       <View style={styles.headerRow}>
-        {onToggleFavorite && (
-          <TouchableOpacity 
-            style={styles.favoriteButton}
-            onPress={() => onToggleFavorite(place)}
-          >
-            <Text style={styles.favoriteIcon}>
-              {place.is_favorite ? '❤️' : '🤍'}
-            </Text>
-          </TouchableOpacity>
-        )}
-        {/* Share Button */}
-        <TouchableOpacity 
-          style={styles.shareButton}
-          onPress={handleShare}
-        >
-          <Text style={styles.shareIcon}>📤</Text>
-        </TouchableOpacity>
         <View style={styles.headerSpacer} />
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
           <Text style={styles.closeButtonText}>✕</Text>
@@ -460,24 +443,29 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
         </TouchableOpacity>
       </Modal>
 
-      {/* Action Buttons - Matching reference design */}
+      {/* Action Buttons */}
       <View style={styles.actionBar}>
-        {/* Must Visit Toggle Button */}
-        {onToggleMustVisit ? (
-          <TouchableOpacity 
-            style={[styles.savedButton, place.is_must_visit && styles.mustVisitActiveButton]}
-            onPress={() => onToggleMustVisit(place)}
-          >
-            <Text style={styles.savedIcon}>{place.is_must_visit ? '🎯' : '📌'}</Text>
-            <Text style={[styles.savedText, place.is_must_visit && styles.mustVisitActiveText]}>
-              {place.is_must_visit ? 'Must Visit' : 'Mark Priority'}
-            </Text>
-          </TouchableOpacity>
+        {/* Check-in Button - Primary Action */}
+        {onCheckIn ? (
+          isCheckedIn ? (
+            <View style={styles.checkedInButton}>
+              <Text style={styles.checkedInIcon}>✓</Text>
+              <Text style={styles.checkedInText}>Checked In</Text>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.checkInButton}
+              onPress={() => onCheckIn(place)}
+            >
+              <Text style={styles.checkInIcon}>📍</Text>
+              <Text style={styles.checkInButtonText}>Check In</Text>
+            </TouchableOpacity>
+          )
         ) : (
-          <TouchableOpacity style={styles.savedButton}>
-            <Text style={styles.savedIcon}>🔖</Text>
+          <View style={styles.savedBadge}>
+            <Text style={styles.savedIcon}>✓</Text>
             <Text style={styles.savedText}>Saved</Text>
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* Direction Button */}
@@ -486,27 +474,9 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
           onPress={openInGoogleMaps}
         >
           <Text style={styles.directionIcon}>↗</Text>
-          <Text style={styles.directionText}>Direction</Text>
+          <Text style={styles.directionText}>Directions</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Check-in Button (if callback provided) */}
-      {onCheckIn && (
-        <View style={styles.checkInContainer}>
-          {isCheckedIn ? (
-            <View style={styles.checkedInBadge}>
-              <Text style={styles.checkedInText}>✓ Checked In</Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.checkInButton}
-              onPress={() => onCheckIn(place)}
-            >
-              <Text style={styles.checkInButtonText}>✓ Check In</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
     </View>
   );
 };
@@ -768,35 +738,59 @@ const styles = StyleSheet.create({
     color: theme.colors.textInverse,
   },
   
-  // Check-in - NeoPOP style
-  checkInContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  // Check-in Button - Primary Action
   checkInButton: {
-    backgroundColor: theme.colors.success,
-    paddingVertical: 16,
-    borderWidth: 3,
-    borderColor: theme.colors.borderDark,
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    ...theme.shadows.neopop.md,
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    marginRight: 12,
+    ...theme.shadows.neopop.sm,
+  },
+  checkInIcon: {
+    fontSize: 18,
+    marginRight: 8,
   },
   checkInButtonText: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: theme.colors.textInverse,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  checkedInBadge: {
-    backgroundColor: theme.categoryColors.activity.bg,
-    paddingVertical: 16,
+  checkedInButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: theme.colors.success,
+    justifyContent: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 14,
+    borderWidth: 2,
+    borderColor: '#10B981',
+    marginRight: 12,
+  },
+  checkedInIcon: {
+    fontSize: 18,
+    marginRight: 8,
+    color: '#10B981',
   },
   checkedInText: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: theme.colors.success,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#10B981',
+  },
+  savedBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 14,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    marginRight: 12,
   },
   
   // Assign to Day Button
@@ -1038,3 +1032,4 @@ const styles = StyleSheet.create({
     color: theme.colors.textInverse,
   },
 });
+
