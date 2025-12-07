@@ -8,10 +8,13 @@ import {
   SafeAreaView,
   Dimensions,
   Platform,
+  Share,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
+import * as Clipboard from 'expo-clipboard';
 import { useTripStore } from '../../stores/tripStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { HapticFeedback } from '../../utils/haptics';
@@ -46,12 +49,16 @@ const SideRail = ({
   activeTab, 
   onTabPress, 
   trip, 
-  onBack 
+  onBack,
+  onSharePress,
+  onTimelinePress,
 }: { 
   activeTab: TabName; 
   onTabPress: (tab: TabName) => void;
   trip: any;
   onBack: () => void;
+  onSharePress: () => void;
+  onTimelinePress: () => void;
 }) => {
   const getDestinationInitial = () => {
     if (!trip?.destination) return '✈️';
@@ -150,17 +157,24 @@ const SideRail = ({
         })}
       </View>
 
-      {/* Settings at bottom */}
+      {/* Bottom Actions */}
       <View style={styles.railBottom}>
+        {/* Timeline/Story Button */}
         <TouchableOpacity
-          style={styles.railSettingsButton}
-          onPress={() => {
-            HapticFeedback.light();
-            // TODO: Open trip settings
-          }}
+          style={styles.railBottomButton}
+          onPress={onTimelinePress}
           activeOpacity={0.7}
         >
-          <Ionicons name="settings-outline" size={20} color="#64748B" />
+          <Ionicons name="time-outline" size={20} color="#64748B" />
+        </TouchableOpacity>
+
+        {/* Share/Invite Button */}
+        <TouchableOpacity
+          style={styles.railBottomButton}
+          onPress={onSharePress}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="share-social-outline" size={20} color="#64748B" />
         </TouchableOpacity>
       </View>
     </View>
@@ -208,6 +222,7 @@ export default function TripTabScreen({ route, navigation }: any) {
   const { initializeNotifications } = useLocationStore();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabName>('Chat');
+  const [showShareModal, setShowShareModal] = useState(false);
 
   useEffect(() => {
     const initTrip = async () => {
@@ -245,6 +260,52 @@ export default function TripTabScreen({ route, navigation }: any) {
     navigation.navigate('ItinerarySetup', { tripId, isInitialSetup: false });
   };
 
+  const handleSharePress = () => {
+    HapticFeedback.light();
+    setShowShareModal(true);
+  };
+
+  const handleTimelinePress = () => {
+    HapticFeedback.light();
+    navigation.navigate('Timeline', { tripId });
+  };
+
+  const handleCopyCode = async () => {
+    if (currentTrip?.invite_code) {
+      await Clipboard.setStringAsync(currentTrip.invite_code);
+      HapticFeedback.success();
+      setShowShareModal(false);
+      Alert.alert('✅ Copied!', `Invite code "${currentTrip.invite_code}" copied!`);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (currentTrip?.invite_code) {
+      const inviteLink = `https://travelagent.app/join/${currentTrip.invite_code}`;
+      await Clipboard.setStringAsync(inviteLink);
+      HapticFeedback.success();
+      setShowShareModal(false);
+      Alert.alert('✅ Copied!', 'Invite link copied to clipboard');
+    }
+  };
+
+  const handleShareInvite = async () => {
+    if (currentTrip) {
+      const inviteCode = currentTrip.invite_code;
+      const inviteLink = `https://travelagent.app/join/${inviteCode}`;
+      const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}! 🌍✈️\n\n📱 Invite Code: ${inviteCode}\n\n🔗 Or tap: ${inviteLink}`;
+      setShowShareModal(false);
+      try {
+        await Share.share({
+          message: shareMessage,
+          title: `Join ${currentTrip.name}`,
+        });
+      } catch (error) {
+        console.error('Share error:', error);
+      }
+    }
+  };
+
   // Render active tab content
   const renderTabContent = () => {
     switch (activeTab) {
@@ -271,6 +332,8 @@ export default function TripTabScreen({ route, navigation }: any) {
             onTabPress={handleTabPress}
             trip={currentTrip}
             onBack={handleBack}
+            onSharePress={handleSharePress}
+            onTimelinePress={handleTimelinePress}
           />
 
           {/* Main Content Area */}
@@ -289,6 +352,67 @@ export default function TripTabScreen({ route, navigation }: any) {
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Share Invite Modal */}
+      {showShareModal && currentTrip && (
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowShareModal(false)} 
+          />
+          <MotiView
+            from={{ translateY: 300, opacity: 0 }}
+            animate={{ translateY: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 20 }}
+            style={styles.shareModal}
+          >
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Invite Friends</Text>
+              <TouchableOpacity onPress={() => setShowShareModal(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Invite Code Display */}
+            <View style={styles.inviteCodeContainer}>
+              <Text style={styles.inviteCodeLabel}>INVITE CODE</Text>
+              <View style={styles.inviteCodeBox}>
+                <Text style={styles.inviteCodeText}>{currentTrip.invite_code}</Text>
+              </View>
+              <Text style={styles.inviteCodeHint}>Share this code with friends to join your trip</Text>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.shareActions}>
+              <TouchableOpacity style={styles.shareActionButton} onPress={handleCopyCode}>
+                <LinearGradient
+                  colors={['#3B82F6', '#2563EB']}
+                  style={styles.shareActionGradient}
+                >
+                  <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.shareActionText}>Copy Code</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.shareActionButton} onPress={handleCopyLink}>
+                <View style={styles.shareActionSecondary}>
+                  <Ionicons name="link-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.shareActionSecondaryText}>Copy Link</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.shareActionButton} onPress={handleShareInvite}>
+                <View style={styles.shareActionSecondary}>
+                  <Ionicons name="share-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.shareActionSecondaryText}>Share...</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </MotiView>
+        </View>
+      )}
     </View>
   );
 }
@@ -394,8 +518,10 @@ const styles = StyleSheet.create({
   railBottom: {
     marginTop: 'auto',
     paddingTop: 16,
+    alignItems: 'center',
+    gap: 12,
   },
-  railSettingsButton: {
+  railBottomButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
@@ -464,5 +590,98 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     flex: 1,
+  },
+
+  // Share Modal Styles
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 1000,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  shareModal: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  inviteCodeContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  inviteCodeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  inviteCodeBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
+  },
+  inviteCodeText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 4,
+  },
+  inviteCodeHint: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginTop: 8,
+  },
+  shareActions: {
+    gap: 12,
+  },
+  shareActionButton: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  shareActionGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 10,
+  },
+  shareActionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  shareActionSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 10,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+  },
+  shareActionSecondaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
 });

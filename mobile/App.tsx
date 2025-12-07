@@ -40,6 +40,9 @@ import ProfileScreen from './src/screens/Profile/ProfileScreen';
 // Itinerary
 import ItinerarySetupScreen from './src/screens/Trip/ItinerarySetupScreen';
 
+// Timeline
+import { TimelineScreen } from './src/screens/Trip/TimelineScreen';
+
 const Stack = createStackNavigator();
 
 const linking = {
@@ -382,6 +385,11 @@ export default function App() {
               <Stack.Screen
                 name="ItinerarySetup"
                 component={ItinerarySetupScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Timeline"
+                component={TimelineScreen}
                 options={{ headerShown: false }}
               />
             </>
