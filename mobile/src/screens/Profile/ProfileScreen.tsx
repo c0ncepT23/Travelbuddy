@@ -31,7 +31,7 @@ interface ProfileScreenProps {
 export default function ProfileScreen({ navigation, embedded = false }: ProfileScreenProps) {
   const { user, logout, updateUser } = useAuthStore();
   const { trips, fetchTrips } = useTripStore();
-  const { totalXP, level, getLevelTitle, getProgress } = useXPStore();
+  const { xp: totalXP, level, getLevelTitle, getProgress } = useXPStore();
   
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(user?.name || '');
