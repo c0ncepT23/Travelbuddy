@@ -208,18 +208,15 @@ export default function ProfileScreen({ navigation, embedded = false }: ProfileS
           <View style={styles.decorCircle2} />
           <View style={styles.decorCircle3} />
           
-          {/* Back Button */}
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          {/* Settings Button */}
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={22} color="rgba(255,255,255,0.7)" />
-          </TouchableOpacity>
+          {/* Back Button - Only show when not embedded in tab */}
+          {!embedded && (
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
 
           {/* Avatar Section */}
           <TouchableOpacity 
@@ -463,17 +460,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 16,
-    width: 40,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsButton: {
-    position: 'absolute',
-    top: 50,
-    right: 16,
     width: 40,
     height: 40,
     backgroundColor: 'rgba(255,255,255,0.1)',
