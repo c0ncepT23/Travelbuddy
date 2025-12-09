@@ -292,86 +292,90 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
         />
       </View>
 
-      {/* Draggable Bottom Sheet */}
-      <PanGestureHandler onGestureEvent={gestureHandler}>
-        <Animated.View style={[styles.bottomSheet, animatedSheetStyle]}>
-          {/* Handle */}
-          <View style={styles.sheetHandle}>
-            <View style={styles.sheetHandleBar} />
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Ionicons name="search" size={18} color="#94A3B8" />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search places..."
-                placeholderTextColor="#94A3B8"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onFocus={() => snapTo(SNAP_POINTS.ANCHORED)}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
+      {/* Bottom Sheet */}
+      <Animated.View style={[styles.bottomSheet, animatedSheetStyle]}>
+        {/* Draggable Handle Area */}
+        <PanGestureHandler onGestureEvent={gestureHandler}>
+          <Animated.View style={styles.sheetHandleArea}>
+            <View style={styles.sheetHandle}>
+              <View style={styles.sheetHandleBar} />
             </View>
-          </View>
 
-          {/* Category Filters */}
-          <View style={styles.filtersWrapper}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filtersContainer}
-            >
-              {CATEGORY_FILTERS.map((filter) => (
-                <TouchableOpacity
-                  key={filter.key}
-                  style={[
-                    styles.filterChip,
-                    selectedCategory === filter.key && styles.filterChipActive,
-                  ]}
-                  onPress={() => {
-                    HapticFeedback.light();
-                    setSelectedCategory(filter.key);
-                  }}
-                >
-                  <Text style={styles.filterIcon}>{filter.icon}</Text>
-                  <Text style={[
-                    styles.filterLabel,
-                    selectedCategory === filter.key && styles.filterLabelActive,
-                  ]}>
-                    {filter.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Places List */}
-          <ScrollView 
-            style={styles.placesList}
-            contentContainerStyle={styles.placesListContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {filteredItems.length > 0 ? (
-              filteredItems.map((item) => renderPlaceCard(item, selectedPlace?.id === item.id))
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📍</Text>
-                <Text style={styles.emptyTitle}>No places found</Text>
-                <Text style={styles.emptyText}>
-                  {searchQuery ? 'Try a different search term' : 'Add places via chat to see them here'}
-                </Text>
+            {/* Search Bar - Part of draggable area */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={18} color="#94A3B8" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search places..."
+                  placeholderTextColor="#94A3B8"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onFocus={() => snapTo(SNAP_POINTS.ANCHORED)}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
               </View>
-            )}
-            <View style={{ height: BOTTOM_TAB_HEIGHT + 20 }} />
-          </ScrollView>
-        </Animated.View>
-      </PanGestureHandler>
+            </View>
+
+            {/* Category Filters - Part of draggable area */}
+            <View style={styles.filtersWrapper}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filtersContainer}
+              >
+                {CATEGORY_FILTERS.map((filter) => (
+                  <TouchableOpacity
+                    key={filter.key}
+                    style={[
+                      styles.filterChip,
+                      selectedCategory === filter.key && styles.filterChipActive,
+                    ]}
+                    onPress={() => {
+                      HapticFeedback.light();
+                      setSelectedCategory(filter.key);
+                    }}
+                  >
+                    <Text style={styles.filterIcon}>{filter.icon}</Text>
+                    <Text style={[
+                      styles.filterLabel,
+                      selectedCategory === filter.key && styles.filterLabelActive,
+                    ]}>
+                      {filter.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </Animated.View>
+        </PanGestureHandler>
+
+        {/* Scrollable Places List - Independent from drag gesture */}
+        <ScrollView 
+          style={styles.placesList}
+          contentContainerStyle={styles.placesListContent}
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+          bounces={true}
+        >
+          {filteredItems.length > 0 ? (
+            filteredItems.map((item) => renderPlaceCard(item, selectedPlace?.id === item.id))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📍</Text>
+              <Text style={styles.emptyTitle}>No places found</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'Try a different search term' : 'Add places via chat to see them here'}
+              </Text>
+            </View>
+          )}
+          <View style={{ height: BOTTOM_TAB_HEIGHT + 20 }} />
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -411,6 +415,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 10,
+  },
+  sheetHandleArea: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   sheetHandle: {
     alignItems: 'center',
