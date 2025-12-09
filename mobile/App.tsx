@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, Text, Alert } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from './src/stores/authStore';
 import { useTripStore } from './src/stores/tripStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -13,6 +14,9 @@ import { pushNotificationService } from './src/services/pushNotification.service
 import shareIntentService, { SharedContent } from './src/services/shareIntent.service';
 import { ShareTripSelectorModal } from './src/components/ShareTripSelectorModal';
 import theme from './src/config/theme';
+
+// Onboarding
+import OnboardingScreen from './src/screens/Onboarding/OnboardingScreen';
 
 // Auth Screens
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -59,12 +63,19 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [sharedContent, setSharedContent] = useState<SharedContent | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
   const navigationRef = React.useRef<any>(null);
 
   useEffect(() => {
     const prepare = async () => {
       try {
+        // Check if user has seen onboarding
+        const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
+        if (!hasSeenOnboarding) {
+          setShowOnboarding(true);
+        }
+        
         await loadStoredAuth();
         setIsReady(true);
       } catch (err) {
@@ -275,6 +286,15 @@ export default function App() {
           </View>
         )}
       </View>
+    );
+  }
+
+  // Show onboarding for first-time users
+  if (showOnboarding) {
+    return (
+      <OnboardingScreen 
+        onComplete={() => setShowOnboarding(false)} 
+      />
     );
   }
 
