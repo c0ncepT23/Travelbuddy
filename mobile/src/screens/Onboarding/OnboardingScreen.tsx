@@ -6,7 +6,6 @@ import {
   Dimensions,
   TouchableOpacity,
   FlatList,
-  Image,
   Platform,
   StatusBar,
 } from 'react-native';
@@ -20,33 +19,26 @@ interface OnboardingSlide {
   id: string;
   title: string;
   subtitle?: string;
-  description: string;
-  emoji: string;
-  gradient: string[];
+  type: 'youtube' | 'funnel' | 'planner';
 }
 
+// Correct order as specified by user
 const SLIDES: OnboardingSlide[] = [
   {
     id: '1',
-    title: 'Your Perfect Trip,\nPlanned in Seconds.',
-    description: 'Let AI organize your dream destinations into a seamless day-by-day itinerary.',
-    emoji: '✈️',
-    gradient: ['#EEF2FF', '#DBEAFE', '#E0F2FE'],
+    title: 'Turn Travel\nDreams into\nItineraries.',
+    subtitle: 'Your AI Companion for\nSeamless Planning.',
+    type: 'youtube',
   },
   {
     id: '2',
-    title: 'Just Paste a Link.\nWe\'ll Find the Places.',
-    description: 'Share YouTube videos, Instagram posts, or blog links. Our AI extracts every location mentioned.',
-    emoji: '🔗',
-    gradient: ['#F0F9FF', '#E0F2FE', '#ECFEFF'],
+    title: 'Just Paste a\nLink. We\'ll Find\nthe Places.',
+    type: 'funnel',
   },
   {
     id: '3',
-    title: 'Turn Travel Dreams\ninto Itineraries.',
-    subtitle: 'Your AI Companion for\nSeamless Planning.',
-    description: 'From inspiration to adventure - we handle the planning so you can focus on exploring.',
-    emoji: '🤖',
-    gradient: ['#EFF6FF', '#DBEAFE', '#E0F2FE'],
+    title: 'Your Perfect\nTrip, Planned\nin Seconds.',
+    type: 'planner',
   },
 ];
 
@@ -86,80 +78,216 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     }
   }).current;
 
+  // Slide 1: YouTube + Landmarks floating around phone
+  const renderYouTubeSlide = () => (
+    <View style={styles.illustrationContainer}>
+      {/* Floating landmark icons */}
+      <View style={[styles.floatingIcon, styles.floatingTopLeft]}>
+        <Text style={styles.landmarkEmoji}>🗼</Text>
+      </View>
+      <View style={[styles.floatingIcon, styles.floatingTopRight]}>
+        <Text style={styles.landmarkEmoji}>🏛️</Text>
+      </View>
+      <View style={[styles.floatingIcon, styles.floatingMidLeft]}>
+        <Text style={styles.landmarkEmoji}>🗽</Text>
+      </View>
+      <View style={[styles.floatingIcon, styles.floatingMidRight]}>
+        <Text style={styles.landmarkEmoji}>🕌</Text>
+      </View>
+      <View style={[styles.floatingIcon, styles.floatingBottomLeft]}>
+        <Text style={styles.landmarkEmoji}>🏰</Text>
+      </View>
+      <View style={[styles.floatingIcon, styles.floatingBottomRight]}>
+        <Text style={styles.landmarkEmoji}>⛩️</Text>
+      </View>
+
+      {/* Phone with YouTube */}
+      <View style={styles.phoneMockup}>
+        <View style={styles.phoneScreen}>
+          {/* YouTube header */}
+          <View style={styles.ytHeader}>
+            <Ionicons name="logo-youtube" size={20} color="#FF0000" />
+            <Text style={styles.ytHeaderText}>YouTube</Text>
+          </View>
+          
+          {/* Video thumbnail */}
+          <View style={styles.ytVideoThumb}>
+            <LinearGradient
+              colors={['#4F46E5', '#7C3AED']}
+              style={styles.ytThumbGradient}
+            >
+              <Ionicons name="play-circle" size={36} color="rgba(255,255,255,0.95)" />
+            </LinearGradient>
+          </View>
+          
+          {/* Video title */}
+          <Text style={styles.ytVideoTitle}>Epic Travel Vlog: Top 10 Destinations!</Text>
+          <Text style={styles.ytVideoMeta}>110K views · 1 year ago</Text>
+          
+          {/* Channel */}
+          <View style={styles.ytChannel}>
+            <View style={styles.ytChannelAvatar} />
+            <Text style={styles.ytChannelName}>Wanderlust Adventures</Text>
+            <View style={styles.ytSubscribeBtn}>
+              <Text style={styles.ytSubscribeText}>Subscribe</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Robot mascot */}
+      <View style={styles.robotFloating}>
+        <Text style={styles.robotEmoji}>🤖</Text>
+      </View>
+    </View>
+  );
+
+  // Slide 2: Funnel with links going in, places coming out
+  const renderFunnelSlide = () => (
+    <View style={styles.illustrationContainer}>
+      {/* Floating link/video icons at top */}
+      <View style={styles.linksCloud}>
+        <View style={[styles.linkIconBox, { transform: [{ rotate: '-15deg' }] }]}>
+          <Ionicons name="link" size={18} color="#3B82F6" />
+        </View>
+        <View style={[styles.linkIconBox, { marginTop: -20 }]}>
+          <Ionicons name="logo-youtube" size={20} color="#FF0000" />
+        </View>
+        <View style={[styles.linkIconBox, { transform: [{ rotate: '10deg' }] }]}>
+          <Ionicons name="videocam" size={18} color="#3B82F6" />
+        </View>
+        <View style={[styles.linkIconBox, { marginTop: -10, transform: [{ rotate: '-5deg' }] }]}>
+          <Ionicons name="link" size={16} color="#6366F1" />
+        </View>
+        <View style={[styles.linkIconBox, { transform: [{ rotate: '20deg' }] }]}>
+          <Ionicons name="play-circle" size={18} color="#EF4444" />
+        </View>
+      </View>
+
+      {/* Funnel */}
+      <View style={styles.funnelShape}>
+        <LinearGradient
+          colors={['rgba(59, 130, 246, 0.3)', 'rgba(59, 130, 246, 0.1)']}
+          style={styles.funnelGradient}
+        />
+      </View>
+
+      {/* Robot mascot next to funnel */}
+      <View style={styles.robotBeside}>
+        <Text style={styles.robotEmoji}>🤖</Text>
+      </View>
+
+      {/* Extracted places on map */}
+      <View style={styles.mapOutput}>
+        <View style={styles.mapFold}>
+          {/* Place pins on map */}
+          <View style={[styles.mapPlacePin, { top: 15, left: 20 }]}>
+            <View style={styles.pinMarker} />
+            <View style={styles.pinLabel}>
+              <Text style={styles.pinLabelText}>Paris</Text>
+            </View>
+          </View>
+          <View style={[styles.mapPlacePin, { top: 25, right: 30 }]}>
+            <View style={styles.pinMarker} />
+            <View style={styles.pinLabel}>
+              <Text style={styles.pinLabelText}>Tokyo</Text>
+            </View>
+          </View>
+        </View>
+        
+        {/* Extracted place chips below */}
+        <View style={styles.extractedChips}>
+          <View style={styles.placeChip}>
+            <View style={styles.chipPin} />
+            <Text style={styles.chipText}>Paris</Text>
+          </View>
+          <View style={styles.placeChip}>
+            <View style={styles.chipPin} />
+            <Text style={styles.chipText}>Tokyo</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
+  // Slide 3: Phone with map + Day planner + travelers
+  const renderPlannerSlide = () => (
+    <View style={styles.illustrationContainer}>
+      {/* Phone mockup with map and itinerary */}
+      <View style={styles.phoneMockup}>
+        <View style={styles.phoneScreen}>
+          {/* Map area with pins */}
+          <View style={styles.mapArea}>
+            <View style={[styles.mapPinFloat, { top: 10, left: 15 }]}>
+              <View style={styles.pinBubble}>
+                <Text style={styles.pinBubbleText}>Eiffel Tower</Text>
+              </View>
+            </View>
+            <View style={[styles.mapPinFloat, { top: 30, right: 10 }]}>
+              <View style={styles.pinBubble}>
+                <Text style={styles.pinBubbleText}>Louvre</Text>
+              </View>
+            </View>
+            <View style={[styles.mapPinFloat, { bottom: 15, right: 20 }]}>
+              <View style={styles.pinBubble}>
+                <Text style={styles.pinBubbleText}>Tokyo</Text>
+              </View>
+            </View>
+          </View>
+          
+          {/* Day planner card */}
+          <View style={styles.dayPlannerCard}>
+            <Text style={styles.dayPlannerTitle}>Day 1</Text>
+            <View style={styles.dayPlannerItem}>
+              <View style={styles.timelineDot} />
+              <Text style={styles.dayPlannerText}>Eiffel Tower</Text>
+            </View>
+            <View style={styles.timelineLine} />
+            <View style={styles.dayPlannerItem}>
+              <View style={styles.timelineDot} />
+              <Text style={styles.dayPlannerText}>Louvre</Text>
+            </View>
+            <View style={styles.timelineLine} />
+            <View style={styles.dayPlannerItem}>
+              <View style={styles.timelineDot} />
+              <Text style={styles.dayPlannerText}>Tokyo</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Robot mascot on left */}
+      <View style={styles.robotLeft}>
+        <Text style={styles.robotEmoji}>🤖</Text>
+      </View>
+
+      {/* Travelers on right */}
+      <View style={styles.travelersRight}>
+        <Text style={styles.travelerEmoji}>🧑‍🤝‍🧑</Text>
+        <Text style={styles.travelerEmoji2}>🎒</Text>
+      </View>
+    </View>
+  );
+
   const renderSlide = ({ item, index }: { item: OnboardingSlide; index: number }) => {
     return (
       <LinearGradient
-        colors={item.gradient}
+        colors={['#EFF6FF', '#DBEAFE', '#E0F2FE']}
         style={styles.slide}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
         <View style={styles.slideContent}>
-          {/* Main Illustration Area */}
-          <View style={styles.illustrationContainer}>
-            {/* Decorative elements */}
-            <View style={styles.decorCircle1} />
-            <View style={styles.decorCircle2} />
-            
-            {/* Phone mockup with content */}
-            <View style={styles.phoneMockup}>
-              <View style={styles.phoneScreen}>
-                {index === 0 && (
-                  <>
-                    <View style={styles.mapPreview}>
-                      <View style={styles.mapPin}><Text style={styles.pinEmoji}>📍</Text></View>
-                      <View style={[styles.mapPin, styles.mapPin2]}><Text style={styles.pinEmoji}>📍</Text></View>
-                      <View style={[styles.mapPin, styles.mapPin3]}><Text style={styles.pinEmoji}>📍</Text></View>
-                    </View>
-                    <View style={styles.dayCard}>
-                      <Text style={styles.dayCardTitle}>Day 1</Text>
-                      <View style={styles.dayCardItem}><Text>📍 Eiffel Tower</Text></View>
-                      <View style={styles.dayCardItem}><Text>📍 Louvre</Text></View>
-                    </View>
-                  </>
-                )}
-                {index === 1 && (
-                  <View style={styles.funnelContainer}>
-                    <View style={styles.linkIcons}>
-                      <View style={styles.linkIcon}><Ionicons name="logo-youtube" size={24} color="#FF0000" /></View>
-                      <View style={styles.linkIcon}><Ionicons name="link" size={20} color="#3B82F6" /></View>
-                      <View style={styles.linkIcon}><Ionicons name="logo-instagram" size={22} color="#E4405F" /></View>
-                    </View>
-                    <View style={styles.funnel} />
-                    <View style={styles.extractedPlaces}>
-                      <View style={styles.placeChip}><Text style={styles.placeChipText}>📍 Paris</Text></View>
-                      <View style={styles.placeChip}><Text style={styles.placeChipText}>📍 Tokyo</Text></View>
-                    </View>
-                  </View>
-                )}
-                {index === 2 && (
-                  <View style={styles.youtubePreview}>
-                    <View style={styles.ytThumbnail}>
-                      <Ionicons name="play-circle" size={40} color="rgba(255,255,255,0.9)" />
-                    </View>
-                    <Text style={styles.ytTitle}>Epic Travel Vlog!</Text>
-                    <View style={styles.landmarkIcons}>
-                      <Text style={styles.landmark}>🗼</Text>
-                      <Text style={styles.landmark}>🗽</Text>
-                      <Text style={styles.landmark}>🏛️</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Robot mascot */}
-            <View style={styles.robotContainer}>
-              <Text style={styles.robotEmoji}>🤖</Text>
-            </View>
-          </View>
-
-          {/* Text Content */}
-          <View style={styles.textContainer}>
+          {/* Title at top */}
+          <View style={styles.titleContainer}>
             <Text style={styles.title}>{item.title}</Text>
             {item.subtitle && <Text style={styles.subtitle}>{item.subtitle}</Text>}
-            <Text style={styles.description}>{item.description}</Text>
           </View>
+
+          {/* Illustration based on type */}
+          {item.type === 'youtube' && renderYouTubeSlide()}
+          {item.type === 'funnel' && renderFunnelSlide()}
+          {item.type === 'planner' && renderPlannerSlide()}
         </View>
       </LinearGradient>
     );
@@ -210,11 +338,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
           <Text style={styles.nextButtonText}>
             {currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
           </Text>
-          <Ionicons 
-            name={currentIndex === SLIDES.length - 1 ? 'checkmark' : 'arrow-forward'} 
-            size={20} 
-            color="#FFFFFF" 
-          />
         </TouchableOpacity>
       </View>
     </View>
@@ -245,57 +368,97 @@ const styles = StyleSheet.create({
   },
   slideContent: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 100 : 80,
+    paddingTop: Platform.OS === 'ios' ? 80 : 60,
   },
 
-  // Illustration
+  // Title
+  titleContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1E3A5F',
+    lineHeight: 40,
+  },
+  subtitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#64748B',
+    lineHeight: 26,
+    marginTop: 12,
+  },
+
+  // Illustration container
   illustrationContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    paddingBottom: 160,
   },
-  decorCircle1: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    top: 20,
-    left: -50,
-  },
-  decorCircle2: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(139, 92, 246, 0.08)',
-    bottom: 100,
-    right: -30,
-  },
+
+  // Phone mockup
   phoneMockup: {
     width: SCREEN_WIDTH * 0.55,
-    height: SCREEN_WIDTH * 0.9,
+    height: SCREEN_WIDTH * 0.95,
     backgroundColor: '#1F2937',
-    borderRadius: 30,
-    padding: 8,
+    borderRadius: 32,
+    padding: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 15,
   },
   phoneScreen: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 26,
     overflow: 'hidden',
-    padding: 12,
   },
-  robotContainer: {
+
+  // Robot
+  robotEmoji: {
+    fontSize: 40,
+  },
+  robotFloating: {
     position: 'absolute',
-    bottom: 80,
-    left: 30,
+    right: 30,
+    top: '35%',
+    width: 65,
+    height: 65,
+    borderRadius: 32,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  robotBeside: {
+    position: 'absolute',
+    left: 25,
+    top: '30%',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  robotLeft: {
+    position: 'absolute',
+    left: 20,
+    top: '25%',
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -304,164 +467,286 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 6,
   },
-  robotEmoji: {
-    fontSize: 32,
+
+  // Floating landmarks (Slide 1)
+  floatingIcon: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  floatingTopLeft: { top: 0, left: 20 },
+  floatingTopRight: { top: 20, right: 25 },
+  floatingMidLeft: { top: '35%', left: 10 },
+  floatingMidRight: { top: '40%', right: 15 },
+  floatingBottomLeft: { bottom: 180, left: 30 },
+  floatingBottomRight: { bottom: 200, right: 20 },
+  landmarkEmoji: {
+    fontSize: 24,
   },
 
-  // Map preview (slide 1)
-  mapPreview: {
+  // YouTube styles (Slide 1)
+  ytHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    gap: 6,
+  },
+  ytHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  ytVideoThumb: {
+    height: 100,
+    marginHorizontal: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  ytThumbGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ytVideoTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1F2937',
+    paddingHorizontal: 8,
+    marginTop: 8,
+  },
+  ytVideoMeta: {
+    fontSize: 9,
+    color: '#64748B',
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  ytChannel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    gap: 6,
+  },
+  ytChannelAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+  },
+  ytChannelName: {
+    flex: 1,
+    fontSize: 10,
+    color: '#1F2937',
+  },
+  ytSubscribeBtn: {
+    backgroundColor: '#1F2937',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  ytSubscribeText: {
+    fontSize: 9,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+
+  // Funnel styles (Slide 2)
+  linksCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 20,
+    paddingHorizontal: 40,
+  },
+  linkIconBox: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  funnelShape: {
+    width: 120,
+    height: 100,
+    marginVertical: 10,
+  },
+  funnelGradient: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 60,
+    borderRightWidth: 60,
+    borderTopWidth: 100,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: 'rgba(59, 130, 246, 0.25)',
+    borderRadius: 10,
+  },
+  mapOutput: {
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  mapFold: {
+    width: SCREEN_WIDTH * 0.7,
+    height: 80,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 8,
+    position: 'relative',
+    transform: [{ perspective: 500 }, { rotateX: '-5deg' }],
+  },
+  mapPlacePin: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pinMarker: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3B82F6',
+    marginRight: 4,
+  },
+  pinLabel: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  pinLabelText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  extractedChips: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  placeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  chipPin: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#3B82F6',
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+
+  // Planner styles (Slide 3)
+  mapArea: {
     flex: 1,
     backgroundColor: '#E5E7EB',
-    borderRadius: 12,
     position: 'relative',
-    marginBottom: 8,
   },
-  mapPin: {
+  mapPinFloat: {
     position: 'absolute',
-    top: 20,
-    left: 30,
+  },
+  pinBubble: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  mapPin2: {
-    top: 50,
-    left: 80,
+  pinBubbleText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#1F2937',
   },
-  mapPin3: {
-    top: 80,
-    left: 50,
-  },
-  pinEmoji: {
-    fontSize: 12,
-  },
-  dayCard: {
+  dayPlannerCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    margin: 8,
     padding: 12,
+    borderRadius: 12,
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 3,
   },
-  dayCardTitle: {
+  dayPlannerTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  dayCardItem: {
+  dayPlannerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 4,
   },
-
-  // Funnel (slide 2)
-  funnelContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#3B82F6',
+    marginRight: 10,
   },
-  linkIcons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+  timelineLine: {
+    width: 2,
+    height: 12,
+    backgroundColor: '#CBD5E1',
+    marginLeft: 4,
   },
-  linkIcon: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  funnel: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 50,
-    borderRightWidth: 50,
-    borderTopWidth: 60,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: 'rgba(59, 130, 246, 0.2)',
-    marginVertical: 16,
-  },
-  extractedPlaces: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  placeChip: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  placeChipText: {
+  dayPlannerText: {
     fontSize: 12,
-    color: '#3B82F6',
-    fontWeight: '500',
+    color: '#475569',
   },
-
-  // YouTube preview (slide 3)
-  youtubePreview: {
-    flex: 1,
+  travelersRight: {
+    position: 'absolute',
+    right: 15,
+    bottom: 180,
     alignItems: 'center',
   },
-  ytThumbnail: {
-    width: '100%',
-    height: 100,
-    backgroundColor: '#1F2937',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
+  travelerEmoji: {
+    fontSize: 36,
   },
-  ytTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  landmarkIcons: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  landmark: {
-    fontSize: 32,
-  },
-
-  // Text
-  textContainer: {
-    paddingHorizontal: 32,
-    paddingBottom: 180,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1E3A5F',
-    textAlign: 'center',
-    lineHeight: 36,
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 26,
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 15,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 22,
+  travelerEmoji2: {
+    fontSize: 24,
+    marginTop: -5,
   },
 
   // Bottom
@@ -478,7 +763,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     gap: 8,
   },
   paginationDot: {
@@ -488,17 +773,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#CBD5E1',
   },
   paginationDotActive: {
-    width: 24,
+    width: 28,
     backgroundColor: '#3B82F6',
   },
   nextButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#3B82F6',
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 16,
-    gap: 8,
     shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -506,9 +789,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   nextButtonText: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
   },
 });
-
