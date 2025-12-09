@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTripStore } from '../../stores/tripStore';
 
 // For mobile, we'll use conditional import
@@ -20,6 +21,7 @@ const DateTimePicker = Platform.OS !== 'web'
 export default function CreateTripScreen({ navigation }: any) {
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
+  const [knowsDates, setKnowsDates] = useState(false);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -46,7 +48,7 @@ export default function CreateTripScreen({ navigation }: any) {
       if (Platform.OS === 'web') {
         window.alert('Please fill in trip name and destination');
       } else {
-        Alert.alert('Error', 'Please fill in trip name and destination');
+        Alert.alert('Missing Info', 'Please add a trip name and destination');
       }
       return;
     }
@@ -55,29 +57,15 @@ export default function CreateTripScreen({ navigation }: any) {
       const trip = await createTrip({
         name: name.trim(),
         destination: destination.trim(),
-        startDate: formatDate(startDate) || undefined,
-        endDate: formatDate(endDate) || undefined,
+        startDate: knowsDates && startDate ? formatDate(startDate) : undefined,
+        endDate: knowsDates && endDate ? formatDate(endDate) : undefined,
       });
 
       if (Platform.OS === 'web') {
-        window.alert('Trip created successfully!');
-        navigation.navigate('ItinerarySetup', { tripId: trip.id, isInitialSetup: true });
+        navigation.navigate('TripHome', { tripId: trip.id });
       } else {
-        Alert.alert(
-          '✈️ Trip Created!', 
-          'Now let\'s set up your itinerary - add cities, dates, and hotels!', 
-          [
-            {
-              text: 'Set Up Itinerary',
-              onPress: () => navigation.navigate('ItinerarySetup', { tripId: trip.id, isInitialSetup: true }),
-            },
-            {
-              text: 'Skip for Now',
-              style: 'cancel',
-              onPress: () => navigation.navigate('TripHome', { tripId: trip.id }),
-            },
-          ]
-        );
+        // Go straight to the trip - no itinerary prompt
+        navigation.replace('TripHome', { tripId: trip.id });
       }
     } catch (error: any) {
       if (Platform.OS === 'web') {
@@ -101,7 +89,7 @@ export default function CreateTripScreen({ navigation }: any) {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Text style={styles.backButtonText}>←</Text>
+              <Ionicons name="chevron-back" size={24} color="#1F2937" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>New Trip</Text>
             <View style={styles.backButton} />
@@ -112,7 +100,7 @@ export default function CreateTripScreen({ navigation }: any) {
             <View style={styles.iconBox}>
               <Text style={styles.icon}>✈️</Text>
             </View>
-            <Text style={styles.subtitle}>Plan your next adventure</Text>
+            <Text style={styles.subtitle}>Start planning your adventure</Text>
           </View>
 
           {/* Trip Name */}
@@ -120,7 +108,7 @@ export default function CreateTripScreen({ navigation }: any) {
             <Text style={styles.label}>Trip Name</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Japan Adventure 2025"
+              placeholder="e.g., Thailand Adventure"
               value={name}
               onChangeText={setName}
               placeholderTextColor="#9CA3AF"
@@ -131,10 +119,10 @@ export default function CreateTripScreen({ navigation }: any) {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Destination</Text>
             <View style={styles.inputWithIcon}>
-              <Text style={styles.inputIcon}>📍</Text>
+              <Ionicons name="location" size={20} color="#3B82F6" style={styles.inputIcon} />
               <TextInput
                 style={styles.inputWithIconField}
-                placeholder="e.g., Tokyo, Japan"
+                placeholder="e.g., Bangkok, Thailand"
                 value={destination}
                 onChangeText={setDestination}
                 placeholderTextColor="#9CA3AF"
@@ -142,82 +130,101 @@ export default function CreateTripScreen({ navigation }: any) {
             </View>
           </View>
 
-          {/* Dates Section */}
+          {/* Dates Toggle Section */}
           <View style={styles.datesSection}>
-            <Text style={styles.label}>When are you going?</Text>
+            <Text style={styles.label}>Travel Dates</Text>
+            <Text style={styles.labelHint}>You can always add or change dates later</Text>
             
-            <View style={styles.dateRow}>
-              {/* Start Date */}
-              <View style={styles.dateInputGroup}>
-                <Text style={styles.dateLabel}>Start</Text>
-                <TouchableOpacity
-                  style={styles.datePicker}
-                  onPress={() => setShowStartPicker(true)}
-                >
-                  <Text style={styles.dateIcon}>📅</Text>
-                  <Text style={[styles.dateText, !startDate && styles.dateTextPlaceholder]}>
-                    {formatDisplayDate(startDate)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* End Date */}
-              <View style={styles.dateInputGroup}>
-                <Text style={styles.dateLabel}>End</Text>
-                <TouchableOpacity
-                  style={styles.datePicker}
-                  onPress={() => setShowEndPicker(true)}
-                >
-                  <Text style={styles.dateIcon}>📅</Text>
-                  <Text style={[styles.dateText, !endDate && styles.dateTextPlaceholder]}>
-                    {formatDisplayDate(endDate)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {startDate && endDate && (
-              <View style={styles.durationBadge}>
-                <Text style={styles.durationText}>
-                  🗓️ {Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))} days
+            {/* Toggle Options */}
+            <View style={styles.dateToggleContainer}>
+              <TouchableOpacity 
+                style={[
+                  styles.dateToggleOption, 
+                  !knowsDates && styles.dateToggleOptionActive
+                ]}
+                onPress={() => setKnowsDates(false)}
+              >
+                <Ionicons 
+                  name={!knowsDates ? "checkmark-circle" : "ellipse-outline"} 
+                  size={22} 
+                  color={!knowsDates ? "#3B82F6" : "#94A3B8"} 
+                />
+                <Text style={[
+                  styles.dateToggleText,
+                  !knowsDates && styles.dateToggleTextActive
+                ]}>
+                  I'll add dates later
                 </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.dateToggleOption, 
+                  knowsDates && styles.dateToggleOptionActive
+                ]}
+                onPress={() => setKnowsDates(true)}
+              >
+                <Ionicons 
+                  name={knowsDates ? "checkmark-circle" : "ellipse-outline"} 
+                  size={22} 
+                  color={knowsDates ? "#3B82F6" : "#94A3B8"} 
+                />
+                <Text style={[
+                  styles.dateToggleText,
+                  knowsDates && styles.dateToggleTextActive
+                ]}>
+                  I know my dates
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Date Pickers - Only show if user knows dates */}
+            {knowsDates && (
+              <View style={styles.datePickersContainer}>
+                <View style={styles.dateRow}>
+                  {/* Start Date */}
+                  <View style={styles.dateInputGroup}>
+                    <Text style={styles.dateLabel}>Start</Text>
+                    <TouchableOpacity
+                      style={styles.datePicker}
+                      onPress={() => setShowStartPicker(true)}
+                    >
+                      <Ionicons name="calendar-outline" size={18} color="#3B82F6" />
+                      <Text style={[styles.dateText, !startDate && styles.dateTextPlaceholder]}>
+                        {formatDisplayDate(startDate)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* End Date */}
+                  <View style={styles.dateInputGroup}>
+                    <Text style={styles.dateLabel}>End</Text>
+                    <TouchableOpacity
+                      style={styles.datePicker}
+                      onPress={() => setShowEndPicker(true)}
+                    >
+                      <Ionicons name="calendar-outline" size={18} color="#3B82F6" />
+                      <Text style={[styles.dateText, !endDate && styles.dateTextPlaceholder]}>
+                        {formatDisplayDate(endDate)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {startDate && endDate && (
+                  <View style={styles.durationBadge}>
+                    <Ionicons name="time-outline" size={16} color="#059669" />
+                    <Text style={styles.durationText}>
+                      {Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
 
-          {/* Date Pickers - Web uses HTML input, mobile uses native picker */}
-          {Platform.OS === 'web' ? (
-            <>
-              {/* Hidden HTML inputs for web */}
-              <input
-                type="date"
-                style={{ position: 'absolute', opacity: 0, pointerEvents: showStartPicker ? 'auto' : 'none' }}
-                onChange={(e) => {
-                  const date = new Date(e.target.value);
-                  setStartDate(date);
-                  setShowStartPicker(false);
-                  if (!endDate) {
-                    const defaultEndDate = new Date(date);
-                    defaultEndDate.setDate(defaultEndDate.getDate() + 7);
-                    setEndDate(defaultEndDate);
-                  }
-                }}
-                onBlur={() => setShowStartPicker(false)}
-                autoFocus={showStartPicker}
-              />
-              <input
-                type="date"
-                style={{ position: 'absolute', opacity: 0, pointerEvents: showEndPicker ? 'auto' : 'none' }}
-                onChange={(e) => {
-                  const date = new Date(e.target.value);
-                  setEndDate(date);
-                  setShowEndPicker(false);
-                }}
-                onBlur={() => setShowEndPicker(false)}
-                autoFocus={showEndPicker}
-              />
-            </>
-          ) : (
+          {/* Date Pickers - Native */}
+          {Platform.OS !== 'web' && (
             <>
               {showStartPicker && DateTimePicker && (
                 <DateTimePicker
@@ -264,7 +271,13 @@ export default function CreateTripScreen({ navigation }: any) {
             <Text style={styles.createButtonText}>
               {isLoading ? 'Creating...' : 'Create Trip'}
             </Text>
+            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
           </TouchableOpacity>
+
+          {/* Helper text */}
+          <Text style={styles.helperText}>
+            💡 Tip: You can save places from YouTube guides without knowing your travel dates!
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -274,7 +287,7 @@ export default function CreateTripScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     flexGrow: 1,
@@ -305,10 +318,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  backButtonText: {
-    fontSize: 20,
-    color: '#1F2937',
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -323,7 +332,7 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 80,
     height: 80,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#EEF2FF',
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
@@ -334,7 +343,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: '#6B7280',
+    color: '#64748B',
     fontWeight: '500',
   },
 
@@ -348,34 +357,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: '#374151',
   },
+  labelHint: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginBottom: 12,
+    marginTop: -4,
+  },
   input: {
     height: 52,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 16,
     color: '#1F2937',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   inputWithIcon: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderRadius: 14,
+    paddingHorizontal: 14,
     height: 52,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   inputIcon: {
-    fontSize: 18,
     marginRight: 10,
   },
   inputWithIconField: {
@@ -385,9 +393,43 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  // Dates
+  // Dates Section
   datesSection: {
     marginBottom: 24,
+  },
+  dateToggleContainer: {
+    gap: 10,
+  },
+  dateToggleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 12,
+  },
+  dateToggleOptionActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#3B82F6',
+  },
+  dateToggleText: {
+    fontSize: 15,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  dateToggleTextActive: {
+    color: '#1F2937',
+    fontWeight: '600',
+  },
+  datePickersContainer: {
+    marginTop: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   dateRow: {
     flexDirection: 'row',
@@ -400,23 +442,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#6B7280',
+    color: '#64748B',
   },
   datePicker: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  dateIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
   },
   dateText: {
     flex: 1,
@@ -434,6 +468,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   durationText: {
     color: '#059669',
@@ -444,11 +481,17 @@ const styles = StyleSheet.create({
   // Create Button
   createButton: {
     height: 56,
-    backgroundColor: '#1F2937',
+    backgroundColor: '#3B82F6',
     borderRadius: 14,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 8,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   createButtonDisabled: {
     opacity: 0.6,
@@ -457,5 +500,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
+  },
+
+  // Helper Text
+  helperText: {
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 20,
+    paddingHorizontal: 20,
+    lineHeight: 20,
   },
 });
