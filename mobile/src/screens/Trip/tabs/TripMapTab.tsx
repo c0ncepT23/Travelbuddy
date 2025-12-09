@@ -321,33 +321,35 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
           </View>
 
           {/* Category Filters */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filtersContainer}
-          >
-            {CATEGORY_FILTERS.map((filter) => (
-              <TouchableOpacity
-                key={filter.key}
-                style={[
-                  styles.filterChip,
-                  selectedCategory === filter.key && styles.filterChipActive,
-                ]}
-                onPress={() => {
-                  HapticFeedback.light();
-                  setSelectedCategory(filter.key);
-                }}
-              >
-                <Text style={styles.filterIcon}>{filter.icon}</Text>
-                <Text style={[
-                  styles.filterLabel,
-                  selectedCategory === filter.key && styles.filterLabelActive,
-                ]}>
-                  {filter.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <View style={styles.filtersWrapper}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filtersContainer}
+            >
+              {CATEGORY_FILTERS.map((filter) => (
+                <TouchableOpacity
+                  key={filter.key}
+                  style={[
+                    styles.filterChip,
+                    selectedCategory === filter.key && styles.filterChipActive,
+                  ]}
+                  onPress={() => {
+                    HapticFeedback.light();
+                    setSelectedCategory(filter.key);
+                  }}
+                >
+                  <Text style={styles.filterIcon}>{filter.icon}</Text>
+                  <Text style={[
+                    styles.filterLabel,
+                    selectedCategory === filter.key && styles.filterLabelActive,
+                  ]}>
+                    {filter.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
           {/* Places List */}
           <ScrollView 
@@ -412,13 +414,13 @@ const styles = StyleSheet.create({
   },
   sheetHandle: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   sheetHandleBar: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2,
+    width: 48,
+    height: 5,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 3,
   },
 
   // Search
@@ -444,37 +446,44 @@ const styles = StyleSheet.create({
   },
 
   // Filters
+  filtersWrapper: {
+    height: 44,
+    marginBottom: 8,
+  },
   filtersContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
+    alignItems: 'center',
+    height: 44,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#F8FAFC',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    marginRight: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    height: 40,
   },
   filterChipActive: {
     backgroundColor: '#EEF2FF',
     borderColor: '#3B82F6',
   },
   filterIcon: {
-    fontSize: 14,
+    fontSize: 16,
     marginRight: 6,
   },
   filterLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
     color: '#64748B',
   },
   filterLabelActive: {
     color: '#3B82F6',
+    fontWeight: '600',
   },
 
   // Places List
