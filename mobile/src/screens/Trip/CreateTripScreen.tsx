@@ -83,18 +83,6 @@ export default function CreateTripScreen({ navigation }: any) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="chevron-back" size={24} color="#1F2937" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>New Trip</Text>
-            <View style={styles.backButton} />
-          </View>
-
           {/* Icon */}
           <View style={styles.iconContainer}>
             <View style={styles.iconBox}>
@@ -295,33 +283,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
+    paddingTop: 20,
   },
 
   // Icon
