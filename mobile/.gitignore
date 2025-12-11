@@ -21,6 +21,10 @@ dist/
 *.mobileprovision
 *.orig.*
 
+# Firebase (contains API keys)
+google-services.json
+GoogleService-Info.plist
+
 # Metro
 .metro-health-check*
 
