@@ -16,11 +16,13 @@ import {
 import { MotiView } from 'moti';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useChatStore } from '../../../stores/chatStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useTripStore } from '../../../stores/tripStore';
 import { useItemStore } from '../../../stores/itemStore';
 import ImportLocationsModal from '../../../components/ImportLocationsModal';
+import YoriLogo from '../../../components/YoriLogo';
 import { ImportModalData, SavedItem } from '../../../types';
 import { HapticFeedback } from '../../../utils/haptics';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -256,7 +258,10 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
               isAI && styles.aiAvatar,
             ]}>
               {isAI ? (
-                <Text style={styles.avatarEmoji}>🤖</Text>
+                <View style={styles.aiAvatarContent}>
+                  <Ionicons name="sparkles" size={10} color="#5DBAF0" style={styles.aiAvatarSparkle} />
+                  <Text style={styles.aiAvatarText}>Y</Text>
+                </View>
               ) : (
                 <Text style={styles.avatarText}>
                   {getInitials(item.sender_name || 'U')}
@@ -320,16 +325,45 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     );
   };
 
-  // Empty state with robot mascot
+  // Empty state with Yori logo and AI sparkles
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <MotiView
         from={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', damping: 15 }}
-        style={styles.emptyMascot}
+        style={styles.emptyMascotContainer}
       >
-        <Text style={styles.emptyMascotEmoji}>🤖</Text>
+        {/* AI Sparkles around logo */}
+        <MotiView
+          from={{ opacity: 0.3, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'timing', duration: 1500, loop: true }}
+          style={[styles.sparkle, { top: -10, left: -5 }]}
+        >
+          <Ionicons name="sparkles" size={20} color="#5DBAF0" />
+        </MotiView>
+        <MotiView
+          from={{ opacity: 0.5, scale: 1 }}
+          animate={{ opacity: 1, scale: 0.9 }}
+          transition={{ type: 'timing', duration: 1200, loop: true, delay: 300 }}
+          style={[styles.sparkle, { top: 5, right: -10 }]}
+        >
+          <Ionicons name="sparkles" size={16} color="#F5A26B" />
+        </MotiView>
+        <MotiView
+          from={{ opacity: 0.4, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1.1 }}
+          transition={{ type: 'timing', duration: 1800, loop: true, delay: 600 }}
+          style={[styles.sparkle, { bottom: 10, left: -15 }]}
+        >
+          <Ionicons name="sparkles" size={14} color="#A8B4C2" />
+        </MotiView>
+        
+        {/* Yori Logo */}
+        <View style={styles.emptyLogoWrapper}>
+          <YoriLogo size="medium" />
+        </View>
       </MotiView>
       <Text style={styles.emptyTitle}>Hey there!</Text>
       <Text style={styles.emptySubtitle}>
@@ -501,7 +535,23 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   aiAvatar: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#F8F8F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  aiAvatarContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiAvatarSparkle: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+  },
+  aiAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#5DBAF0',
   },
   avatarEmoji: {
     fontSize: 18,
@@ -592,6 +642,29 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
+  },
+  emptyMascotContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  sparkle: {
+    position: 'absolute',
+    zIndex: 10,
+  },
+  emptyLogoWrapper: {
+    width: 120,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: '#F8F8F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#5DBAF0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
   emptyMascot: {
     width: 100,
