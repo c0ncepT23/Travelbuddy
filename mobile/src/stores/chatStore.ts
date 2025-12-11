@@ -74,7 +74,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoading: true });
     try {
       const response = await api.get<{ data: Message[] }>(`/trips/${tripId}/messages`);
-      console.log(`[ChatStore] Fetched ${response.data.data?.length || 0} messages for trip ${tripId}`);
       set({ messages: response.data.data || [], isLoading: false });
     } catch (error) {
       console.error('[ChatStore] Fetch messages error:', error);

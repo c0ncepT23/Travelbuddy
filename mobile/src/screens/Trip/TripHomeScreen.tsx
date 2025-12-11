@@ -561,7 +561,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
         {isAgent ? (
           <View style={styles.agentMessageRow}>
             <View style={styles.aiAvatar}>
-              <Text style={styles.aiAvatarEmoji}>🤖</Text>
+              <Text style={styles.aiAvatarEmoji}>✨</Text>
             </View>
             <View style={styles.agentBubble}>
               <Text style={styles.agentLabel}>TravelPal</Text>

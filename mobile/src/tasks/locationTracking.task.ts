@@ -95,7 +95,7 @@ export async function startBackgroundLocationTracking() {
       timeInterval: 60000, // Update every 1 minute
       distanceInterval: 100, // Or every 100 meters
       foregroundService: {
-        notificationTitle: 'Travel Agent',
+        notificationTitle: 'Yori',
         notificationBody: 'Tracking your location to notify you of nearby places',
         notificationColor: '#6366F1',
       },

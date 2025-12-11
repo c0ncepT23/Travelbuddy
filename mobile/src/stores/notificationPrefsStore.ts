@@ -29,7 +29,6 @@ export const useNotificationPrefsStore = create<NotificationPrefsState>((set, ge
       const prefs = response.data.data;
       set({ preferences: prefs, isLoading: false });
       
-      console.log('[NotifPrefsStore] Loaded preferences');
       return prefs;
     } catch (error: any) {
       console.error('[NotifPrefsStore] Fetch error:', error);
@@ -60,7 +59,6 @@ export const useNotificationPrefsStore = create<NotificationPrefsState>((set, ge
         quietEnd: prefs.quiet_end,
       });
 
-      console.log('[NotifPrefsStore] Updated preferences');
     } catch (error: any) {
       console.error('[NotifPrefsStore] Update error:', error);
       set({ isLoading: false, error: error.message });

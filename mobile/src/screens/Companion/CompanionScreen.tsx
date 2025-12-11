@@ -29,7 +29,7 @@ export default function CompanionScreen({ route, navigation }: any) {
       const welcomeMessage: CompanionMessage = {
         id: 'welcome',
         type: 'companion',
-        content: "Hey! I'm your travel companion 🤖\n\nI can help you with your trip! You can:\n\n• Ask me: \"I'm hungry for ramen\" or \"What's near me?\"\n• Share links: Paste YouTube/Instagram/Reddit links and I'll extract places\n• Get recommendations: \"Show me matcha spots\" or \"Surprise me\"\n\nGo ahead, what can I help you with?",
+        content: "Hey! I'm Yori, your travel companion ✨\n\nI can help you with your trip! You can:\n\n• Ask me: \"I'm hungry for ramen\" or \"What's near me?\"\n• Share links: Paste YouTube/Instagram/Reddit links and I'll extract places\n• Get recommendations: \"Show me matcha spots\" or \"Surprise me\"\n\nGo ahead, what can I help you with?",
         timestamp: new Date(),
       };
       
@@ -163,7 +163,7 @@ export default function CompanionScreen({ route, navigation }: any) {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>🤖 Travel Companion</Text>
+          <Text style={styles.headerTitle}>✨ Yori</Text>
           <Text style={styles.headerSubtitle}>Ask me anything about your saved places</Text>
         </View>
         {messages.length > 1 && (

@@ -114,15 +114,12 @@ export const useLocationStore = create<LocationState>((set, get) => ({
 
   startBackgroundTracking: async (tripId: string) => {
     try {
-      // ALWAYS set the active trip first - even if task is already running
-      // This ensures the trip ID is available for the background task
-      console.log('[LocationStore] Setting active trip:', tripId);
+      // Set the active trip - ensures trip ID is available for background task
       await setActiveTrip(tripId);
       
       // Check if already tracking
       const isAlreadyActive = await isBackgroundTrackingActive();
       if (isAlreadyActive) {
-        console.log('[LocationStore] Background tracking already active, trip ID updated');
         set({ isBackgroundTracking: true });
         return;
       }
@@ -142,8 +139,6 @@ export const useLocationStore = create<LocationState>((set, get) => ({
       // Check if it's actually running
       const isActive = await isBackgroundTrackingActive();
       set({ isBackgroundTracking: isActive });
-      
-      console.log('[LocationStore] Background tracking started:', isActive);
     } catch (error) {
       console.error('[LocationStore] Start background tracking error:', error);
       throw error;
@@ -155,7 +150,6 @@ export const useLocationStore = create<LocationState>((set, get) => ({
       await stopBackgroundLocationTracking();
       await setActiveTrip(null);
       set({ isBackgroundTracking: false });
-      console.log('[LocationStore] Background tracking stopped');
     } catch (error) {
       console.error('[LocationStore] Stop background tracking error:', error);
     }
@@ -189,7 +183,6 @@ export const useLocationStore = create<LocationState>((set, get) => ({
   initializeNotifications: async () => {
     try {
       await notificationService.initialize();
-      console.log('[LocationStore] Notifications initialized');
     } catch (error) {
       console.error('[LocationStore] Notification initialization error:', error);
     }

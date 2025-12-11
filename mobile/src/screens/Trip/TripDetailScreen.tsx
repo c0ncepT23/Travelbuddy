@@ -1053,7 +1053,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
           >
             <View style={styles.chatModal}>
               <View style={styles.chatModalHeader}>
-                <Text style={styles.chatModalTitle}>AI Assistant 🤖</Text>
+                <Text style={styles.chatModalTitle}>✨ Yori Assistant</Text>
                 <TouchableOpacity onPress={() => setShowChatModal(false)}>
                   <Text style={styles.closeButtonText}>✕</Text>
                 </TouchableOpacity>

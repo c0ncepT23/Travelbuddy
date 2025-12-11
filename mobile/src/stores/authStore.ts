@@ -126,43 +126,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadStoredAuth: async () => {
-    console.log('🔵 loadStoredAuth: Starting...');
     set({ isLoading: true });
     try {
-      console.log('🔵 loadStoredAuth: Accessing AsyncStorage...');
       const [accessToken, refreshToken, userStr] = await Promise.all([
         AsyncStorage.getItem('accessToken'),
         AsyncStorage.getItem('refreshToken'),
         AsyncStorage.getItem('user'),
       ]);
-      
-      console.log('🔵 loadStoredAuth: AsyncStorage read complete', {
-        hasToken: !!accessToken,
-        hasRefresh: !!refreshToken,
-        hasUser: !!userStr
-      });
 
       if (accessToken && refreshToken && userStr) {
-        console.log('🔵 loadStoredAuth: Parsing user data...');
         const user = JSON.parse(userStr);
-        console.log('🔵 loadStoredAuth: Setting authenticated state...');
         set({
           user,
           accessToken,
           refreshToken,
           isAuthenticated: true,
         });
-        console.log('✅ loadStoredAuth: Complete - User authenticated');
-      } else {
-        console.log('✅ loadStoredAuth: Complete - No stored auth found');
       }
     } catch (error) {
-      console.error('❌ loadStoredAuth ERROR:', error);
-      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack');
+      console.error('[AuthStore] Load auth error:', error);
     } finally {
-      console.log('🔵 loadStoredAuth: Setting isLoading = false');
       set({ isLoading: false });
-      console.log('✅ loadStoredAuth: Finished');
     }
   },
 

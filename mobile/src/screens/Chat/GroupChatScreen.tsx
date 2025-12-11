@@ -290,7 +290,7 @@ export default function GroupChatScreen({ route, navigation }: any) {
           /* Pending Import Message */
           <View style={styles.importMessageContainer}>
             <View style={styles.aiAvatarSmall}>
-              <Text style={styles.aiAvatarEmoji}>🤖</Text>
+              <Text style={styles.aiAvatarEmoji}>✨</Text>
             </View>
             <View style={styles.importMessage}>
               <Text style={styles.agentLabel}>TravelPal</Text>
@@ -332,7 +332,7 @@ export default function GroupChatScreen({ route, navigation }: any) {
           /* AI Agent Message */
           <View style={styles.agentMessageContainer}>
             <View style={styles.aiAvatar}>
-              <Text style={styles.aiAvatarEmoji}>🤖</Text>
+              <Text style={styles.aiAvatarEmoji}>✨</Text>
             </View>
             <View style={styles.agentBubble}>
               <Text style={styles.agentLabel}>TravelPal</Text>

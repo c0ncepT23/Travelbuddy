@@ -83,23 +83,7 @@ export const useItemStore = create<ItemState>((set, get) => ({
         params,
       });
       
-      // Log enrichment data
       const items = response.data.data;
-      console.log(`[ItemStore] Fetched ${items.length} items`);
-      const enriched = items.filter(i => i.google_place_id);
-      console.log(`[ItemStore] ${enriched.length} items have Google enrichment`);
-      if (items.length > 0) {
-        const sample = items[0];
-        console.log(`[ItemStore] Sample item fields:`, {
-          name: sample.name,
-          hasRating: !!sample.rating,
-          rating: sample.rating,
-          hasArea: !!sample.area_name,
-          area: sample.area_name,
-          hasPhotos: !!sample.photos_json,
-        });
-      }
-      
       set({ items, isLoading: false });
       return items;
     } catch (error) {
@@ -282,9 +266,6 @@ export const useItemStore = create<ItemState>((set, get) => ({
     try {
       const response = await api.get<{ data: DayGroup[] }>(`/trips/${tripId}/items/by-day`);
       const dayGroups = response.data.data;
-      
-      console.log(`[ItemStore] Fetched ${dayGroups.length} day groups`);
-      
       set({ dayGroups, isLoading: false });
       return dayGroups;
     } catch (error) {
@@ -369,7 +350,6 @@ export const useItemStore = create<ItemState>((set, get) => ({
           state.currentItem?.id === itemId ? enrichedItem : state.currentItem,
       }));
       
-      console.log(`[ItemStore] Enriched item: ${enrichedItem.name}, Photos: ${enrichedItem.photos_json ? 'Yes' : 'No'}`);
       return enrichedItem;
     } catch (error: any) {
       console.error('[ItemStore] Enrich error:', error);
@@ -381,8 +361,6 @@ export const useItemStore = create<ItemState>((set, get) => ({
     const { items, enrichItemWithGoogle } = get();
     const itemsToEnrich = items.filter(item => !item.photos_json);
     
-    console.log(`[ItemStore] Enriching ${itemsToEnrich.length} items without photos`);
-    
     // Enrich items sequentially with delay to avoid rate limiting
     for (const item of itemsToEnrich) {
       try {
@@ -393,8 +371,6 @@ export const useItemStore = create<ItemState>((set, get) => ({
         console.error(`[ItemStore] Failed to enrich ${item.name}:`, error);
       }
     }
-    
-    console.log(`[ItemStore] Enrichment complete`);
   },
 
   setItems: (items) => {

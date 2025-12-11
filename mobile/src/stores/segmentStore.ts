@@ -45,7 +45,6 @@ export const useSegmentStore = create<SegmentState>((set, get) => ({
       );
       const segments = response.data.data;
       set({ segments, isLoading: false });
-      console.log(`[SegmentStore] Fetched ${segments.length} segments for trip ${tripId}`);
       return segments;
     } catch (error: any) {
       console.error('[SegmentStore] Fetch segments error:', error);
@@ -62,14 +61,6 @@ export const useSegmentStore = create<SegmentState>((set, get) => ({
       );
       const info = response.data.data;
       set({ currentSegmentInfo: info, isLoading: false });
-      
-      if (info.segment) {
-        console.log(`[SegmentStore] Current segment: ${info.segment.city} (Day ${info.dayNumber}/${info.totalDays})`);
-      } else if (info.isTransitDay) {
-        console.log(`[SegmentStore] Transit day - no active segment`);
-      } else {
-        console.log(`[SegmentStore] No current segment`);
-      }
       
       return info;
     } catch (error: any) {
@@ -93,7 +84,6 @@ export const useSegmentStore = create<SegmentState>((set, get) => ({
         isLoading: false,
       }));
       
-      console.log(`[SegmentStore] Added segment: ${newSegment.city}`);
       return newSegment;
     } catch (error: any) {
       console.error('[SegmentStore] Add segment error:', error);
@@ -118,7 +108,6 @@ export const useSegmentStore = create<SegmentState>((set, get) => ({
         isLoading: false,
       }));
       
-      console.log(`[SegmentStore] Updated segment: ${updatedSegment.city}`);
       return updatedSegment;
     } catch (error: any) {
       console.error('[SegmentStore] Update segment error:', error);
@@ -137,7 +126,6 @@ export const useSegmentStore = create<SegmentState>((set, get) => ({
         isLoading: false,
       }));
       
-      console.log(`[SegmentStore] Deleted segment: ${segmentId}`);
     } catch (error: any) {
       console.error('[SegmentStore] Delete segment error:', error);
       set({ isLoading: false, error: error.message });
@@ -154,7 +142,6 @@ export const useSegmentStore = create<SegmentState>((set, get) => ({
       const reorderedSegments = response.data.data;
       
       set({ segments: reorderedSegments });
-      console.log(`[SegmentStore] Reordered ${segmentIds.length} segments`);
     } catch (error: any) {
       console.error('[SegmentStore] Reorder segments error:', error);
       throw new Error(error.response?.data?.error || 'Failed to reorder segments');

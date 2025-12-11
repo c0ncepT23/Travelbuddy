@@ -191,7 +191,7 @@ export default function ChatScreen({ route, navigation }: any) {
       return (
         <View style={styles.importMessageContainer}>
           <View style={styles.importMessage}>
-            <Text style={styles.agentBadge}>🤖 Agent</Text>
+            <Text style={styles.agentBadge}>✨ Yori</Text>
             
             {/* Source Card */}
             <View style={styles.importSourceCard}>
@@ -245,7 +245,7 @@ export default function ChatScreen({ route, navigation }: any) {
         {!isAgent && !isCurrentUser && (
           <Text style={styles.senderName}>{item.sender_name}</Text>
         )}
-        {isAgent && <Text style={styles.agentBadge}>🤖 Agent</Text>}
+        {isAgent && <Text style={styles.agentBadge}>✨ Yori</Text>}
 
         {/* Source Card for URLs */}
         {hasURL && !isAgent && renderSourceCard(content)}
@@ -303,7 +303,7 @@ export default function ChatScreen({ route, navigation }: any) {
           !isLoading ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>💬</Text>
-              <Text style={styles.emptyText}>Start chatting with your travel agent!</Text>
+              <Text style={styles.emptyText}>Start chatting with Yori!</Text>
               <Text style={styles.emptySubtext}>
                 Share links, photos, or ask questions
               </Text>

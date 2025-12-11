@@ -33,13 +33,6 @@ export const useBriefingStore = create<BriefingState>((set, get) => ({
         isLoading: false, 
         lastFetched: new Date() 
       });
-      
-      console.log(`[BriefingStore] Fetched briefing for trip ${tripId}`);
-      if (briefing.segment) {
-        console.log(`[BriefingStore] Segment: ${briefing.segment.city}, Day ${briefing.segment.dayNumber}/${briefing.segment.totalDays}`);
-      }
-      console.log(`[BriefingStore] Time of day: ${briefing.timeOfDay}, ${briefing.topPicks.length} top picks`);
-      
       return briefing;
     } catch (error: any) {
       console.error('[BriefingStore] Fetch briefing error:', error);
