@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../../stores/authStore';
 import { API_BASE_URL } from '../../config/api';
+import YoriLogo from '../../components/YoriLogo';
 
 export default function RegisterScreen({ navigation }: any) {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -91,10 +92,8 @@ export default function RegisterScreen({ navigation }: any) {
         <View style={styles.content}>
           {/* Hero Section */}
           <View style={styles.heroSection}>
-            <View style={styles.logoBox}>
-              <Text style={styles.logoEmoji}>🌍</Text>
-            </View>
-            <Text style={styles.title}>Join the squad!</Text>
+            <YoriLogo size="large" />
+            <Text style={styles.title}>Join Yori!</Text>
             <Text style={styles.subtitle}>Start your travel journey today</Text>
           </View>
 
@@ -235,23 +234,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoBox: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  logoEmoji: {
-    fontSize: 50,
-  },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
     color: '#1F2937',
     textAlign: 'center',
+    marginTop: 20,
     marginBottom: 8,
   },
   subtitle: {

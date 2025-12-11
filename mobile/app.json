@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Travel Agent",
-    "slug": "travel-agent",
+    "name": "Yori",
+    "slug": "yori-travel",
     "version": "1.2.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -17,9 +17,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Travel Agent to use your location to notify you when you're near saved places.",
-          "locationAlwaysPermission": "Allow Travel Agent to notify you about nearby saved places even when the app is closed.",
-          "locationWhenInUsePermission": "Allow Travel Agent to use your location to suggest nearby saved places.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Yori to use your location to notify you when you're near saved places.",
+          "locationAlwaysPermission": "Allow Yori to notify you about nearby saved places even when the app is closed.",
+          "locationWhenInUsePermission": "Allow Yori to use your location to suggest nearby saved places.",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }
@@ -36,8 +36,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.travelagent.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "We need your location to suggest nearby places from your saved list.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to proactively suggest nearby places.",
+        "NSLocationWhenInUseUsageDescription": "Yori needs your location to suggest nearby places from your saved list.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Yori needs your location to proactively suggest nearby places.",
         "NSCameraUsageDescription": "Allow camera access to take photos of places you want to save.",
         "NSPhotoLibraryUsageDescription": "Allow photo library access to upload images.",
         "NSMicrophoneUsageDescription": "Allow microphone access for voice notes.",

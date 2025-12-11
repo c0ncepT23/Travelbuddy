@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useAuthStore } from '../../stores/authStore';
 import { API_BASE_URL } from '../../config/api';
+import YoriLogo from '../../components/YoriLogo';
 
 function LoginScreenContent({ navigation }: any) {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -74,11 +75,9 @@ function LoginScreenContent({ navigation }: any) {
         <View style={styles.content}>
           {/* Hero Section */}
           <View style={styles.heroSection}>
-            <View style={styles.logoBox}>
-              <Text style={styles.logoEmoji}>✈️</Text>
-            </View>
+            <YoriLogo size="large" />
             <Text style={styles.title}>Welcome back!</Text>
-            <Text style={styles.subtitle}>Your travel squad is waiting</Text>
+            <Text style={styles.subtitle}>Your travel companion awaits</Text>
           </View>
 
           {/* Form Section */}
@@ -201,23 +200,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoBox: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  logoEmoji: {
-    fontSize: 50,
-  },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
     color: '#1F2937',
     textAlign: 'center',
+    marginTop: 20,
     marginBottom: 8,
   },
   subtitle: {
