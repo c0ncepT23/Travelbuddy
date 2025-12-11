@@ -35,13 +35,6 @@ interface TripChatTabProps {
   navigation: any;
 }
 
-// Quick Action Chips
-const QUICK_ACTIONS = [
-  { id: 'youtube', label: '🎥 Paste YouTube Link', placeholder: 'Paste a YouTube travel guide link...' },
-  { id: 'attractions', label: '📍 Find Attractions', message: 'What are the must-see attractions here?' },
-  { id: 'food', label: '🍽️ Food Spots', message: 'Find me the best food spots' },
-  { id: 'plan', label: '📅 Plan My Day', message: 'Help me plan my day' },
-];
 
 // Helper functions
 const formatMessageTime = (date: Date): string => {
@@ -145,7 +138,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
   const [inputText, setInputText] = useState('');
   const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showQuickActions, setShowQuickActions] = useState(true);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -168,7 +160,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
   // Handle input change with typing indicator
   const handleInputChange = (text: string) => {
     setInputText(text);
-    setShowQuickActions(text.length === 0);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -198,7 +189,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
 
     const messageText = inputText.trim();
     setInputText('');
-    setShowQuickActions(true);
     HapticFeedback.light();
 
     try {
@@ -207,17 +197,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     } catch (error) {
       console.error('Send message error:', error);
     }
-  };
-
-  // Handle quick action
-  const handleQuickAction = (action: typeof QUICK_ACTIONS[0]) => {
-    HapticFeedback.light();
-    if (action.message) {
-      setInputText(action.message);
-    } else if (action.placeholder) {
-      setInputText('');
-    }
-    setShowQuickActions(false);
   };
 
   // Refresh messages
@@ -422,25 +401,6 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
 
       {/* Input Area */}
       <View style={styles.inputArea}>
-        {/* Quick Action Chips */}
-        {showQuickActions && (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickActionsContainer}
-          >
-            {QUICK_ACTIONS.map((action) => (
-              <TouchableOpacity
-                key={action.id}
-                style={styles.quickActionChip}
-                onPress={() => handleQuickAction(action)}
-              >
-                <Text style={styles.quickActionText}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
         {/* Input Bar */}
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.linkButton}>
@@ -712,22 +672,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: Platform.OS === 'ios' ? 8 : 12,
-  },
-  quickActionsContainer: {
-    paddingBottom: 12,
-    gap: 8,
-  },
-  quickActionChip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  quickActionText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#475569',
   },
   inputBar: {
     flexDirection: 'row',
