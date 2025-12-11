@@ -211,6 +211,17 @@ export class AICompanionService {
       // Analyze query intent
       const intent = await this.analyzeQueryIntent(query, context);
       
+      // Handle "alternatives" intent specially
+      if (intent.type === 'alternatives' && intent.referencedPlace) {
+        logger.info(`[Companion] Alternatives request for: ${intent.referencedPlace}, reason: ${intent.reason}`);
+        return await this.findAlternatives(
+          savedPlaces,
+          intent.referencedPlace,
+          intent.reason,
+          context
+        );
+      }
+      
       // Filter relevant places based on intent and context
       const relevantPlaces = await this.filterRelevantPlaces(
         savedPlaces,
@@ -745,11 +756,13 @@ export class AICompanionService {
     query: string,
     context: UserContext
   ): Promise<{
-    type: 'location_based' | 'category' | 'specific' | 'surprise' | 'general';
+    type: 'location_based' | 'category' | 'specific' | 'surprise' | 'general' | 'alternatives';
     category?: ItemCategory;
     keywords: string[];
     distance?: 'nearby' | 'walking' | 'any';
     time?: 'now' | 'later' | 'any';
+    referencedPlace?: string; // For alternatives - the place user can't visit
+    reason?: string; // Why they can't visit (closed, crowded, etc.)
   }> {
     try {
       const prompt = `Analyze this user query about their saved travel places:
@@ -759,19 +772,30 @@ Current time: ${context.time.toLocaleTimeString()}
 User location: ${context.location ? 'Known' : 'Unknown'}
 
 Determine:
-1. Query type: location_based (near me), category (food/shopping/places), specific (named place), surprise (something random), general (other)
+1. Query type:
+   - location_based: "near me", "nearby", "around here"
+   - category: asking about food/shopping/places
+   - specific: asking about a named place
+   - surprise: "surprise me", "random", "anything"
+   - alternatives: user CAN'T go to a place and wants SIMILAR options (e.g., "can't go to X", "X is closed", "alternative to X", "similar to X", "what else like X")
+   - general: other queries
+
 2. Category if mentioned: food, shopping, place, activity, accommodation, tip
 3. Keywords to match
 4. Distance preference: nearby (<500m), walking (<2km), any
 5. Time preference: now (immediate), later (planning), any
+6. Referenced place (for alternatives): the place name they can't/don't want to visit
+7. Reason (for alternatives): why they can't visit (closed, crowded, too far, etc.)
 
 Respond with JSON:
 {
-  "type": "location_based|category|specific|surprise|general",
+  "type": "location_based|category|specific|surprise|general|alternatives",
   "category": "food|shopping|place|activity|accommodation|tip|null",
   "keywords": ["keyword1", "keyword2"],
   "distance": "nearby|walking|any",
-  "time": "now|later|any"
+  "time": "now|later|any",
+  "referencedPlace": "place name or null",
+  "reason": "reason or null"
 }`;
 
       const response = await openai.chat.completions.create({
@@ -789,6 +813,8 @@ Respond with JSON:
         keywords: result.keywords || [],
         distance: result.distance || 'any',
         time: result.time || 'any',
+        referencedPlace: result.referencedPlace === 'null' ? undefined : result.referencedPlace,
+        reason: result.reason === 'null' ? undefined : result.reason,
       };
     } catch (error) {
       logger.error('Intent analysis error:', error);
@@ -864,6 +890,189 @@ Respond with JSON:
     
     // Limit results to top 5
     return filtered.slice(0, 5);
+  }
+
+  /**
+   * Find alternatives to a place the user can't visit
+   * Prioritizes saved items, then supplements with Google Places if needed
+   * 
+   * Cost optimization:
+   * - Only calls Google Places if saved items < 3
+   * - Limits Google results to top 3
+   * - Skips photos (fetched on-demand)
+   * - Results are cached for 1 hour
+   */
+  private static async findAlternatives(
+    savedPlaces: SavedItem[],
+    referencedPlaceName: string,
+    reason: string | undefined,
+    context: UserContext
+  ): Promise<CompanionResponse> {
+    logger.info(`[Alternatives] Finding alternatives for: ${referencedPlaceName}`);
+    
+    // 1. Find the referenced place from saved items
+    const referencedPlace = savedPlaces.find(p => 
+      p.name.toLowerCase().includes(referencedPlaceName.toLowerCase()) ||
+      referencedPlaceName.toLowerCase().includes(p.name.toLowerCase())
+    );
+    
+    if (!referencedPlace) {
+      logger.info(`[Alternatives] Referenced place not found in saved items`);
+      return {
+        message: `I couldn't find "${referencedPlaceName}" in your saved places. Could you tell me more about what kind of place you're looking for? 🤔`,
+      };
+    }
+    
+    logger.info(`[Alternatives] Found referenced place: ${referencedPlace.name}, category: ${referencedPlace.category}`);
+    
+    // 2. Find similar places from saved items (same category, excluding the referenced place)
+    let alternatives: Array<SavedItem & { distance?: number }> = savedPlaces.filter(p => 
+      p.id !== referencedPlace.id &&
+      p.category?.toLowerCase() === referencedPlace.category?.toLowerCase()
+    );
+    
+    logger.info(`[Alternatives] Found ${alternatives.length} saved alternatives in same category`);
+    
+    // 3. If user has location, calculate distances and prioritize nearby
+    const searchLat = context.location?.lat || referencedPlace.location_lat;
+    const searchLng = context.location?.lng || referencedPlace.location_lng;
+    
+    if (searchLat && searchLng) {
+      alternatives = alternatives
+        .filter(p => p.location_lat && p.location_lng)
+        .map(p => ({
+          ...p,
+          distance: this.calculateDistance(
+            searchLat,
+            searchLng,
+            p.location_lat!,
+            p.location_lng!
+          ),
+        }))
+        .sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
+    
+    // 4. Take top 3 from saved items
+    const savedAlternatives = alternatives.slice(0, 3);
+    
+    // 5. If < 3 saved alternatives, supplement with Google Places
+    let googleAlternatives: Array<{
+      name: string;
+      address: string;
+      rating?: number;
+      distance?: number;
+      isGoogleResult: boolean;
+    }> = [];
+    
+    const needGoogleSupport = savedAlternatives.length < 3 && searchLat && searchLng;
+    
+    if (needGoogleSupport) {
+      logger.info(`[Alternatives] Saved items insufficient (${savedAlternatives.length}), querying Google Places`);
+      
+      try {
+        const { GooglePlacesService } = await import('./googlePlaces.service');
+        
+        // Map category to Google type
+        const googleType = GooglePlacesService.categoryToGoogleType(referencedPlace.category || 'place');
+        
+        // Extract keyword from place name (e.g., "Ichiran Ramen" → "ramen")
+        const keywords = referencedPlace.name.toLowerCase().split(' ').filter(w => 
+          !['the', 'a', 'an', 'restaurant', 'cafe', 'shop', 'store'].includes(w) && w.length > 2
+        );
+        const keyword = keywords.length > 0 ? keywords[keywords.length - 1] : undefined;
+        
+        const googleResults = await GooglePlacesService.searchNearby({
+          lat: searchLat,
+          lng: searchLng,
+          type: googleType,
+          keyword: keyword,
+          radius: 1500, // 1.5km
+          openNow: true, // Prioritize open places since user needs alternative NOW
+          maxResults: 3 - savedAlternatives.length, // Only get what we need
+        });
+        
+        logger.info(`[Alternatives] Google returned ${googleResults.length} places`);
+        
+        // Filter out places already in saved items
+        const savedNames = savedPlaces.map(p => p.name.toLowerCase());
+        
+        googleAlternatives = googleResults
+          .filter(g => !savedNames.some(name => 
+            name.includes(g.name.toLowerCase()) || g.name.toLowerCase().includes(name)
+          ))
+          .map(g => ({
+            name: g.name,
+            address: g.vicinity,
+            rating: g.rating,
+            distance: searchLat && searchLng && g.geometry?.location 
+              ? this.calculateDistance(searchLat, searchLng, g.geometry.location.lat, g.geometry.location.lng)
+              : undefined,
+            isGoogleResult: true,
+          }));
+          
+        logger.info(`[Alternatives] After filtering, ${googleAlternatives.length} Google suggestions`);
+      } catch (error) {
+        logger.error('[Alternatives] Google Places error:', error);
+        // Continue without Google results
+      }
+    }
+    
+    // 6. Build response
+    const reasonText = reason ? ` (${reason})` : '';
+    let message = `No worries! Since you can't visit **${referencedPlace.name}**${reasonText}, here are some similar alternatives:\n\n`;
+    
+    let placeIndex = 1;
+    
+    // Show saved alternatives first
+    if (savedAlternatives.length > 0) {
+      message += `**From your saved places:**\n`;
+      savedAlternatives.forEach((place) => {
+        const distanceText = place.distance 
+          ? ` (${place.distance < 1000 ? `${Math.round(place.distance)}m` : `${(place.distance / 1000).toFixed(1)}km`})`
+          : '';
+        const ratingText = place.rating ? ` ⭐ ${Number(place.rating).toFixed(1)}` : '';
+        message += `${placeIndex}. **${place.name}**${distanceText}${ratingText}\n`;
+        if (place.description) {
+          message += `   ${place.description.substring(0, 80)}${place.description.length > 80 ? '...' : ''}\n`;
+        }
+        message += '\n';
+        placeIndex++;
+      });
+    }
+    
+    // Show Google alternatives
+    if (googleAlternatives.length > 0) {
+      message += `**New discoveries nearby:**\n`;
+      googleAlternatives.forEach((place) => {
+        const distanceText = place.distance 
+          ? ` (${place.distance < 1000 ? `${Math.round(place.distance)}m` : `${(place.distance / 1000).toFixed(1)}km`})`
+          : '';
+        const ratingText = place.rating ? ` ⭐ ${place.rating.toFixed(1)}` : '';
+        const openText = ' 🟢 Open now';
+        message += `${placeIndex}. **${place.name}**${distanceText}${ratingText}${openText}\n`;
+        message += `   📍 ${place.address}\n`;
+        message += `   _Say "add ${place.name}" to save it!_\n\n`;
+        placeIndex++;
+      });
+    }
+    
+    // No results at all
+    if (savedAlternatives.length === 0 && googleAlternatives.length === 0) {
+      message = `I couldn't find similar ${referencedPlace.category || 'places'} nearby right now. `;
+      message += `Try asking "find ${referencedPlace.category || 'places'} near me" and I'll search for you! 🔍`;
+    }
+    
+    return {
+      message,
+      places: savedAlternatives.map(p => ({
+        id: p.id,
+        name: p.name,
+        category: p.category || 'place',
+        description: p.description || '',
+        location_name: p.location_name,
+        distance: p.distance,
+      })),
+    };
   }
 
   /**

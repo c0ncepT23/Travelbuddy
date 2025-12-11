@@ -2,6 +2,29 @@ import axios from 'axios';
 import { config } from '../config/env';
 import logger from '../config/logger';
 
+// Simple in-memory cache for nearby search results (TTL: 1 hour)
+const nearbySearchCache = new Map<string, { data: NearbyPlace[]; timestamp: number }>();
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+interface NearbyPlace {
+  place_id: string;
+  name: string;
+  vicinity: string;
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  geometry: {
+    location: {
+      lat: number;
+      lng: number;
+    };
+  };
+  opening_hours?: {
+    open_now: boolean;
+  };
+  types: string[];
+}
+
 interface GooglePlaceDetails {
   place_id: string;
   name: string;
@@ -36,6 +59,89 @@ interface GooglePlaceDetails {
 export class GooglePlacesService {
   private static readonly API_KEY = config.googleMaps.apiKey;
   private static readonly BASE_URL = 'https://maps.googleapis.com/maps/api/place';
+
+  /**
+   * Search for nearby places by type/keyword
+   * Used for finding alternatives when saved items aren't enough
+   * 
+   * Cost: $32 per 1,000 requests (Nearby Search)
+   * Free tier: ~6,250 calls/month with $200 credit
+   */
+  static async searchNearby(options: {
+    lat: number;
+    lng: number;
+    type?: string;        // e.g., "restaurant", "cafe", "tourist_attraction"
+    keyword?: string;     // e.g., "ramen", "sushi"
+    radius?: number;      // meters, default 1000
+    openNow?: boolean;    // filter to only open places
+    maxResults?: number;  // limit results, default 3
+  }): Promise<NearbyPlace[]> {
+    try {
+      if (!this.API_KEY) {
+        logger.warn('[GooglePlaces] API Key missing, skipping nearby search');
+        return [];
+      }
+
+      const { lat, lng, type, keyword, radius = 1000, openNow = false, maxResults = 3 } = options;
+
+      // Check cache first
+      const cacheKey = `nearby:${lat.toFixed(3)},${lng.toFixed(3)}:${type || ''}:${keyword || ''}:${radius}:${openNow}`;
+      const cached = nearbySearchCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        logger.info(`[GooglePlaces] Cache hit for nearby search: ${cacheKey}`);
+        return cached.data.slice(0, maxResults);
+      }
+
+      logger.info(`[GooglePlaces] Nearby search: type=${type}, keyword=${keyword}, radius=${radius}m`);
+
+      const params: any = {
+        location: `${lat},${lng}`,
+        radius: radius,
+        key: this.API_KEY,
+      };
+
+      if (type) params.type = type;
+      if (keyword) params.keyword = keyword;
+      if (openNow) params.opennow = true;
+
+      const response = await axios.get(`${this.BASE_URL}/nearbysearch/json`, { params });
+
+      if (response.data.status !== 'OK' && response.data.status !== 'ZERO_RESULTS') {
+        logger.warn(`[GooglePlaces] Nearby search status: ${response.data.status}`);
+        return [];
+      }
+
+      const results: NearbyPlace[] = response.data.results || [];
+      logger.info(`[GooglePlaces] Found ${results.length} nearby places`);
+
+      // Cache the results
+      nearbySearchCache.set(cacheKey, { data: results, timestamp: Date.now() });
+
+      // Return limited results (skip photos to save costs)
+      return results.slice(0, maxResults);
+    } catch (error: any) {
+      logger.error('[GooglePlaces] Nearby search error:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Map our category to Google Places type
+   */
+  static categoryToGoogleType(category: string): string {
+    const mapping: Record<string, string> = {
+      'food': 'restaurant',
+      'restaurant': 'restaurant',
+      'cafe': 'cafe',
+      'shopping': 'shopping_mall',
+      'place': 'tourist_attraction',
+      'activity': 'tourist_attraction',
+      'accommodation': 'lodging',
+      'bar': 'bar',
+      'nightlife': 'night_club',
+    };
+    return mapping[category.toLowerCase()] || 'point_of_interest';
+  }
 
   /**
    * Search for a place by text query to get its Place ID
