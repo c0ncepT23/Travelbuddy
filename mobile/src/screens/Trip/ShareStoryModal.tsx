@@ -5,15 +5,16 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
-  Switch,
-  ScrollView,
-  Alert,
   Share,
   Platform,
+  Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useCheckInStore } from '../../stores/checkInStore';
+import { HapticFeedback } from '../../utils/haptics';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ShareStoryModalProps {
   visible: boolean;
@@ -30,15 +31,9 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
   tripName,
   destination,
 }) => {
-  const { currentStory, createOrGetStory, updateStory, stats, fetchStats } = useCheckInStore();
-  const [isPublic, setIsPublic] = useState(true);
-  const [showRatings, setShowRatings] = useState(true);
-  const [showPhotos, setShowPhotos] = useState(true);
-  const [showCosts, setShowCosts] = useState(false);
-  const [showNotes, setShowNotes] = useState(true);
-  const [storyTitle, setStoryTitle] = useState(`My ${destination} Adventure`);
-  const [storyDescription, setStoryDescription] = useState('');
+  const { currentStory, createOrGetStory, stats, fetchStats } = useCheckInStore();
   const [isCreating, setIsCreating] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     if (visible && tripId) {
@@ -50,25 +45,13 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
   const loadOrCreateStory = async () => {
     setIsCreating(true);
     try {
-      const story = await createOrGetStory(tripId, {
-        isPublic,
-        title: storyTitle,
-        description: storyDescription,
-        showRatings,
-        showPhotos,
-        showCosts,
-        showNotes,
+      await createOrGetStory(tripId, {
+        isPublic: true,
+        title: `My ${destination} Adventure`,
+        showRatings: true,
+        showPhotos: true,
+        showNotes: true,
       });
-      
-      if (story) {
-        setStoryTitle(story.title || `My ${destination} Adventure`);
-        setStoryDescription(story.description || '');
-        setIsPublic(story.is_public);
-        setShowRatings(story.show_ratings);
-        setShowPhotos(story.show_photos);
-        setShowCosts(story.show_costs);
-        setShowNotes(story.show_notes);
-      }
     } catch (error) {
       console.error('Error creating story:', error);
     } finally {
@@ -76,46 +59,18 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
     }
   };
 
-  const handleUpdateSettings = async () => {
-    if (!currentStory) return;
-    
-    try {
-      await updateStory(currentStory.share_code, {
-        isPublic,
-        title: storyTitle,
-        description: storyDescription,
-        showRatings,
-        showPhotos,
-        showCosts,
-        showNotes,
-      });
-      Alert.alert('✅ Updated', 'Your story settings have been updated');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update story settings');
-    }
-  };
-
   const shareStoryLink = async () => {
-    if (!currentStory) {
-      Alert.alert('Creating story...', 'Please wait a moment');
-      return;
-    }
+    if (!currentStory) return;
 
-    const storyUrl = `https://travelagent.app/story/${currentStory.share_code}`;
-    const message = `Check out my ${destination} journey! 🗾\n\n${storyTitle}\n\n${
-      stats ? `📍 ${stats.unique_places || 0} places visited\n⭐ ${stats.total_checkins || 0} check-ins\n\n` : ''
-    }View my timeline: ${storyUrl}`;
+    HapticFeedback.medium();
+    const storyUrl = `https://yori.travel/story/${currentStory.share_code}`;
+    const message = `Check out my ${destination} journey! 🗺️✨\n\n📍 ${stats?.unique_places || 0} places · ✅ ${stats?.total_checkins || 0} check-ins\n\nView my timeline: ${storyUrl}`;
 
     try {
-      if (Platform.OS === 'web') {
-        await Clipboard.setStringAsync(storyUrl);
-        Alert.alert('Copied!', 'Story link copied to clipboard');
-      } else {
-        await Share.share({
-          message,
-          title: storyTitle,
-        });
-      }
+      await Share.share({
+        message,
+        title: `My ${destination} Journey`,
+      });
     } catch (error) {
       console.error('Error sharing:', error);
     }
@@ -124,179 +79,93 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
   const copyLink = async () => {
     if (!currentStory) return;
     
-    const storyUrl = `https://travelagent.app/story/${currentStory.share_code}`;
+    HapticFeedback.medium();
+    const storyUrl = `https://yori.travel/story/${currentStory.share_code}`;
     await Clipboard.setStringAsync(storyUrl);
-    Alert.alert('Copied!', 'Story link copied to clipboard');
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+      <TouchableOpacity 
+        style={styles.overlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.overlayBg} />
+      </TouchableOpacity>
+
+      <View style={styles.modalContainer}>
+        <View style={styles.modal}>
+          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Share Your Journey 🗺️</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.closeButton}>✕</Text>
+            <Text style={styles.title}>Share Timeline</Text>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close" size={24} color="#64748B" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Story Stats */}
-            {stats && (
-              <View style={styles.statsCard}>
-                <Text style={styles.statsTitle}>Your Journey So Far</Text>
-                <View style={styles.statsGrid}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{stats.unique_places || 0}</Text>
-                    <Text style={styles.statLabel}>Places</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{stats.total_checkins || 0}</Text>
-                    <Text style={styles.statLabel}>Check-ins</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{stats.days_active || 0}</Text>
-                    <Text style={styles.statLabel}>Days</Text>
-                  </View>
-                  {typeof stats.avg_rating === 'number' && stats.avg_rating > 0 && (
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>{Number(stats.avg_rating).toFixed(1)}⭐</Text>
-                      <Text style={styles.statLabel}>Avg Rating</Text>
-                    </View>
-                  )}
+          {/* Stats Card */}
+          {stats && (
+            <View style={styles.statsCard}>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{stats.unique_places || 0}</Text>
+                  <Text style={styles.statLabel}>Places</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{stats.total_checkins || 0}</Text>
+                  <Text style={styles.statLabel}>Check-ins</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{stats.days_active || 0}</Text>
+                  <Text style={styles.statLabel}>Days</Text>
                 </View>
               </View>
-            )}
-
-            {/* Story Settings */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Story Details</Text>
-              
-              <TextInput
-                style={styles.input}
-                placeholder="Story Title"
-                value={storyTitle}
-                onChangeText={setStoryTitle}
-              />
-              
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Add a description (optional)"
-                value={storyDescription}
-                onChangeText={setStoryDescription}
-                multiline
-                numberOfLines={3}
-              />
             </View>
+          )}
 
-            {/* Privacy Settings */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Privacy Settings</Text>
-              
-              <View style={styles.settingRow}>
-                <Text style={styles.settingLabel}>Make story public</Text>
-                <Switch
-                  value={isPublic}
-                  onValueChange={setIsPublic}
-                  trackColor={{ false: '#D1D5DB', true: '#10B981' }}
-                  thumbColor={isPublic ? '#FFFFFF' : '#F3F4F6'}
-                />
-              </View>
-
-              <Text style={styles.helperText}>
-                {isPublic 
-                  ? '✅ Anyone with the link can view your journey' 
-                  : '🔒 Only you can view this story'}
-              </Text>
-            </View>
-
-            {/* Content Settings */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>What to Include</Text>
-              
-              <View style={styles.settingRow}>
-                <Text style={styles.settingLabel}>Show ratings</Text>
-                <Switch
-                  value={showRatings}
-                  onValueChange={setShowRatings}
-                  trackColor={{ false: '#D1D5DB', true: '#10B981' }}
-                />
-              </View>
-              
-              <View style={styles.settingRow}>
-                <Text style={styles.settingLabel}>Show photos</Text>
-                <Switch
-                  value={showPhotos}
-                  onValueChange={setShowPhotos}
-                  trackColor={{ false: '#D1D5DB', true: '#10B981' }}
-                />
-              </View>
-              
-              <View style={styles.settingRow}>
-                <Text style={styles.settingLabel}>Show notes</Text>
-                <Switch
-                  value={showNotes}
-                  onValueChange={setShowNotes}
-                  trackColor={{ false: '#D1D5DB', true: '#10B981' }}
-                />
-              </View>
-              
-              <View style={styles.settingRow}>
-                <Text style={styles.settingLabel}>Show costs</Text>
-                <Switch
-                  value={showCosts}
-                  onValueChange={setShowCosts}
-                  trackColor={{ false: '#D1D5DB', true: '#10B981' }}
-                />
+          {/* Link Section */}
+          {currentStory && (
+            <View style={styles.linkSection}>
+              <Text style={styles.linkLabel}>Your Story Link</Text>
+              <View style={styles.linkContainer}>
+                <Text style={styles.linkText} numberOfLines={1}>
+                  yori.travel/story/{currentStory.share_code}
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.copyButton, linkCopied && styles.copyButtonSuccess]}
+                  onPress={copyLink}
+                >
+                  <Ionicons 
+                    name={linkCopied ? "checkmark" : "copy-outline"} 
+                    size={18} 
+                    color={linkCopied ? "#10B981" : "#3B82F6"} 
+                  />
+                </TouchableOpacity>
               </View>
             </View>
+          )}
 
-            {/* Share Link */}
-            {currentStory && (
-              <View style={styles.linkSection}>
-                <Text style={styles.linkLabel}>Your Story Link</Text>
-                <View style={styles.linkContainer}>
-                  <Text style={styles.linkText} numberOfLines={1}>
-                    travelagent.app/story/{currentStory.share_code}
-                  </Text>
-                  <TouchableOpacity style={styles.copyButton} onPress={copyLink}>
-                    <Text style={styles.copyButtonText}>📋</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {currentStory.views_count > 0 && (
-                  <Text style={styles.viewCount}>
-                    👁️ Viewed {currentStory.views_count} times
-                  </Text>
-                )}
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Action Buttons */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.updateButton}
-              onPress={handleUpdateSettings}
-            >
-              <Text style={styles.updateButtonText}>Update Settings</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.shareButton}
-              onPress={shareStoryLink}
-              disabled={!currentStory || isCreating}
-            >
-              <Text style={styles.shareButtonText}>
-                {isCreating ? 'Creating...' : 'Share Journey 🚀'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Share Button */}
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={shareStoryLink}
+            disabled={!currentStory || isCreating}
+          >
+            <Ionicons name="share-social" size={20} color="#FFFFFF" />
+            <Text style={styles.shareButtonText}>
+              {isCreating ? 'Creating...' : 'Share via...'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -304,165 +173,126 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  overlayBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modal: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
+    borderRadius: 24,
+    width: SCREEN_WIDTH - 48,
+    maxWidth: 400,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  closeButton: {
-    fontSize: 28,
-    color: '#6B7280',
-    fontWeight: '300',
-  },
-  content: {
-    padding: 20,
-  },
-  statsCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 20,
   },
-  statsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 12,
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1F2937',
   },
-  statsGrid: {
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  statsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-around',
   },
   statItem: {
     alignItems: 'center',
+    flex: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#E2E8F0',
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: '#1F2937',
   },
   statLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  settingLabel: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 8,
-    fontStyle: 'italic',
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 4,
   },
   linkSection: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 20,
   },
   linkLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
     marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   linkContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
     padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   linkText: {
     flex: 1,
-    fontSize: 13,
-    color: '#6366F1',
+    fontSize: 14,
+    color: '#3B82F6',
+    fontWeight: '500',
   },
   copyButton: {
-    padding: 4,
-  },
-  copyButtonText: {
-    fontSize: 20,
-  },
-  viewCount: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 8,
-  },
-  footer: {
-    flexDirection: 'row',
-    padding: 20,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  updateButton: {
-    flex: 1,
-    paddingVertical: 14,
+    width: 36,
+    height: 36,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
-  updateButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
+  copyButtonSuccess: {
+    backgroundColor: '#ECFDF5',
   },
   shareButton: {
-    flex: 1,
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
   },
   shareButtonText: {
     fontSize: 16,
