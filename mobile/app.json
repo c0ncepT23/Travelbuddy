@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Yori",
-    "slug": "yori-travel",
+    "slug": "travel-agent",
     "version": "1.2.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -51,6 +51,7 @@
     },
     "android": {
       "package": "com.travelagent.app",
+      "googleServicesFile": "./android/app/google-services.json",
       "versionCode": 3,
       "permissions": [
         "ACCESS_FINE_LOCATION",
