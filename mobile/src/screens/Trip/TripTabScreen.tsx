@@ -8,19 +8,17 @@ import {
   SafeAreaView,
   Dimensions,
   Platform,
-  Share,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { MotiView } from 'moti';
-import * as Clipboard from 'expo-clipboard';
 import { useTripStore } from '../../stores/tripStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { useChatStore } from '../../stores/chatStore';
 import { HapticFeedback } from '../../utils/haptics';
 import MemberAvatarStack from '../../components/MemberAvatarStack';
 import MemberListModal from '../../components/MemberListModal';
+import InviteModal from '../../components/InviteModal';
 import { TripMember } from '../../types';
 
 // Tab Screens
@@ -151,7 +149,7 @@ export default function TripTabScreen({ route, navigation }: any) {
   const { onlineUsers } = useChatStore();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabName>('Chat');
-  const [showShareModal, setShowShareModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
   
   // Get online user IDs
@@ -199,20 +197,10 @@ export default function TripTabScreen({ route, navigation }: any) {
     setActiveTab(tab);
   };
 
-  const handleShare = async () => {
+  const handleShare = () => {
     HapticFeedback.light();
     if (currentTrip) {
-      const inviteCode = currentTrip.invite_code;
-      const inviteLink = `https://travelagent.app/join/${inviteCode}`;
-      const shareMessage = `Join my trip "${currentTrip.name}" to ${currentTrip.destination}! 🌍✈️\n\n📱 Invite Code: ${inviteCode}\n\n🔗 Or tap: ${inviteLink}`;
-      try {
-        await Share.share({
-          message: shareMessage,
-          title: `Join ${currentTrip.name}`,
-        });
-      } catch (error) {
-        console.error('Share error:', error);
-      }
+      setShowInviteModal(true);
     }
   };
 
@@ -269,6 +257,17 @@ export default function TripTabScreen({ route, navigation }: any) {
         onlineUserIds={onlineUserIds}
         tripName={currentTrip?.name}
       />
+      
+      {/* Invite Modal */}
+      {currentTrip && (
+        <InviteModal
+          visible={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          tripName={currentTrip.name}
+          destination={currentTrip.destination}
+          inviteCode={currentTrip.invite_code}
+        />
+      )}
     </View>
   );
 }

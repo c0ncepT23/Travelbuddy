@@ -279,6 +279,12 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
     );
   }
 
+  // Navigate to Timeline
+  const handleTimelinePress = () => {
+    HapticFeedback.light();
+    navigation.navigate('Timeline', { tripId });
+  };
+
   return (
     <View style={styles.container}>
       {/* Full Screen Map */}
@@ -290,11 +296,20 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
           selectedPlace={selectedPlace}
           onMarkerPress={handleMarkerPress}
         />
+        
+        {/* Timeline Button - Top Right Corner */}
+        <TouchableOpacity 
+          style={styles.timelineButton}
+          onPress={handleTimelinePress}
+        >
+          <Ionicons name="time" size={22} color="#3B82F6" />
+          <Text style={styles.timelineButtonText}>Timeline</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Bottom Sheet */}
       <Animated.View style={[styles.bottomSheet, animatedSheetStyle]}>
-        {/* Draggable Handle Area */}
+        {/* Draggable Handle Area - Only handle and search */}
         <PanGestureHandler onGestureEvent={gestureHandler}>
           <Animated.View style={styles.sheetHandleArea}>
             <View style={styles.sheetHandle}>
@@ -320,39 +335,39 @@ export default function TripMapTab({ tripId, navigation }: TripMapTabProps) {
                 )}
               </View>
             </View>
-
-            {/* Category Filters - Part of draggable area */}
-            <View style={styles.filtersWrapper}>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filtersContainer}
-              >
-                {CATEGORY_FILTERS.map((filter) => (
-                  <TouchableOpacity
-                    key={filter.key}
-                    style={[
-                      styles.filterChip,
-                      selectedCategory === filter.key && styles.filterChipActive,
-                    ]}
-                    onPress={() => {
-                      HapticFeedback.light();
-                      setSelectedCategory(filter.key);
-                    }}
-                  >
-                    <Text style={styles.filterIcon}>{filter.icon}</Text>
-                    <Text style={[
-                      styles.filterLabel,
-                      selectedCategory === filter.key && styles.filterLabelActive,
-                    ]}>
-                      {filter.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
           </Animated.View>
         </PanGestureHandler>
+        
+        {/* Category Filters - OUTSIDE PanGestureHandler for horizontal scroll */}
+        <View style={styles.filtersWrapper}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersContainer}
+          >
+            {CATEGORY_FILTERS.map((filter) => (
+              <TouchableOpacity
+                key={filter.key}
+                style={[
+                  styles.filterChip,
+                  selectedCategory === filter.key && styles.filterChipActive,
+                ]}
+                onPress={() => {
+                  HapticFeedback.light();
+                  setSelectedCategory(filter.key);
+                }}
+              >
+                <Text style={styles.filterIcon}>{filter.icon}</Text>
+                <Text style={[
+                  styles.filterLabel,
+                  selectedCategory === filter.key && styles.filterLabelActive,
+                ]}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* Scrollable Places List - Independent from drag gesture */}
         <ScrollView 
@@ -399,6 +414,28 @@ const styles = StyleSheet.create({
   // Map
   mapContainer: {
     flex: 1,
+  },
+  timelineButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  timelineButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginLeft: 6,
   },
 
   // Bottom Sheet
