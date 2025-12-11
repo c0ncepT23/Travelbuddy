@@ -334,40 +334,53 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
         transition={{ type: 'spring', damping: 15 }}
         style={styles.emptyMascotContainer}
       >
-        {/* AI Sparkles around logo */}
+        {/* AI Sparkles around logo - animated */}
         <MotiView
-          from={{ opacity: 0.3, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'timing', duration: 1500, loop: true }}
-          style={[styles.sparkle, { top: -10, left: -5 }]}
-        >
-          <Ionicons name="sparkles" size={20} color="#5DBAF0" />
-        </MotiView>
-        <MotiView
-          from={{ opacity: 0.5, scale: 1 }}
-          animate={{ opacity: 1, scale: 0.9 }}
-          transition={{ type: 'timing', duration: 1200, loop: true, delay: 300 }}
-          style={[styles.sparkle, { top: 5, right: -10 }]}
-        >
-          <Ionicons name="sparkles" size={16} color="#F5A26B" />
-        </MotiView>
-        <MotiView
-          from={{ opacity: 0.4, scale: 0.9 }}
+          from={{ opacity: 0.4, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1.1 }}
-          transition={{ type: 'timing', duration: 1800, loop: true, delay: 600 }}
-          style={[styles.sparkle, { bottom: 10, left: -15 }]}
+          transition={{ type: 'timing', duration: 1500, loop: true }}
+          style={[styles.sparkle, { top: -5, left: 5 }]}
         >
-          <Ionicons name="sparkles" size={14} color="#A8B4C2" />
+          <Ionicons name="sparkles" size={22} color="#5DBAF0" />
+        </MotiView>
+        <MotiView
+          from={{ opacity: 0.6, scale: 1 }}
+          animate={{ opacity: 1, scale: 0.9 }}
+          transition={{ type: 'timing', duration: 1200, loop: true, delay: 400 }}
+          style={[styles.sparkle, { top: 10, right: -5 }]}
+        >
+          <Ionicons name="sparkles" size={18} color="#F5A26B" />
+        </MotiView>
+        <MotiView
+          from={{ opacity: 0.5, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1.15 }}
+          transition={{ type: 'timing', duration: 1800, loop: true, delay: 800 }}
+          style={[styles.sparkle, { bottom: 5, left: -8 }]}
+        >
+          <Ionicons name="sparkles" size={16} color="#A8B4C2" />
+        </MotiView>
+        <MotiView
+          from={{ opacity: 0.3, scale: 1.1 }}
+          animate={{ opacity: 0.9, scale: 0.85 }}
+          transition={{ type: 'timing', duration: 2000, loop: true, delay: 200 }}
+          style={[styles.sparkle, { bottom: 15, right: 0 }]}
+        >
+          <Ionicons name="sparkles" size={14} color="#E8A07A" />
         </MotiView>
         
-        {/* Yori Logo */}
-        <View style={styles.emptyLogoWrapper}>
-          <YoriLogo size="medium" />
+        {/* Yori Logo Circle */}
+        <View style={styles.yoriLogoCircle}>
+          <LinearGradient
+            colors={['#F8FCFF', '#F0F7FF']}
+            style={styles.yoriLogoGradient}
+          >
+            <YoriLogo size="medium" />
+          </LinearGradient>
         </View>
       </MotiView>
       <Text style={styles.emptyTitle}>Hey there!</Text>
       <Text style={styles.emptySubtitle}>
-        I'm your AI travel assistant. Paste a YouTube guide, ask for recommendations, or let me help plan your trip!
+        I'm Yori, your AI travel assistant. Paste a YouTube guide, ask for recommendations, or let me help plan your trip!
       </Text>
     </View>
   );
@@ -647,36 +660,32 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
+    width: 140,
+    height: 140,
   },
   sparkle: {
     position: 'absolute',
     zIndex: 10,
   },
-  emptyLogoWrapper: {
+  yoriLogoCircle: {
     width: 120,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: '#F8F8F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
     shadowColor: '#5DBAF0',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  emptyMascot: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#EEF2FF',
+  yoriLogoGradient: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptyMascotEmoji: {
-    fontSize: 48,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: 'rgba(93, 186, 240, 0.2)',
   },
   emptyTitle: {
     fontSize: 24,
