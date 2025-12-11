@@ -17,7 +17,11 @@ import { MotiView } from 'moti';
 import * as Clipboard from 'expo-clipboard';
 import { useTripStore } from '../../stores/tripStore';
 import { useLocationStore } from '../../stores/locationStore';
+import { useChatStore } from '../../stores/chatStore';
 import { HapticFeedback } from '../../utils/haptics';
+import MemberAvatarStack from '../../components/MemberAvatarStack';
+import MemberListModal from '../../components/MemberListModal';
+import { TripMember } from '../../types';
 
 // Tab Screens
 import TripChatTab from './tabs/TripChatTab';
@@ -100,12 +104,18 @@ const BottomTabBar = ({
 // Header Component
 const TripHeader = ({ 
   trip, 
+  members,
+  onlineUserIds,
   onBack,
   onShare,
+  onMembersPress,
 }: { 
   trip: any;
+  members: TripMember[];
+  onlineUserIds: string[];
   onBack: () => void;
   onShare: () => void;
+  onMembersPress: () => void;
 }) => {
   return (
     <View style={styles.header}>
@@ -117,20 +127,37 @@ const TripHeader = ({
         {trip?.name || 'Trip'}
       </Text>
       
-      <TouchableOpacity style={styles.headerShareButton} onPress={onShare}>
-        <Ionicons name="share-outline" size={22} color="#1F2937" />
-      </TouchableOpacity>
+      <View style={styles.headerRight}>
+        {members.length > 0 && (
+          <MemberAvatarStack
+            members={members}
+            onlineUserIds={onlineUserIds}
+            maxDisplay={3}
+            onPress={onMembersPress}
+          />
+        )}
+        <TouchableOpacity style={styles.headerShareButton} onPress={onShare}>
+          <Ionicons name="share-outline" size={22} color="#1F2937" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 export default function TripTabScreen({ route, navigation }: any) {
   const { tripId } = route.params;
-  const { currentTrip, fetchTripDetails, fetchTripMembers } = useTripStore();
+  const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
   const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking } = useLocationStore();
+  const { onlineUsers } = useChatStore();
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabName>('Chat');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  
+  // Get online user IDs
+  const onlineUserIds = onlineUsers
+    .filter(u => u.is_online)
+    .map(u => u.user_id.toString());
 
   useEffect(() => {
     const initTrip = async () => {
@@ -144,7 +171,6 @@ export default function TripTabScreen({ route, navigation }: any) {
         await initializeNotifications();
         
         // Start background location tracking for proximity alerts
-        console.log('[TripTab] Starting background tracking for trip:', tripId);
         await startBackgroundTracking(tripId);
         
         setIsLoading(false);
@@ -214,9 +240,12 @@ export default function TripTabScreen({ route, navigation }: any) {
         {/* Header - Only show for non-profile tabs */}
         {activeTab !== 'Profile' && (
           <TripHeader 
-            trip={currentTrip} 
+            trip={currentTrip}
+            members={currentTripMembers}
+            onlineUserIds={onlineUserIds}
             onBack={handleBack}
             onShare={handleShare}
+            onMembersPress={() => setShowMemberModal(true)}
           />
         )}
         
@@ -231,6 +260,15 @@ export default function TripTabScreen({ route, navigation }: any) {
           onTabPress={handleTabPress} 
         />
       </SafeAreaView>
+      
+      {/* Member List Modal */}
+      <MemberListModal
+        visible={showMemberModal}
+        onClose={() => setShowMemberModal(false)}
+        members={currentTripMembers}
+        onlineUserIds={onlineUserIds}
+        tripName={currentTrip?.name}
+      />
     </View>
   );
 }
@@ -272,6 +310,11 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     textAlign: 'center',
     marginHorizontal: 12,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   headerShareButton: {
     width: 40,
