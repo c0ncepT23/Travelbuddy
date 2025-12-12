@@ -4,6 +4,7 @@ import Tesseract from 'tesseract.js';
 import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
+import { ApifyInstagramService } from './apifyInstagram.service';
 import { YtDlpService } from './ytdlp.service';
 import {
   extractYouTubeVideoId,
@@ -675,7 +676,13 @@ export class ContentProcessorService {
   }
 
   /**
-   * Extract multiple places from Instagram post/reel using Gemini (NEW!)
+   * Extract multiple places from Instagram post/reel using Apify + Gemini 2.5 Video Analysis
+   * 
+   * Pipeline:
+   * 1. Apify scrapes Instagram (handles anti-bot, gets video URL)
+   * 2. For Reels: Download video → Gemini 2.5 multimodal analysis (sees + hears content)
+   * 3. For Posts: Gemini analyzes caption + image
+   * 4. Google Places enriches with ratings, photos, hours
    */
   static async extractMultiplePlacesFromInstagram(
     url: string
@@ -684,24 +691,42 @@ export class ContentProcessorService {
     places: Array<ProcessedContent & { originalContent: any }>;
   }> {
     try {
-      logger.info('Processing Instagram post...');
+      logger.info('🎬 [Instagram] Processing with Apify + Gemini 2.5 pipeline...');
 
-      // Fetch Instagram data
+      // Check if Apify is configured
+      if (ApifyInstagramService.isConfigured()) {
+        logger.info('✅ [Instagram] Apify configured - using enhanced pipeline');
+        
+        const result = await ApifyInstagramService.extractPlacesFromInstagram(url);
+        
+        logger.info(`🎉 [Instagram] Extracted ${result.places.length} places via Apify pipeline`);
+        
+        return {
+          summary: result.summary,
+          places: result.places.map(place => ({
+            ...place,
+            source_title: result.source_title,
+          })),
+        };
+      }
+
+      // Fallback to basic scraping if Apify not configured
+      logger.warn('⚠️ [Instagram] Apify not configured, using basic fallback...');
+      
+      // Fetch Instagram data using basic method
       const instaData = await this.fetchInstagramPost(url);
 
       logger.info(`Instagram Caption Length: ${instaData.caption.length}`);
-      logger.info(`Instagram Caption Content: "${instaData.caption}"`);
 
       // Use Gemini to analyze caption and extract places
       const analysis = await GeminiService.analyzeInstagramPost(
         instaData.caption,
-        instaData.images[0] // Pass image URL if available (future enhancement: process image)
+        instaData.images[0]
       );
 
       logger.info(`Found ${analysis.places.length} places in Instagram post`);
 
       if (analysis.places.length === 0) {
-        // No places found, save as single item with summary
         const processed = await TravelAgent.processContent(
           `${analysis.summary} (Source: Instagram)`,
           ItemSourceType.INSTAGRAM
@@ -718,7 +743,7 @@ export class ContentProcessorService {
         };
       }
 
-      // Process each place found by Gemini
+      // Process and enrich places
       const processedPlaces = analysis.places.map((place) => ({
         name: place.name,
         category: place.category,

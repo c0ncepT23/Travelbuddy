@@ -46,6 +46,11 @@ export const config = {
     apiKey: process.env.GEMINI_API_KEY || '',
   },
 
+  // Apify (Instagram scraping)
+  apify: {
+    token: process.env.APIFY_TOKEN || '',
+  },
+
   // Google OAuth
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
