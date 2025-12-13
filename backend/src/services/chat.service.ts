@@ -61,14 +61,32 @@ export class ChatService {
           // Extract and process URL
           const urls = MessageIntentService.extractUrls(content);
           if (urls.length > 0) {
-            logger.info(`✅ Processing URL: ${urls[0]}`);
-            this.processUrlMessage(userId, tripGroupId, urls[0]);
+            const url = urls[0];
+            logger.info(`✅ Processing URL: ${url}`);
             
+            // Detect source type for better UI
+            const sourceType = ContentProcessorService.detectContentType(url);
+            const sourceLabel = sourceType === 'youtube' ? '🎬 YouTube video' :
+                               sourceType === 'instagram' ? '📷 Instagram post' :
+                               sourceType === 'reddit' ? '💬 Reddit post' : '🔗 Link';
+            
+            // Send processing message with metadata for UI
             const processingMessage = await this.sendAgentMessage(
               tripGroupId,
-              `Processing ${senderName}'s link... 🔄`,
-              MessageType.SYSTEM
+              `Analyzing ${sourceLabel}...`,
+              MessageType.SYSTEM,
+              {
+                type: 'processing',
+                source_url: url,
+                source_type: sourceType,
+                status: 'processing',
+                started_at: new Date().toISOString(),
+              }
             );
+            
+            // Start async processing
+            this.processUrlMessage(userId, tripGroupId, url, processingMessage.id);
+            
             return { userMessage, agentResponse: processingMessage };
           }
           break;
@@ -131,7 +149,8 @@ export class ChatService {
   private static async processUrlMessage(
     userId: string,
     tripGroupId: string,
-    url: string
+    url: string,
+    _processingMessageId?: string
   ): Promise<void> {
     try {
       logger.info(`🔍 Processing URL: ${url}`);
@@ -192,8 +211,26 @@ export class ChatService {
           return;
         }
 
+        // Check if any places were found
+        if (uniquePlaces.length === 0) {
+          await this.sendAgentMessage(
+            tripGroupId,
+            `🎬 I watched the video but couldn't identify specific places to add.\n\n📝 **Summary:** ${analysis.summary}\n\n💡 *Tip: If you know places from the video, just tell me like "Add Senso-ji Temple in Tokyo"*`,
+            MessageType.TEXT,
+            {
+              type: 'extraction_result',
+              status: 'empty',
+              source_url: url,
+              source_type: 'youtube',
+              summary: analysis.summary,
+              reason: 'no_places_found',
+            }
+          );
+          return;
+        }
+
         // Regular places video - NEW: Send pending_import message
-        const videoTitle = analysis.places[0]?.source_title || 'YouTube Video';
+        const videoTitle = uniquePlaces[0]?.source_title || 'YouTube Video';
         
         await this.sendAgentMessage(
           tripGroupId,
@@ -219,10 +256,19 @@ export class ChatService {
         const analysis = await ContentProcessorService.extractMultiplePlacesFromReddit(url);
         
         if (analysis.places.length === 0) {
-          // No places found
+          // No places found - send helpful message with metadata
           await this.sendAgentMessage(
             tripGroupId,
-            `💬 I read the discussion but couldn't find specific places to add. Saved it as a reference! 📝`
+            `💬 I read through the discussion but couldn't find specific place names to add.\n\n📝 **Summary:** ${analysis.summary}\n\n💡 *Tip: If you know specific places mentioned, you can tell me directly like "Add Ichiran Ramen in Tokyo"*`,
+            MessageType.TEXT,
+            {
+              type: 'extraction_result',
+              status: 'empty',
+              source_url: url,
+              source_type: 'reddit',
+              summary: analysis.summary,
+              reason: 'no_places_found',
+            }
           );
           return;
         }
@@ -254,10 +300,19 @@ export class ChatService {
         const analysis = await ContentProcessorService.extractMultiplePlacesFromInstagram(url);
         
         if (analysis.places.length === 0) {
-          // No places found
+          // No places found - send helpful message with metadata
           await this.sendAgentMessage(
             tripGroupId,
-            `📷 I checked out the post but couldn't find specific places to add. Saved it as a reference! 📝`
+            `📷 I watched the reel but couldn't identify specific place names.\n\n📝 **What I saw:** ${analysis.summary}\n\n💡 *Tip: If you know the place name, just tell me like "Add Cafe Lalo in NYC" and I'll find it!*`,
+            MessageType.TEXT,
+            {
+              type: 'extraction_result',
+              status: 'empty',
+              source_url: url,
+              source_type: 'instagram',
+              summary: analysis.summary,
+              reason: 'no_places_found',
+            }
           );
           return;
         }
@@ -346,9 +401,40 @@ export class ChatService {
     } catch (error: any) {
       logger.error('❌ URL processing error:', error);
       logger.error('Error details:', { message: error.message, stack: error.stack });
+      
+      // Determine error type for better messaging
+      const isNetworkError = error.message?.includes('fetch') || error.message?.includes('network');
+      const isPrivateContent = error.message?.includes('private') || error.message?.includes('unavailable');
+      const isRateLimited = error.message?.includes('rate') || error.message?.includes('limit');
+      
+      let errorMessage = '';
+      let errorReason = 'unknown';
+      
+      if (isPrivateContent) {
+        errorMessage = `🔒 This content seems to be private or unavailable.\n\n💡 *Try sharing a public link, or tell me the place name directly!*`;
+        errorReason = 'private_content';
+      } else if (isRateLimited) {
+        errorMessage = `⏳ I'm processing too many links right now. Please try again in a minute!\n\n💡 *In the meantime, you can tell me about places directly.*`;
+        errorReason = 'rate_limited';
+      } else if (isNetworkError) {
+        errorMessage = `📡 Had trouble reaching that link. Could be a temporary issue.\n\n💡 *Try again, or share the place name directly like "Add Shake Shack in NYC"*`;
+        errorReason = 'network_error';
+      } else {
+        errorMessage = `🤔 I couldn't extract places from that link.\n\n💡 *No worries! Just tell me the place name like "Add Blue Bottle Coffee in Tokyo" and I'll find it for you!*`;
+        errorReason = 'extraction_failed';
+      }
+      
       await this.sendAgentMessage(
         tripGroupId,
-        `Hmm, I had trouble processing that link. Could you share more details about it? 🤔`
+        errorMessage,
+        MessageType.TEXT,
+        {
+          type: 'extraction_result',
+          status: 'error',
+          source_url: url,
+          reason: errorReason,
+          error_message: error.message,
+        }
       );
     }
   }

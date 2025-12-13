@@ -206,12 +206,82 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
     setRefreshing(false);
   };
 
+  // Render processing card for link extraction
+  const renderProcessingCard = (item: any) => {
+    const metadata = item.metadata;
+    const status = metadata?.status || 'processing';
+    const sourceType = metadata?.source_type || 'link';
+    
+    const sourceIcon = sourceType === 'youtube' ? 'logo-youtube' :
+                       sourceType === 'instagram' ? 'logo-instagram' :
+                       sourceType === 'reddit' ? 'logo-reddit' : 'link';
+    const sourceColor = sourceType === 'youtube' ? '#FF0000' :
+                        sourceType === 'instagram' ? '#E4405F' :
+                        sourceType === 'reddit' ? '#FF4500' : '#3B82F6';
+
+    return (
+      <MotiView
+        from={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        style={styles.processingCard}
+      >
+        <View style={styles.processingHeader}>
+          <View style={[styles.processingIconBg, { backgroundColor: `${sourceColor}15` }]}>
+            <Ionicons name={sourceIcon as any} size={20} color={sourceColor} />
+          </View>
+          <View style={styles.processingHeaderText}>
+            {status === 'processing' ? (
+              <>
+                <Text style={styles.processingTitle}>Analyzing content...</Text>
+                <Text style={styles.processingSubtitle}>Extracting places with AI</Text>
+              </>
+            ) : status === 'empty' ? (
+              <>
+                <Text style={styles.processingTitle}>No places found</Text>
+                <Text style={styles.processingSubtitle}>Try adding manually</Text>
+              </>
+            ) : status === 'error' ? (
+              <>
+                <Text style={[styles.processingTitle, { color: '#EF4444' }]}>Couldn't process</Text>
+                <Text style={styles.processingSubtitle}>See message for details</Text>
+              </>
+            ) : null}
+          </View>
+          {status === 'processing' && (
+            <ActivityIndicator size="small" color={sourceColor} />
+          )}
+          {status === 'empty' && (
+            <Ionicons name="alert-circle" size={24} color="#F59E0B" />
+          )}
+          {status === 'error' && (
+            <Ionicons name="close-circle" size={24} color="#EF4444" />
+          )}
+        </View>
+        
+        {status === 'processing' && (
+          <View style={styles.processingSteps}>
+            <MotiView
+              from={{ width: '0%' }}
+              animate={{ width: '100%' }}
+              transition={{ type: 'timing', duration: 15000 }}
+              style={styles.processingProgress}
+            />
+          </View>
+        )}
+      </MotiView>
+    );
+  };
+
   // Render message bubble
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     const isOwnMessage = item.sender_id === user?.id;
     const isAI = item.sender_type === 'agent';
     const showDate = index === messages.length - 1 || 
       formatMessageDate(messages[index + 1]?.created_at) !== formatMessageDate(item.created_at);
+    
+    // Check if this is a processing/extraction message
+    const isProcessingMessage = item.metadata?.type === 'processing';
+    const isExtractionResult = item.metadata?.type === 'extraction_result';
 
     return (
       <View>
@@ -221,57 +291,66 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
           </View>
         )}
         
-        <MotiView
-          from={{ opacity: 0, translateY: 10 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 200 }}
-          style={[
-            styles.messageContainer,
-            isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
-          ]}
-        >
-          {/* Avatar for AI/Others */}
-          {!isOwnMessage && (
-            <View style={[
-              styles.avatar,
-              isAI && styles.aiAvatar,
-            ]}>
-              {isAI ? (
-                <View style={styles.aiAvatarContent}>
-                  <Ionicons name="sparkles" size={10} color="#5DBAF0" style={styles.aiAvatarSparkle} />
-                  <Text style={styles.aiAvatarText}>Y</Text>
-                </View>
-              ) : (
-                <Text style={styles.avatarText}>
-                  {getInitials(item.sender_name || 'U')}
-                </Text>
-              )}
-            </View>
-          )}
-
-          {/* Message Bubble */}
-          <View style={[
-            styles.messageBubble,
-            isOwnMessage && styles.ownMessageBubble,
-            isAI && styles.aiMessageBubble,
-          ]}>
-            {!isOwnMessage && !isAI && (
-              <Text style={styles.senderName}>{item.sender_name}</Text>
+        {/* Show processing card for processing messages */}
+        {isProcessingMessage && renderProcessingCard(item)}
+        
+        {/* Show extraction result card for empty/error states */}
+        {isExtractionResult && item.metadata?.status !== 'success' && renderProcessingCard(item)}
+        
+        {/* Regular message bubble (skip for processing-only messages) */}
+        {!isProcessingMessage && (
+          <MotiView
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 200 }}
+            style={[
+              styles.messageContainer,
+              isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
+            ]}
+          >
+            {/* Avatar for AI/Others */}
+            {!isOwnMessage && (
+              <View style={[
+                styles.avatar,
+                isAI && styles.aiAvatar,
+              ]}>
+                {isAI ? (
+                  <View style={styles.aiAvatarContent}>
+                    <Ionicons name="sparkles" size={10} color="#5DBAF0" style={styles.aiAvatarSparkle} />
+                    <Text style={styles.aiAvatarText}>Y</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {getInitials(item.sender_name || 'U')}
+                  </Text>
+                )}
+              </View>
             )}
-            <Text style={[
-              styles.messageText,
-              isOwnMessage && styles.ownMessageText,
+
+            {/* Message Bubble */}
+            <View style={[
+              styles.messageBubble,
+              isOwnMessage && styles.ownMessageBubble,
+              isAI && styles.aiMessageBubble,
             ]}>
-              {item.content}
-            </Text>
-            <Text style={[
-              styles.messageTime,
-              isOwnMessage && styles.ownMessageTime,
-            ]}>
-              {formatMessageTime(item.created_at)}
-            </Text>
-          </View>
-        </MotiView>
+              {!isOwnMessage && !isAI && (
+                <Text style={styles.senderName}>{item.sender_name}</Text>
+              )}
+              <Text style={[
+                styles.messageText,
+                isOwnMessage && styles.ownMessageText,
+              ]}>
+                {item.content}
+              </Text>
+              <Text style={[
+                styles.messageTime,
+                isOwnMessage && styles.ownMessageTime,
+              ]}>
+                {formatMessageTime(item.created_at)}
+              </Text>
+            </View>
+          </MotiView>
+        )}
       </View>
     );
   };
@@ -718,30 +797,60 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
   },
 
-  // Processing Card
+  // Processing Card - Enhanced
   processingCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginVertical: 8,
+    marginHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   processingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 12,
+  },
+  processingIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingHeaderText: {
+    flex: 1,
   },
   processingTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1F2937',
   },
+  processingSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  processingSteps: {
+    marginTop: 16,
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  processingProgress: {
+    height: '100%',
+    backgroundColor: '#3B82F6',
+    borderRadius: 2,
+  },
   processingPlaces: {
+    marginTop: 12,
     marginBottom: 12,
   },
   processingPlaceItem: {
