@@ -144,16 +144,35 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const confettiRef = useRef<any>(null);
+  const confettiTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Trigger confetti celebration
   const celebrateSuccess = (placesCount: number) => {
     if (placesCount > 0) {
+      // Clear any existing timeout to prevent memory leaks
+      if (confettiTimeoutRef.current) {
+        clearTimeout(confettiTimeoutRef.current);
+      }
+      
       HapticFeedback.success();
       setShowConfetti(true);
+      
       // Auto-hide after animation
-      setTimeout(() => setShowConfetti(false), 3000);
+      confettiTimeoutRef.current = setTimeout(() => {
+        setShowConfetti(false);
+        confettiTimeoutRef.current = null;
+      }, 3000);
     }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (confettiTimeoutRef.current) {
+        clearTimeout(confettiTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Initialize chat
   useEffect(() => {
