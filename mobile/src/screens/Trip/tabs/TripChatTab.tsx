@@ -17,6 +17,7 @@ import { MotiView } from 'moti';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import ConfettiCannon from 'react-native-confetti-cannon';
 import { useChatStore } from '../../../stores/chatStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useTripStore } from '../../../stores/tripStore';
@@ -138,9 +139,21 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
   const [inputText, setInputText] = useState('');
   const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const confettiRef = useRef<any>(null);
+
+  // Trigger confetti celebration
+  const celebrateSuccess = (placesCount: number) => {
+    if (placesCount > 0) {
+      HapticFeedback.success();
+      setShowConfetti(true);
+      // Auto-hide after animation
+      setTimeout(() => setShowConfetti(false), 3000);
+    }
+  };
 
   // Initialize chat
   useEffect(() => {
@@ -156,6 +169,26 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
       leaveTripChat(tripId);
     };
   }, [tripId]);
+
+  // Watch for successful place extraction and celebrate!
+  const lastMessageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (messages.length > 0) {
+      const latestMessage = messages[0]; // Most recent message
+      
+      // Only trigger for new messages we haven't seen
+      if (latestMessage.id !== lastMessageIdRef.current) {
+        lastMessageIdRef.current = latestMessage.id;
+        
+        // Check if it's a successful extraction with places
+        const places = latestMessage.metadata?.places;
+        if (latestMessage.metadata?.type === 'pending_import' && 
+            Array.isArray(places) && places.length > 0) {
+          celebrateSuccess(places.length);
+        }
+      }
+    }
+  }, [messages]);
 
   // Handle input change with typing indicator
   const handleInputChange = (text: string) => {
@@ -534,7 +567,23 @@ export default function TripChatTab({ tripId, navigation }: TripChatTabProps) {
           onImportComplete={(count) => {
             console.log(`[ChatTab] Imported ${count} places`);
             setImportModalData(null);
+            // Celebrate after successful import!
+            celebrateSuccess(count);
           }}
+        />
+      )}
+
+      {/* Confetti Celebration! 🎉 */}
+      {showConfetti && (
+        <ConfettiCannon
+          ref={confettiRef}
+          count={100}
+          origin={{ x: SCREEN_WIDTH / 2, y: -10 }}
+          autoStart={true}
+          fadeOut={true}
+          fallSpeed={2500}
+          explosionSpeed={350}
+          colors={['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899']}
         />
       )}
     </KeyboardAvoidingView>
