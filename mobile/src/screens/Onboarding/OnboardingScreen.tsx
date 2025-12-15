@@ -10,6 +10,7 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -26,25 +27,21 @@ const SLIDES: OnboardingSlide[] = [
     id: '1',
     image: require('../../../assets/splash-1.png'),
     title: 'Just paste a link.\nWe extract the places',
-    subtitle: 'YouTube, Instagram, Reddit\n→ Map pins in seconds',
   },
   {
     id: '2',
     image: require('../../../assets/splash-2.png'),
     title: 'Discover places\nnearby',
-    subtitle: 'Get notified when you\'re\nclose to a saved spot',
   },
   {
     id: '3',
     image: require('../../../assets/splash-3.png'),
     title: 'Plan together\nwith friends',
-    subtitle: 'Share your trip and\nexplore as a group',
   },
   {
     id: '4',
     image: require('../../../assets/splash-4.png'),
     title: 'Ready for your\nnext adventure?',
-    subtitle: 'Let\'s make it unforgettable',
   },
 ];
 
@@ -86,20 +83,32 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
   const renderSlide = ({ item }: { item: OnboardingSlide }) => (
     <View style={styles.slide}>
-      {/* Title at top */}
-      <View style={styles.titleContainer}>
-        <Text style={styles.title}>{item.title}</Text>
-        {item.subtitle && (
-          <Text style={styles.subtitle}>{item.subtitle}</Text>
-        )}
-      </View>
+      {/* AI Magic Stars */}
+      <Text style={[styles.star, styles.star1]}>✦</Text>
+      <Text style={[styles.star, styles.star2]}>✦</Text>
+      <Text style={[styles.star, styles.star3]}>✦</Text>
       
-      {/* Image - below title, no overlap */}
-      <Image
-        source={item.image}
-        style={styles.splashImage}
-        resizeMode="contain"
-      />
+      {/* Top section with gradient and text */}
+      <LinearGradient
+        colors={['#56A0D8', '#56A0D8', 'transparent']}
+        style={styles.topGradient}
+      >
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>{item.title}</Text>
+          {item.subtitle && (
+            <Text style={styles.subtitle}>{item.subtitle}</Text>
+          )}
+        </View>
+      </LinearGradient>
+      
+      {/* Image in the middle-bottom area */}
+      <View style={styles.imageContainer}>
+        <Image
+          source={item.image}
+          style={styles.splashImage}
+          resizeMode="contain"
+        />
+      </View>
     </View>
   );
 
@@ -145,7 +154,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EDF5FF',
+    backgroundColor: '#56A0D8',
   },
   skipBtn: {
     position: 'absolute',
@@ -155,36 +164,51 @@ const styles = StyleSheet.create({
   },
   skipText: {
     fontSize: 16,
-    color: '#64748B',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   slide: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
+    backgroundColor: '#56A0D8',
+  },
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     paddingTop: Platform.OS === 'ios' ? 100 : 80,
+    paddingBottom: 30,
+    zIndex: 10,
   },
   titleContainer: {
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     alignItems: 'center',
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: 42,
+    lineHeight: 36,
   },
   subtitle: {
-    fontSize: 18,
-    color: '#64748B',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
-    marginTop: 16,
-    lineHeight: 26,
+    marginTop: 10,
+    lineHeight: 22,
+  },
+  imageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 150 : 130,
+    paddingBottom: 160,
   },
   splashImage: {
-    width: SCREEN_WIDTH,
+    width: SCREEN_WIDTH * 0.95,
     height: SCREEN_HEIGHT * 0.55,
-    alignSelf: 'center',
   },
   bottom: {
     position: 'absolute',
@@ -202,26 +226,46 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(148, 163, 184, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
   },
   dotActive: {
     width: 32,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
   },
   nextBtn: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     elevation: 4,
   },
   nextText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#3B82F6',
+  },
+  star: {
+    position: 'absolute',
+    color: 'rgba(255, 255, 255, 0.7)',
+    zIndex: 5,
+  },
+  star1: {
+    top: '15%',
+    left: '8%',
+    fontSize: 20,
+  },
+  star2: {
+    top: '35%',
+    right: '10%',
+    fontSize: 16,
+  },
+  star3: {
+    bottom: '25%',
+    left: '12%',
+    fontSize: 14,
   },
 });
