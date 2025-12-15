@@ -25,18 +25,26 @@ const SLIDES: OnboardingSlide[] = [
   {
     id: '1',
     image: require('../../../assets/splash-1.png'),
-    title: 'Turn travel dreams\ninto itineraries',
-    subtitle: 'Your AI companion for\nseamless planning',
+    title: 'Just paste a link.\nWe extract the places',
+    subtitle: 'YouTube, Instagram, Reddit\n→ Map pins in seconds',
   },
   {
     id: '2',
     image: require('../../../assets/splash-2.png'),
-    title: 'Just paste the link.\nWe\'ll find the places',
+    title: 'Discover places\nnearby',
+    subtitle: 'Get notified when you\'re\nclose to a saved spot',
   },
   {
     id: '3',
     image: require('../../../assets/splash-3.png'),
-    title: 'Your perfect trip,\nplanned in seconds',
+    title: 'Plan together\nwith friends',
+    subtitle: 'Share your trip and\nexplore as a group',
+  },
+  {
+    id: '4',
+    image: require('../../../assets/splash-4.png'),
+    title: 'Ready for your\nnext adventure?',
+    subtitle: 'Let\'s make it unforgettable',
   },
 ];
 
