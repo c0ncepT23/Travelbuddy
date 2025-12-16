@@ -30,6 +30,7 @@
     "expo-notifications": "~0.28.19",
     "expo-status-bar": "~1.12.1",
     "expo-task-manager": "~11.8.2",
+    "expo-updates": "~0.25.28",
     "moti": "^0.30.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
