@@ -9,10 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../stores/authStore';
 import { API_BASE_URL } from '../../config/api';
 import YoriLogo from '../../components/YoriLogo';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 function LoginScreenContent({ navigation }: any) {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -22,17 +26,19 @@ function LoginScreenContent({ navigation }: any) {
   const { login, isLoading } = useAuthStore();
 
   const handleSendOTP = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      Alert.alert('Invalid Phone', 'Please enter a valid phone number (min 10 digits)');
+    if (!phoneNumber || phoneNumber.length !== 10) {
+      Alert.alert('Invalid Phone', 'Please enter a valid 10-digit phone number');
       return;
     }
+
+    const fullPhoneNumber = `+91${phoneNumber}`;
 
     try {
       setIsLoadingOTP(true);
       const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber }),
+        body: JSON.stringify({ phoneNumber: fullPhoneNumber }),
       });
 
       const data = await response.json();
@@ -56,8 +62,10 @@ function LoginScreenContent({ navigation }: any) {
       return;
     }
 
+    const fullPhoneNumber = `+91${phoneNumber}`;
+
     try {
-      await login({ phoneNumber, otpCode });
+      await login({ phoneNumber: fullPhoneNumber, otpCode });
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
     }
@@ -68,16 +76,38 @@ function LoginScreenContent({ navigation }: any) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {/* Background Gradient */}
+      <LinearGradient
+        colors={['#FDF4FF', '#FAF5FF', '#FFFFFF']}
+        style={styles.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
+      {/* Decorative Stars */}
+      <Text style={[styles.star, styles.star1]}>✦</Text>
+      <Text style={[styles.star, styles.star2]}>✦</Text>
+      <Text style={[styles.star, styles.star3]}>✦</Text>
+
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
           {/* Hero Section */}
           <View style={styles.heroSection}>
-            <YoriLogo size="large" />
-            <Text style={styles.title}>Welcome back!</Text>
-            <Text style={styles.subtitle}>Your travel companion awaits</Text>
+            <View style={styles.logoContainer}>
+              <YoriLogo size="large" />
+            </View>
+            <Text style={styles.title}>
+              {step === 'phone' ? 'Welcome back!' : 'Enter the code'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {step === 'phone' 
+                ? 'Your travel companion awaits ✨' 
+                : `We sent it to +91 ${phoneNumber}`}
+            </Text>
           </View>
 
           {/* Form Section */}
@@ -86,54 +116,76 @@ function LoginScreenContent({ navigation }: any) {
               <>
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Phone Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="+1 234 567 8900"
-                    placeholderTextColor="#9CA3AF"
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    keyboardType="phone-pad"
-                    editable={!isLoadingOTP}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Text style={styles.countryCode}>+91</Text>
+                    <View style={styles.inputDivider} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="10 digit number"
+                      placeholderTextColor="#9CA3AF"
+                      value={phoneNumber}
+                      onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, '').slice(0, 10))}
+                      keyboardType="number-pad"
+                      maxLength={10}
+                      editable={!isLoadingOTP}
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.loginButton, isLoadingOTP && styles.buttonDisabled]}
+                  style={[styles.primaryButton, isLoadingOTP && styles.buttonDisabled]}
                   onPress={handleSendOTP}
                   disabled={isLoadingOTP}
-                  activeOpacity={0.9}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.loginButtonText}>
-                    {isLoadingOTP ? 'Sending OTP...' : 'Send OTP'}
-                  </Text>
+                  <LinearGradient
+                    colors={['#8B5CF6', '#7C3AED']}
+                    style={styles.buttonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {isLoadingOTP ? 'Sending...' : 'Send OTP →'}
+                    </Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Enter OTP Code</Text>
-                  <Text style={styles.otpHint}>We sent a 4-digit code to {phoneNumber}</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="0000"
-                    placeholderTextColor="#9CA3AF"
-                    value={otpCode}
-                    onChangeText={setOtpCode}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    editable={!isLoading}
-                  />
+                  <View style={styles.inputWrapper}>
+                    <Text style={styles.inputIcon}>🔐</Text>
+                    <TextInput
+                      style={[styles.input, styles.otpInput]}
+                      placeholder="• • • •"
+                      placeholderTextColor="#9CA3AF"
+                      value={otpCode}
+                      onChangeText={setOtpCode}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      editable={!isLoading}
+                      autoFocus
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.loginButton, isLoading && styles.buttonDisabled]}
+                  style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
                   onPress={handleLogin}
                   disabled={isLoading}
-                  activeOpacity={0.9}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.loginButtonText}>
-                    {isLoading ? 'Logging in...' : "Let's Go! 🚀"}
-                  </Text>
+                  <LinearGradient
+                    colors={['#8B5CF6', '#7C3AED']}
+                    style={styles.buttonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {isLoading ? 'Logging in...' : "Let's Go! 🚀"}
+                    </Text>
+                  </LinearGradient>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -154,7 +206,7 @@ function LoginScreenContent({ navigation }: any) {
               style={styles.signupButton}
               onPress={() => navigation.navigate('Register')}
               disabled={isLoading}
-              activeOpacity={0.9}
+              activeOpacity={0.8}
             >
               <Text style={styles.signupButtonText}>Create Account</Text>
             </TouchableOpacity>
@@ -187,12 +239,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  gradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  star: {
+    position: 'absolute',
+    color: '#8B5CF6',
+    opacity: 0.15,
+    zIndex: 1,
+  },
+  star1: {
+    top: '12%',
+    left: '10%',
+    fontSize: 24,
+  },
+  star2: {
+    top: '28%',
+    right: '12%',
+    fontSize: 18,
+  },
+  star3: {
+    bottom: '35%',
+    left: '15%',
+    fontSize: 20,
+  },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
   },
   content: {
-    padding: 24,
+    padding: 28,
   },
   
   // Hero Section
@@ -200,12 +280,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  logoContainer: {
+    marginBottom: 16,
+  },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
     color: '#1F2937',
     textAlign: 'center',
-    marginTop: 20,
     marginBottom: 8,
   },
   subtitle: {
@@ -227,41 +309,70 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
+    marginLeft: 4,
   },
-  otpHint: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#6B7280',
-    marginBottom: 12,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 16,
+  },
+  inputIcon: {
+    fontSize: 18,
+    marginRight: 12,
+  },
+  countryCode: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    paddingRight: 12,
+  },
+  inputDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E5E7EB',
+    marginRight: 12,
   },
   input: {
+    flex: 1,
     height: 56,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 14,
-    paddingHorizontal: 16,
     fontSize: 16,
     fontWeight: '500',
     color: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  },
+  otpInput: {
+    letterSpacing: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 
-  // Login Button
-  loginButton: {
+  // Primary Button
+  primaryButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 8,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonGradient: {
     height: 56,
-    backgroundColor: '#1F2937',
-    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
   },
-  loginButtonText: {
+  primaryButtonText: {
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
 
   // Sign Up Section
@@ -275,18 +386,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#6B7280',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   signupButton: {
     paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingHorizontal: 36,
     backgroundColor: '#F3F4F6',
     borderRadius: 14,
   },
   signupButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#374151',
   },
 
   // Back Button

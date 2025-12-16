@@ -31,12 +31,12 @@ const SLIDES: OnboardingSlide[] = [
   {
     id: '2',
     image: require('../../../assets/splash-2.png'),
-    title: 'Discover places\nnearby',
+    title: 'Your wishlist finds you.\nNot the other way around',
   },
   {
     id: '3',
     image: require('../../../assets/splash-3.png'),
-    title: 'Plan together\nwith friends',
+    title: 'Invite friends.\nPlan the trip together',
   },
   {
     id: '4',
@@ -250,22 +250,22 @@ const styles = StyleSheet.create({
   },
   star: {
     position: 'absolute',
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.6)',
     zIndex: 5,
   },
   star1: {
-    top: '15%',
-    left: '8%',
-    fontSize: 20,
+    top: '42%',
+    left: '5%',
+    fontSize: 18,
   },
   star2: {
-    top: '35%',
-    right: '10%',
-    fontSize: 16,
+    top: '32%',
+    right: '6%',
+    fontSize: 14,
   },
   star3: {
-    bottom: '25%',
-    left: '12%',
-    fontSize: 14,
+    bottom: '22%',
+    right: '8%',
+    fontSize: 16,
   },
 });
