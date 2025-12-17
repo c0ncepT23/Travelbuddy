@@ -9,6 +9,12 @@ export default {
     orientation: "portrait",
     userInterfaceStyle: "light",
     assetBundlePatterns: ["**/*"],
+    updates: {
+      url: "https://u.expo.dev/03f5aa21-93d3-46d6-b572-f41aa2eee57a"
+    },
+    runtimeVersion: {
+      policy: "appVersion"
+    },
     splash: {
       resizeMode: "contain",
       backgroundColor: "#0000FF"
