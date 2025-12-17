@@ -34,6 +34,8 @@ interface ApifyInstagramResult {
 interface InstagramExtractionResult {
   summary: string;
   source_title: string;
+  destination?: string;
+  destination_country?: string;
   places: Array<ProcessedContent & { 
     originalContent: any;
     google_place_id?: string;
@@ -410,6 +412,8 @@ If no places are identifiable, return an empty places array.`;
         return {
           summary: fallbackResult.summary,
           source_title: 'Instagram Discovery',
+          destination: fallbackResult.destination,
+          destination_country: fallbackResult.destination_country,
           places: fallbackResult.places.map(place => ({
             ...place,
             location_name: place.location,
@@ -420,6 +424,8 @@ If no places are identifiable, return an empty places array.`;
 
       let analysisResult: {
         summary: string;
+        destination?: string;
+        destination_country?: string;
         places: Array<{
           name: string;
           category: ItemCategory;
@@ -509,6 +515,8 @@ If no places are identifiable, return an empty places array.`;
       return {
         summary: analysisResult.summary,
         source_title,
+        destination: analysisResult.destination,
+        destination_country: analysisResult.destination_country,
         places: enrichedPlaces,
       };
     } finally {

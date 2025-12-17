@@ -928,4 +928,3 @@ export class SavedItemModel {
     }));
   }
 }
-
