@@ -880,13 +880,27 @@ export class ContentProcessorService {
               let finalCuisineType = place.cuisine_type;
               let finalPlaceType = place.place_type;
               
-              if (enriched.google_cuisine_type && !place.cuisine_type) {
-                finalCuisineType = enriched.google_cuisine_type;
-                logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+              // Full validation logic matching YouTube enrichment
+              if (enriched.google_cuisine_type) {
+                if (!place.cuisine_type) {
+                  finalCuisineType = enriched.google_cuisine_type;
+                  logger.info(`🔍 [VALIDATE-INSTA] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+                } else if (place.cuisine_type !== enriched.google_cuisine_type) {
+                  logger.info(`🔍 [VALIDATE-INSTA] AI said "${place.cuisine_type}", Google says "${enriched.google_cuisine_type}" for "${place.name}" - keeping AI's choice`);
+                } else {
+                  logger.info(`✅ [VALIDATE-INSTA] Google confirms cuisine_type: "${place.cuisine_type}" for "${place.name}"`);
+                }
               }
-              if (enriched.google_place_type && !place.place_type) {
-                finalPlaceType = enriched.google_place_type;
-                logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
+              
+              if (enriched.google_place_type) {
+                if (!place.place_type) {
+                  finalPlaceType = enriched.google_place_type;
+                  logger.info(`🔍 [VALIDATE-INSTA] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
+                } else if (place.place_type !== enriched.google_place_type) {
+                  logger.info(`🔍 [VALIDATE-INSTA] AI said "${place.place_type}", Google says "${enriched.google_place_type}" for "${place.name}" - keeping AI's choice`);
+                } else {
+                  logger.info(`✅ [VALIDATE-INSTA] Google confirms place_type: "${place.place_type}" for "${place.name}"`);
+                }
               }
               
               logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}`);
