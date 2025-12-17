@@ -130,6 +130,25 @@ export interface SavedItem {
   // Day planner fields
   planned_day?: number | null;  // Day number (1 = Day 1, null = Unassigned)
   day_order?: number;           // Order within the day
+  // Sub-categorization fields (for smart clustering)
+  tags?: string[];              // ["michelin", "hidden gem", "local favorite"]
+  cuisine_type?: string;        // For food: "ramen", "wagyu", "cheesecake"
+  place_type?: string;          // For places: "temple", "shrine", "market"
+  destination?: string;         // Auto-detected destination: "Tokyo", "Japan"
+  destination_id?: string;      // Link to destinations table
+}
+
+// Destination for auto-grouping (replaces mandatory trip creation)
+export interface Destination {
+  id: string;
+  user_id: string;
+  name: string;                 // "Japan", "Tokyo", "Paris"
+  country?: string;
+  country_code?: string;
+  cover_image_url?: string;
+  total_places: number;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface ItemVisit {
@@ -164,6 +183,12 @@ export interface ProcessedContent {
   area_name?: string;
   photos_json?: any[];
   opening_hours_json?: any;
+  // Sub-categorization fields
+  cuisine_type?: string;        // For food: "ramen", "wagyu", "cheesecake"
+  place_type?: string;          // For places: "temple", "shrine", "market"
+  tags?: string[];              // ["michelin", "hidden gem", "local favorite"]
+  destination?: string;         // Auto-detected: "Tokyo", "Japan"
+  destination_country?: string; // Country name: "Japan"
 }
 
 export interface YouTubeVideoData {

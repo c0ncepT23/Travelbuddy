@@ -494,5 +494,75 @@ export class SavedItemController {
       });
     }
   }
+
+  /**
+   * Get smart sub-clusters for browsing
+   * Returns cuisine_types (ramen, wagyu, cheesecake), place_types (temple, shrine), etc.
+   * This enables users to browse by "what" they want (e.g., "I want ramen") instead of just categories
+   */
+  static async getSubClusters(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { tripId } = req.params;
+      const { category } = req.query;
+
+      const clusters = await SavedItemModel.getSubClusters(
+        tripId,
+        category as any
+      );
+
+      res.status(200).json({
+        success: true,
+        data: clusters,
+      });
+    } catch (error: any) {
+      logger.error('Get sub-clusters error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to get sub-clusters',
+      });
+    }
+  }
+
+  /**
+   * Get items by sub-type (cuisine_type or place_type)
+   * e.g., GET /trips/:tripId/items/subtype/ramen?field=cuisine_type
+   */
+  static async getBySubType(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { tripId, subType } = req.params;
+      const field = (req.query.field as string) || 'cuisine_type';
+
+      if (field !== 'cuisine_type' && field !== 'place_type') {
+        res.status(400).json({
+          success: false,
+          error: 'Field must be cuisine_type or place_type',
+        });
+        return;
+      }
+
+      const items = await SavedItemModel.findBySubType(tripId, subType, field);
+
+      res.status(200).json({
+        success: true,
+        data: items,
+      });
+    } catch (error: any) {
+      logger.error('Get by sub-type error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to get items by sub-type',
+      });
+    }
+  }
 }
 

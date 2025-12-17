@@ -4,6 +4,7 @@ import { SavedItem, ItemCategory, ItemSourceType, ItemStatus } from '../types';
 export class SavedItemModel {
   /**
    * Create a new saved item
+   * Now supports sub-categorization fields: tags, cuisine_type, place_type, destination
    */
   static async create(
     tripGroupId: string,
@@ -28,15 +29,21 @@ export class SavedItemModel {
     formattedAddress?: string,
     areaName?: string,
     photosJson?: any[],
-    openingHoursJson?: any
+    openingHoursJson?: any,
+    // Sub-categorization fields (for smart clustering)
+    tags?: string[],
+    cuisineType?: string,
+    placeType?: string,
+    destination?: string
   ): Promise<SavedItem> {
     const result = await query(
       `INSERT INTO saved_items 
        (trip_group_id, added_by, name, category, description, location_name, 
         location_lat, location_lng, original_source_type, original_source_url, source_title, original_content,
         location_confidence, location_confidence_score, google_place_id, rating, user_ratings_total, 
-        price_level, formatted_address, area_name, photos_json, opening_hours_json)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        price_level, formatted_address, area_name, photos_json, opening_hours_json,
+        tags, cuisine_type, place_type, destination)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
        RETURNING *`,
       [
         tripGroupId,
@@ -61,6 +68,10 @@ export class SavedItemModel {
         areaName,
         photosJson ? JSON.stringify(photosJson) : null,
         openingHoursJson ? JSON.stringify(openingHoursJson) : null,
+        tags ? JSON.stringify(tags) : null,
+        cuisineType,
+        placeType,
+        destination,
       ]
     );
 
@@ -735,6 +746,186 @@ export class SavedItemModel {
         tip: parseInt(row?.tip_count) || 0,
       },
     };
+  }
+
+  /**
+   * Get sub-clusters for smart grouping within categories
+   * Returns cuisine_types for food, place_types for places, etc.
+   * Now also uses primary_tag as fallback when cuisine_type/place_type is not set
+   */
+  static async getSubClusters(
+    tripGroupId: string,
+    category?: ItemCategory
+  ): Promise<{
+    cuisine_types: Array<{ type: string; count: number; items: SavedItem[] }>;
+    place_types: Array<{ type: string; count: number; items: SavedItem[] }>;
+    destinations: Array<{ destination: string; count: number }>;
+    tags: Array<{ tag: string; count: number }>;
+  }> {
+    // Get cuisine types (for food items) - use COALESCE with primary_tag for fallback
+    // primary_tag_group = 'cuisine' indicates a food-related tag
+    const cuisineResult = await query(
+      `SELECT COALESCE(cuisine_type, 
+              CASE WHEN primary_tag_group IN ('cuisine', 'food') THEN primary_tag ELSE NULL END
+             ) as cuisine_type, 
+             COUNT(*) as count
+       FROM saved_items
+       WHERE trip_group_id = $1 
+         AND (cuisine_type IS NOT NULL 
+              OR (primary_tag_group IN ('cuisine', 'food') AND primary_tag IS NOT NULL))
+         ${category ? 'AND category = $2' : ''}
+       GROUP BY COALESCE(cuisine_type, 
+                CASE WHEN primary_tag_group IN ('cuisine', 'food') THEN primary_tag ELSE NULL END)
+       HAVING COALESCE(cuisine_type, 
+              CASE WHEN primary_tag_group IN ('cuisine', 'food') THEN primary_tag ELSE NULL END) IS NOT NULL
+       ORDER BY count DESC`,
+      category ? [tripGroupId, category] : [tripGroupId]
+    );
+
+    // Get place types (for non-food items) - use COALESCE with primary_tag for fallback
+    // primary_tag_group = 'landmark', 'attraction', 'shopping' indicates a place-related tag
+    const placeTypeResult = await query(
+      `SELECT COALESCE(place_type,
+              CASE WHEN primary_tag_group IN ('landmark', 'attraction', 'shopping', 'activity', 'landmark_type') THEN primary_tag ELSE NULL END
+             ) as place_type, 
+             COUNT(*) as count
+       FROM saved_items
+       WHERE trip_group_id = $1 
+         AND (place_type IS NOT NULL 
+              OR (primary_tag_group IN ('landmark', 'attraction', 'shopping', 'activity', 'landmark_type') AND primary_tag IS NOT NULL))
+         ${category ? 'AND category = $2' : ''}
+       GROUP BY COALESCE(place_type,
+                CASE WHEN primary_tag_group IN ('landmark', 'attraction', 'shopping', 'activity', 'landmark_type') THEN primary_tag ELSE NULL END)
+       HAVING COALESCE(place_type,
+              CASE WHEN primary_tag_group IN ('landmark', 'attraction', 'shopping', 'activity', 'landmark_type') THEN primary_tag ELSE NULL END) IS NOT NULL
+       ORDER BY count DESC`,
+      category ? [tripGroupId, category] : [tripGroupId]
+    );
+
+    // Get destinations
+    const destinationResult = await query(
+      `SELECT destination, COUNT(*) as count
+       FROM saved_items
+       WHERE trip_group_id = $1 
+         AND destination IS NOT NULL
+       GROUP BY destination
+       ORDER BY count DESC`,
+      [tripGroupId]
+    );
+
+    // Get tag counts (JSONB aggregation)
+    const tagsResult = await query(
+      `SELECT tag, COUNT(*) as count
+       FROM saved_items, jsonb_array_elements_text(COALESCE(tags, '[]'::jsonb)) as tag
+       WHERE trip_group_id = $1
+         ${category ? 'AND category = $2' : ''}
+       GROUP BY tag
+       ORDER BY count DESC
+       LIMIT 20`,
+      category ? [tripGroupId, category] : [tripGroupId]
+    );
+
+    // For each cuisine type, get the actual items (including those matched by primary_tag)
+    const cuisineTypes = await Promise.all(
+      cuisineResult.rows.map(async (row: any) => {
+        const itemsResult = await query(
+          `SELECT * FROM saved_items 
+           WHERE trip_group_id = $1 
+             AND (cuisine_type = $2 
+                  OR (primary_tag = $2 AND primary_tag_group IN ('cuisine', 'food')))
+           ORDER BY rating DESC NULLS LAST, created_at DESC`,
+          [tripGroupId, row.cuisine_type]
+        );
+        return {
+          type: row.cuisine_type,
+          count: parseInt(row.count),
+          items: itemsResult.rows.map((item: any) => ({
+            ...item,
+            location_lat: item.location_lat ? parseFloat(item.location_lat) : null,
+            location_lng: item.location_lng ? parseFloat(item.location_lng) : null,
+          })),
+        };
+      })
+    );
+
+    // For each place type, get the actual items (including those matched by primary_tag)
+    const placeTypes = await Promise.all(
+      placeTypeResult.rows.map(async (row: any) => {
+        const itemsResult = await query(
+          `SELECT * FROM saved_items 
+           WHERE trip_group_id = $1 
+             AND (place_type = $2 
+                  OR (primary_tag = $2 AND primary_tag_group IN ('landmark', 'attraction', 'shopping', 'activity', 'landmark_type')))
+           ORDER BY rating DESC NULLS LAST, created_at DESC`,
+          [tripGroupId, row.place_type]
+        );
+        return {
+          type: row.place_type,
+          count: parseInt(row.count),
+          items: itemsResult.rows.map((item: any) => ({
+            ...item,
+            location_lat: item.location_lat ? parseFloat(item.location_lat) : null,
+            location_lng: item.location_lng ? parseFloat(item.location_lng) : null,
+          })),
+        };
+      })
+    );
+
+    return {
+      cuisine_types: cuisineTypes,
+      place_types: placeTypes,
+      destinations: destinationResult.rows.map((row: any) => ({
+        destination: row.destination,
+        count: parseInt(row.count),
+      })),
+      tags: tagsResult.rows.map((row: any) => ({
+        tag: row.tag,
+        count: parseInt(row.count),
+      })),
+    };
+  }
+
+  /**
+   * Get items by sub-type (cuisine_type or place_type)
+   */
+  static async findBySubType(
+    tripGroupId: string,
+    subType: string,
+    subTypeField: 'cuisine_type' | 'place_type'
+  ): Promise<SavedItem[]> {
+    const result = await query(
+      `SELECT * FROM saved_items
+       WHERE trip_group_id = $1 AND ${subTypeField} = $2
+       ORDER BY rating DESC NULLS LAST, created_at DESC`,
+      [tripGroupId, subType]
+    );
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
+  }
+
+  /**
+   * Get items by destination (for auto-grouping without trips)
+   */
+  static async findByDestination(
+    tripGroupId: string,
+    destination: string
+  ): Promise<SavedItem[]> {
+    const result = await query(
+      `SELECT * FROM saved_items
+       WHERE trip_group_id = $1 AND destination ILIKE $2
+       ORDER BY category, created_at DESC`,
+      [tripGroupId, `%${destination}%`]
+    );
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      location_lat: row.location_lat ? parseFloat(row.location_lat) : null,
+      location_lng: row.location_lng ? parseFloat(row.location_lng) : null,
+    }));
   }
 }
 

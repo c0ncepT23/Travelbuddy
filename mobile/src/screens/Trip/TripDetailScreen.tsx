@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useTripStore } from '../../stores/tripStore';
 import { useItemStore } from '../../stores/itemStore';
+import { SubClusters, SubCluster } from '../../types';
 import { useLocationStore } from '../../stores/locationStore';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useXPStore, XP_REWARDS } from '../../stores/xpStore';
@@ -28,6 +29,7 @@ import { PlaceListDrawer } from '../../components/PlaceListDrawer';
 import { EnhancedCheckInModal } from '../../components/EnhancedCheckInModal';
 import { DayPlannerView } from '../../components/DayPlannerView';
 import { TimelineScreen } from './TimelineScreen';
+import { SubClusterBrowser } from '../../components/SubClusterBrowser';
 import api from '../../config/api';
 import { ItemCategory } from '../../types';
 import { MotiView } from 'moti';
@@ -50,7 +52,7 @@ const BOTTOM_SHEET_MAX_HEIGHT = screenHeight * 0.75;
 export default function TripDetailScreen({ route, navigation }: any) {
   const { tripId } = route.params;
   const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
-  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, fetchItemsByDay, updateNotes } = useItemStore();
+  const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, fetchItemsByDay, updateNotes, fetchSubClusters, subClusters } = useItemStore();
   const { sendQuery, getMessages, isLoading: chatLoading } = useCompanionStore();
   const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking, location } = useLocationStore();
   const { addXP, level, getProgress, getLevelTitle } = useXPStore();
@@ -72,6 +74,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'map' | 'planner' | 'timeline'>('map');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSubClusterBrowser, setShowSubClusterBrowser] = useState(false);
   const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
   const confettiRef = React.useRef<any>(null);
   const mapRef = React.useRef<MapViewRef>(null);
@@ -278,6 +281,14 @@ export default function TripDetailScreen({ route, navigation }: any) {
     );
   };
 
+  const handleSubClusterSelect = (clusterType: string, clusterItems: SavedItem[], isCuisine: boolean) => {
+    HapticFeedback.medium();
+    setShowSubClusterBrowser(false);
+    setSelectedCategory(isCuisine ? 'food' : 'place');
+    setDrawerItems(clusterItems);
+    setIsDrawerOpen(true);
+  };
+
   const handleAssignToDay = async (place: any, day: number | null) => {
     try {
       HapticFeedback.medium();
@@ -321,6 +332,13 @@ export default function TripDetailScreen({ route, navigation }: any) {
         await fetchTripMembers(tripId);
         const loadedItems = await fetchTripItems(tripId, {});
         await fetchCheckIns(tripId);
+        
+        // Fetch sub-clusters for smart grouping (e.g., "3 Ramen spots")
+        try {
+          await fetchSubClusters(tripId);
+        } catch (e) {
+          console.log('[TripDetail] Sub-clusters not available yet');
+        }
 
         // Debug: Log items by category and their coordinates
         const categories = ['food', 'place', 'shopping', 'activity', 'accommodation'];
@@ -817,40 +835,174 @@ export default function TripDetailScreen({ route, navigation }: any) {
           </View>
         </GestureDetector>
 
-          {/* Sneak Peek (Collapsed) - Clean modern style */}
+          {/* Sneak Peek (Collapsed) - Smart Sub-Clusters */}
           {!isExpanded && (
             <View style={styles.sneakPeek}>
               <View style={styles.sneakPeekHeader}>
                 <Text style={styles.sneakPeekTitle}>{currentTrip?.destination || 'Your Places'}</Text>
                 <Text style={styles.sneakPeekCount}>{items.length} saved</Text>
               </View>
-              <View style={styles.sneakPeekStats}>
-                {foodCount > 0 && (
-                  <View style={styles.statPill}>
-                    <Text style={styles.statPillText}>🍽️ {foodCount}</Text>
-                  </View>
-                )}
-                {placeCount > 0 && (
-                  <View style={styles.statPill}>
-                    <Text style={styles.statPillText}>🏛️ {placeCount}</Text>
-                  </View>
-                )}
-                {shoppingCount > 0 && (
-                  <View style={styles.statPill}>
-                    <Text style={styles.statPillText}>🛍️ {shoppingCount}</Text>
-                  </View>
-                )}
-                {activityCount > 0 && (
-                  <View style={styles.statPill}>
-                    <Text style={styles.statPillText}>🎯 {activityCount}</Text>
-                  </View>
-                )}
-                {accommodationCount > 0 && (
-                  <View style={styles.statPill}>
-                    <Text style={styles.statPillText}>🏨 {accommodationCount}</Text>
-                  </View>
-                )}
-              </View>
+              
+              {/* Smart Sub-Clusters - Show browse by type button + preview pills */}
+              {subClusters && (subClusters.cuisine_types.length > 0 || subClusters.place_types.length > 0) ? (
+                <View>
+                  {/* Browse by Type Button - Opens Zenly-style browser */}
+                  <TouchableOpacity
+                    style={styles.browseByTypeButton}
+                    onPress={() => {
+                      HapticFeedback.medium();
+                      setShowSubClusterBrowser(true);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.browseByTypeEmoji}>✨</Text>
+                    <View style={styles.browseByTypeContent}>
+                      <Text style={styles.browseByTypeTitle}>Browse by type</Text>
+                      <Text style={styles.browseByTypeSubtitle}>
+                        {subClusters.cuisine_types.length} food types • {subClusters.place_types.length} place types
+                      </Text>
+                    </View>
+                    <Text style={styles.browseByTypeArrow}>→</Text>
+                  </TouchableOpacity>
+
+                  {/* Quick preview pills */}
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.subClusterScroll}
+                  >
+                    {/* Food sub-clusters (e.g., "3 Ramen", "2 Wagyu") */}
+                    {subClusters.cuisine_types.slice(0, 3).map((cluster) => (
+                      <TouchableOpacity
+                        key={`cuisine-${cluster.type}`}
+                        style={styles.subClusterPill}
+                        onPress={() => {
+                          HapticFeedback.medium();
+                          const cuisineItems = items.filter(i => 
+                            i.cuisine_type?.toLowerCase() === cluster.type.toLowerCase() ||
+                            i.primary_tag?.toLowerCase() === cluster.type.toLowerCase()
+                          );
+                          if (cuisineItems.length > 0) {
+                            setSelectedCategory('food');
+                            setDrawerItems(cuisineItems);
+                            setIsDrawerOpen(true);
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.subClusterCount}>{cluster.count}</Text>
+                        <Text style={styles.subClusterType}>{cluster.type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    
+                    {/* Place sub-clusters (e.g., "4 Temples", "2 Markets") */}
+                    {subClusters.place_types.slice(0, 3).map((cluster) => (
+                      <TouchableOpacity
+                        key={`place-${cluster.type}`}
+                        style={[styles.subClusterPill, styles.subClusterPillPlace]}
+                        onPress={() => {
+                          HapticFeedback.medium();
+                          const placeItems = items.filter(i => 
+                            i.place_type?.toLowerCase() === cluster.type.toLowerCase() ||
+                            i.primary_tag?.toLowerCase() === cluster.type.toLowerCase()
+                          );
+                          if (placeItems.length > 0) {
+                            setSelectedCategory('place');
+                            setDrawerItems(placeItems);
+                            setIsDrawerOpen(true);
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.subClusterCount}>{cluster.count}</Text>
+                        <Text style={styles.subClusterType}>{cluster.type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    
+                    {/* More button */}
+                    {(subClusters.cuisine_types.length > 3 || subClusters.place_types.length > 3) && (
+                      <TouchableOpacity
+                        style={styles.moreClustersPill}
+                        onPress={() => {
+                          HapticFeedback.medium();
+                          setShowSubClusterBrowser(true);
+                        }}
+                      >
+                        <Text style={styles.moreClustersText}>+more</Text>
+                      </TouchableOpacity>
+                    )}
+                  </ScrollView>
+                </View>
+              ) : (
+                /* Fallback: Show regular category counts if no sub-clusters */
+                <View style={styles.sneakPeekStats}>
+                  {foodCount > 0 && (
+                    <TouchableOpacity 
+                      style={styles.statPill}
+                      onPress={() => {
+                        HapticFeedback.medium();
+                        setSelectedCategory('food');
+                        setDrawerItems(items.filter(i => i.category === 'food'));
+                        setIsDrawerOpen(true);
+                      }}
+                    >
+                      <Text style={styles.statPillText}>🍽️ {foodCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {placeCount > 0 && (
+                    <TouchableOpacity 
+                      style={styles.statPill}
+                      onPress={() => {
+                        HapticFeedback.medium();
+                        setSelectedCategory('place');
+                        setDrawerItems(items.filter(i => i.category === 'place'));
+                        setIsDrawerOpen(true);
+                      }}
+                    >
+                      <Text style={styles.statPillText}>🏛️ {placeCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {shoppingCount > 0 && (
+                    <TouchableOpacity 
+                      style={styles.statPill}
+                      onPress={() => {
+                        HapticFeedback.medium();
+                        setSelectedCategory('shopping');
+                        setDrawerItems(items.filter(i => i.category === 'shopping'));
+                        setIsDrawerOpen(true);
+                      }}
+                    >
+                      <Text style={styles.statPillText}>🛍️ {shoppingCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {activityCount > 0 && (
+                    <TouchableOpacity 
+                      style={styles.statPill}
+                      onPress={() => {
+                        HapticFeedback.medium();
+                        setSelectedCategory('activity');
+                        setDrawerItems(items.filter(i => i.category === 'activity'));
+                        setIsDrawerOpen(true);
+                      }}
+                    >
+                      <Text style={styles.statPillText}>🎯 {activityCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {accommodationCount > 0 && (
+                    <TouchableOpacity 
+                      style={styles.statPill}
+                      onPress={() => {
+                        HapticFeedback.medium();
+                        setSelectedCategory('accommodation');
+                        setDrawerItems(items.filter(i => i.category === 'accommodation'));
+                        setIsDrawerOpen(true);
+                      }}
+                    >
+                      <Text style={styles.statPillText}>🏨 {accommodationCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
           )}
 
@@ -1220,6 +1372,16 @@ export default function TripDetailScreen({ route, navigation }: any) {
             </View>
           </MotiView>
         </View>
+      )}
+
+      {/* SUB-CLUSTER BROWSER - Zenly-inspired */}
+      {showSubClusterBrowser && subClusters && (
+        <SubClusterBrowser
+          subClusters={subClusters}
+          items={items}
+          onClusterSelect={handleSubClusterSelect}
+          onClose={() => setShowSubClusterBrowser(false)}
+        />
       )}
 
       {/* SHARE MY STORY MODAL */}
@@ -1620,6 +1782,82 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#4B5563',
+  },
+  // Sub-cluster styles for smart grouping
+  subClusterScroll: {
+    paddingVertical: 4,
+    gap: 10,
+  },
+  subClusterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    gap: 6,
+  },
+  subClusterPillPlace: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#3B82F6',
+  },
+  subClusterCount: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  subClusterType: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#78350F',
+    textTransform: 'capitalize',
+  },
+  // Browse by Type Button - Zenly-inspired
+  browseByTypeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  browseByTypeEmoji: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  browseByTypeContent: {
+    flex: 1,
+  },
+  browseByTypeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0369A1',
+  },
+  browseByTypeSubtitle: {
+    fontSize: 13,
+    color: '#0284C7',
+    marginTop: 2,
+  },
+  browseByTypeArrow: {
+    fontSize: 20,
+    color: '#0369A1',
+    fontWeight: '700',
+  },
+  moreClustersPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 20,
+  },
+  moreClustersText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
   },
 
   // Expanded List - Clean Modern Style

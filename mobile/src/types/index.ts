@@ -143,7 +143,7 @@ export interface SavedItem {
   created_at: string;
   updated_at: string;
   distance?: number;
-  tags?: ItemTag[];
+  tags?: ItemTag[] | string[];  // Can be ItemTag[] (old) or string[] (new simple tags)
   primary_tag?: string | null;
   primary_tag_group?: string | null;
   primary_tag_confidence?: number;
@@ -163,6 +163,11 @@ export interface SavedItem {
   // Day planner fields
   planned_day?: number | null;  // Day number (1 = Day 1, null = Unassigned)
   day_order?: number;           // Order within the day
+  // NEW: Smart sub-categorization fields
+  cuisine_type?: string;        // For food: "ramen", "wagyu", "cheesecake", etc.
+  place_type?: string;          // For places: "temple", "shrine", "market", etc.
+  destination?: string;         // Auto-detected: "Tokyo", "Japan"
+  destination_id?: string;      // Link to destinations table
   // Extra info from source (e.g., guide videos)
   extra_info?: {
     video_type?: 'guide' | 'places' | 'howto';
@@ -170,6 +175,20 @@ export interface SavedItem {
     creator?: string;
     [key: string]: any;
   };
+}
+
+// Smart Sub-Cluster Types (for browsing by cuisine/place type)
+export interface SubCluster {
+  type: string;              // e.g., "ramen", "temple"
+  count: number;
+  items: SavedItem[];
+}
+
+export interface SubClusters {
+  cuisine_types: SubCluster[];  // For food items
+  place_types: SubCluster[];    // For places/shopping/activity
+  destinations: Array<{ destination: string; count: number }>;
+  tags: Array<{ tag: string; count: number }>;
 }
 
 // Check-in types

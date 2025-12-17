@@ -373,7 +373,11 @@ export class ContentProcessorService {
   }
 
   /**
-   * Extract multiple places from YouTube video using Gemini (NEW!)
+   * Extract multiple places from YouTube video using Gemini
+   * Now also extracts:
+   * - destination/destination_country for auto-grouping
+   * - cuisine_type/place_type for smart sub-clustering
+   * - tags for additional insights
    */
   static async extractMultiplePlacesFromVideo(
     url: string
@@ -388,6 +392,7 @@ export class ContentProcessorService {
       places: string[];
     }>;
     destination?: string;
+    destination_country?: string;
     duration_days?: number;
     // Guide metadata (for creating Guide record)
     guideMetadata?: {
@@ -440,6 +445,12 @@ export class ContentProcessorService {
           location_lng: undefined as number | undefined,
           source_title: videoData.title,
           day: place.day,
+          // Sub-categorization
+          cuisine_type: place.cuisine_type,
+          place_type: place.place_type,
+          tags: place.tags,
+          destination: analysis.destination,
+          destination_country: analysis.destination_country,
           originalContent: {
             ...videoData,
             video_type: 'guide',
@@ -452,6 +463,7 @@ export class ContentProcessorService {
           places: processedPlaces,
           itinerary: analysis.itinerary,
           destination: analysis.destination,
+          destination_country: analysis.destination_country,
           duration_days: analysis.duration_days,
           guideMetadata,
         };
@@ -464,6 +476,8 @@ export class ContentProcessorService {
         return {
           summary: analysis.summary,
           video_type: 'howto',
+          destination: analysis.destination,
+          destination_country: analysis.destination_country,
           places: [
             {
               name: videoData.title,
@@ -471,6 +485,9 @@ export class ContentProcessorService {
               description: analysis.summary,
               location_name: undefined,
               source_title: videoData.title,
+              destination: analysis.destination,
+              destination_country: analysis.destination_country,
+              tags: ['travel tips', 'guide'],
               originalContent: {
                 ...videoData,
                 video_type: 'howto',
@@ -492,9 +509,13 @@ export class ContentProcessorService {
         return {
           summary: analysis.summary,
           video_type: 'places',
+          destination: analysis.destination,
+          destination_country: analysis.destination_country,
           places: [
             {
               ...processed,
+              destination: analysis.destination,
+              destination_country: analysis.destination_country,
               originalContent: {
                 ...videoData,
                 video_type: 'places',
@@ -505,7 +526,7 @@ export class ContentProcessorService {
         };
       }
 
-      // Process each place found by Gemini
+      // Process each place found by Gemini - now with sub-categorization!
       const processedPlaces = analysis.places.map((place) => ({
         name: place.name,
         category: place.category,
@@ -514,6 +535,12 @@ export class ContentProcessorService {
         location_lat: undefined as number | undefined,
         location_lng: undefined as number | undefined,
         source_title: videoData.title,
+        // Sub-categorization for smart clustering
+        cuisine_type: place.cuisine_type,
+        place_type: place.place_type,
+        tags: place.tags,
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
         originalContent: {
           ...videoData,
           video_type: 'places',
@@ -558,9 +585,17 @@ export class ContentProcessorService {
       const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;
       logger.info(`🎉 [ENRICH] Complete! ${enrichedCount}/${processedPlaces.length} places enriched with Google data`);
 
+      // Log sub-categorization stats
+      const cuisineTypes = [...new Set(enrichedPlaces.filter(p => p.cuisine_type).map(p => p.cuisine_type))];
+      const placeTypes = [...new Set(enrichedPlaces.filter(p => p.place_type).map(p => p.place_type))];
+      if (cuisineTypes.length > 0) logger.info(`🍽️ Cuisine types: ${cuisineTypes.join(', ')}`);
+      if (placeTypes.length > 0) logger.info(`📍 Place types: ${placeTypes.join(', ')}`);
+
       return {
         summary: analysis.summary,
         video_type: 'places',
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
         places: enrichedPlaces,
         guideMetadata,
       };
@@ -571,12 +606,15 @@ export class ContentProcessorService {
   }
 
   /**
-   * Extract multiple places from Reddit post using Gemini (NEW!)
+   * Extract multiple places from Reddit post using Gemini
+   * Now also extracts cuisine_type, place_type, tags, and destination
    */
   static async extractMultiplePlacesFromReddit(
     url: string
   ): Promise<{
     summary: string;
+    destination?: string;
+    destination_country?: string;
     places: Array<ProcessedContent & { originalContent: any }>;
   }> {
     try {
@@ -596,6 +634,7 @@ export class ContentProcessorService {
       );
 
       logger.info(`Found ${analysis.places.length} places in Reddit post`);
+      logger.info(`Destination: ${analysis.destination || 'Unknown'} (${analysis.destination_country || 'Unknown'})`);
 
       if (analysis.places.length === 0) {
         // No places found, save post as single item with summary
@@ -606,16 +645,20 @@ export class ContentProcessorService {
 
         return {
           summary: analysis.summary,
+          destination: analysis.destination,
+          destination_country: analysis.destination_country,
           places: [
             {
               ...processed,
+              destination: analysis.destination,
+              destination_country: analysis.destination_country,
               originalContent: redditData,
             },
           ],
         };
       }
 
-      // Process each place found by Gemini
+      // Process each place found by Gemini - now with sub-categorization!
       const processedPlaces = analysis.places.map((place) => ({
         name: place.name,
         category: place.category,
@@ -624,6 +667,12 @@ export class ContentProcessorService {
         location_lat: undefined as number | undefined,
         location_lng: undefined as number | undefined,
         source_title: `Reddit: ${redditData.title}`,
+        // Sub-categorization for smart clustering
+        cuisine_type: place.cuisine_type,
+        place_type: place.place_type,
+        tags: place.tags,
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
         originalContent: redditData,
       }));
 
@@ -667,6 +716,8 @@ export class ContentProcessorService {
 
       return {
         summary: analysis.summary,
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
         places: enrichedPlaces,
       };
     } catch (error: any) {
@@ -677,6 +728,7 @@ export class ContentProcessorService {
 
   /**
    * Extract multiple places from Instagram post/reel using Apify + Gemini 2.5 Video Analysis
+   * Now also extracts cuisine_type, place_type, tags, and destination
    * 
    * Pipeline:
    * 1. Apify scrapes Instagram (handles anti-bot, gets video URL)
@@ -688,6 +740,8 @@ export class ContentProcessorService {
     url: string
   ): Promise<{
     summary: string;
+    destination?: string;
+    destination_country?: string;
     places: Array<ProcessedContent & { originalContent: any }>;
   }> {
     try {
@@ -725,6 +779,7 @@ export class ContentProcessorService {
       );
 
       logger.info(`Found ${analysis.places.length} places in Instagram post`);
+      logger.info(`Destination: ${analysis.destination || 'Unknown'} (${analysis.destination_country || 'Unknown'})`);
 
       if (analysis.places.length === 0) {
         const processed = await TravelAgent.processContent(
@@ -734,16 +789,20 @@ export class ContentProcessorService {
 
         return {
           summary: analysis.summary,
+          destination: analysis.destination,
+          destination_country: analysis.destination_country,
           places: [
             {
               ...processed,
+              destination: analysis.destination,
+              destination_country: analysis.destination_country,
               originalContent: instaData,
             },
           ],
         };
       }
 
-      // Process and enrich places
+      // Process and enrich places - now with sub-categorization!
       const processedPlaces = analysis.places.map((place) => ({
         name: place.name,
         category: place.category,
@@ -752,6 +811,12 @@ export class ContentProcessorService {
         location_lat: undefined as number | undefined,
         location_lng: undefined as number | undefined,
         source_title: 'Instagram Discovery',
+        // Sub-categorization for smart clustering
+        cuisine_type: place.cuisine_type,
+        place_type: place.place_type,
+        tags: place.tags,
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
         originalContent: instaData,
       }));
 
@@ -795,6 +860,8 @@ export class ContentProcessorService {
 
       return {
         summary: analysis.summary,
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
         places: enrichedPlaces,
       };
     } catch (error: any) {

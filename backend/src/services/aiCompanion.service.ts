@@ -369,7 +369,7 @@ export class AICompanionService {
         location_confidence_score: geocodedPlaces[index].confidence_score || 0,
       }));
 
-      // Save all extracted places with coordinates
+      // Save all extracted places with coordinates + sub-categorization
       const savedItems: SavedItem[] = [];
       for (const place of placesWithCoords) {
         try {
@@ -387,10 +387,24 @@ export class AICompanionService {
             place.source_title || 'Unknown Source',
             place.originalContent,
             place.location_confidence,
-            place.location_confidence_score
+            place.location_confidence_score,
+            // Google Places enrichment (passed from content processor)
+            place.google_place_id,
+            place.rating,
+            place.user_ratings_total,
+            place.price_level,
+            place.formatted_address,
+            place.area_name,
+            place.photos_json,
+            place.opening_hours_json,
+            // NEW: Sub-categorization fields for smart clustering
+            place.tags,
+            place.cuisine_type,
+            place.place_type,
+            place.destination || place.destination_country || tripDestination
           );
           savedItems.push(savedItem);
-          logger.info(`[Companion] Saved: ${savedItem.name} at (${place.location_lat}, ${place.location_lng})`);
+          logger.info(`[Companion] Saved: ${savedItem.name} (${place.cuisine_type || place.place_type || place.category}) at (${place.location_lat}, ${place.location_lng})`);
         } catch (error) {
           logger.error(`[Companion] Error saving item: ${place.name}`, error);
         }

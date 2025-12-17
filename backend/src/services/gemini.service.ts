@@ -77,6 +77,11 @@ If no specific places are mentioned, return an empty places array but still prov
 
   /**
    * Fallback: Analyze video from title and description
+   * Now also extracts:
+   * - destination (country/city for auto-grouping)
+   * - cuisine_type (for food items: ramen, wagyu, sushi, etc.)
+   * - place_type (for places: temple, shrine, market, viewpoint, etc.)
+   * - tags (additional descriptive tags for sub-clustering)
    */
   static async analyzeVideoMetadata(
     title: string,
@@ -85,20 +90,25 @@ If no specific places are mentioned, return an empty places array but still prov
   ): Promise<{
     summary: string;
     video_type: 'places' | 'howto' | 'guide';
+    destination?: string;  // Country or City, e.g., "Japan", "Tokyo", "Paris"
+    destination_country?: string;  // Always the country, e.g., "Japan"
+    duration_days?: number;
     places: Array<{
       name: string;
       category: ItemCategory;
       description: string;
       location?: string;
-      day?: number; // For guide videos - which day this place is recommended for
+      day?: number;
+      // NEW: Sub-categorization fields
+      cuisine_type?: string;  // For food: "ramen", "wagyu", "sushi", "cheesecake", etc.
+      place_type?: string;    // For places: "temple", "shrine", "market", "viewpoint", etc.
+      tags?: string[];        // Additional tags: ["michelin", "local favorite", "hidden gem"]
     }>;
     itinerary?: Array<{
       day: number;
       title: string;
       places: string[];
     }>;
-    destination?: string;
-    duration_days?: number;
   }> {
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
@@ -127,25 +137,38 @@ Determine if this is a:
 - **HOW-TO VIDEO**: Teaches tips, etiquette, or advice without recommending specific places
   Examples: "How to eat sushi", "Travel tips for Japan", "Things to avoid"
 
-STEP 2 - EXTRACT INFORMATION:
+STEP 2 - EXTRACT DESTINATION:
+ALWAYS extract the destination country and city/region:
+- destination: The specific city or region (e.g., "Tokyo", "Kyoto", "Bangkok")
+- destination_country: The country name (e.g., "Japan", "Thailand", "France")
 
-If GUIDE/ITINERARY VIDEO:
-- Extract the destination and number of days
-- Extract the day-by-day itinerary structure
-- Extract ALL places mentioned with their recommended day
+STEP 3 - EXTRACT PLACES WITH SUB-CATEGORIES:
+For EACH place, extract detailed categorization:
 
-If PLACES VIDEO:
-- Extract ALL specific place names mentioned
-- No day assignment needed
+For FOOD items, identify cuisine_type:
+- Japanese: "ramen", "sushi", "wagyu", "tempura", "udon", "yakitori", "izakaya", "kaiseki", "tonkatsu", "curry"
+- Desserts: "cheesecake", "matcha sweets", "mochi", "ice cream", "cafe", "bakery"
+- Street food: "takoyaki", "okonomiyaki", "gyoza", "street food"
+- Drinks: "sake bar", "whisky bar", "coffee", "tea house"
 
-If HOW-TO VIDEO:
-- Return empty places array
+For PLACE items, identify place_type:
+- Cultural: "temple", "shrine", "castle", "palace", "museum", "gallery"
+- Nature: "garden", "park", "viewpoint", "mountain", "beach", "onsen"
+- Urban: "neighborhood", "street", "market", "station", "observation deck"
+- Entertainment: "theme park", "arcade", "theater", "stadium"
+
+For SHOPPING items, identify place_type:
+- "department store", "mall", "vintage shop", "thrift store", "electronics", "fashion", "souvenir", "market"
+
+Also add relevant tags like:
+- ["michelin", "budget-friendly", "hidden gem", "local favorite", "instagram-worthy", "reservation needed"]
 
 RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
 {
   "video_type": "guide" or "places" or "howto",
   "summary": "Brief summary",
-  "destination": "City/Country (for guide videos)",
+  "destination": "Tokyo",
+  "destination_country": "Japan",
   "duration_days": 4,
   "itinerary": [
     {
@@ -156,18 +179,30 @@ RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
   ],
   "places": [
     {
-      "name": "Place Name",
-      "category": "food|accommodation|place|shopping|activity|tip",
-      "description": "Specific details",
-      "location": "City/Area",
-      "day": 1
+      "name": "Ichiran Ramen",
+      "category": "food",
+      "description": "Famous tonkotsu ramen chain with solo dining booths",
+      "location": "Shibuya, Tokyo",
+      "day": 1,
+      "cuisine_type": "ramen",
+      "tags": ["local favorite", "solo dining friendly"]
+    },
+    {
+      "name": "Senso-ji Temple",
+      "category": "place",
+      "description": "Tokyo's oldest and most famous Buddhist temple",
+      "location": "Asakusa, Tokyo",
+      "day": 2,
+      "place_type": "temple",
+      "tags": ["iconic", "must-see", "free entry"]
     }
   ]
 }
 
 For GUIDE videos: Include both itinerary structure AND individual places with day numbers.
 For PLACES videos: Just include places array, no itinerary.
-For HOW-TO videos: Return empty places array.`;
+For HOW-TO videos: Return empty places array.
+ALWAYS include destination and destination_country even for places/howto videos.`;
 
       const result = await model.generateContent(prompt);
       const response = result.response;
@@ -189,6 +224,17 @@ For HOW-TO videos: Return empty places array.`;
       const videoType = parsed.video_type || 'places';
       logger.info(`Gemini classified video as: ${videoType}`);
       logger.info(`Gemini extracted ${parsed.places?.length || 0} places from video metadata`);
+      logger.info(`Destination: ${parsed.destination || 'Unknown'} (${parsed.destination_country || 'Unknown'})`);
+
+      // Log sub-categorization stats
+      const cuisineTypes = parsed.places?.filter((p: any) => p.cuisine_type).map((p: any) => p.cuisine_type);
+      const placeTypes = parsed.places?.filter((p: any) => p.place_type).map((p: any) => p.place_type);
+      if (cuisineTypes?.length > 0) {
+        logger.info(`Cuisine types found: ${[...new Set(cuisineTypes)].join(', ')}`);
+      }
+      if (placeTypes?.length > 0) {
+        logger.info(`Place types found: ${[...new Set(placeTypes)].join(', ')}`);
+      }
 
       // For guide videos, include itinerary structure
       if (videoType === 'guide') {
@@ -202,6 +248,7 @@ For HOW-TO videos: Return empty places array.`;
         places: parsed.places || [],
         itinerary: parsed.itinerary,
         destination: parsed.destination,
+        destination_country: parsed.destination_country,
         duration_days: parsed.duration_days,
       };
     } catch (error: any) {
@@ -212,6 +259,7 @@ For HOW-TO videos: Return empty places array.`;
 
   /**
    * Analyze Reddit post and extract multiple places from comments
+   * Now also extracts cuisine_type, place_type, tags, and destination
    */
   static async analyzeRedditPost(
     title: string,
@@ -219,11 +267,16 @@ For HOW-TO videos: Return empty places array.`;
     comments: string[]
   ): Promise<{
     summary: string;
+    destination?: string;
+    destination_country?: string;
     places: Array<{
       name: string;
       category: ItemCategory;
       description: string;
       location?: string;
+      cuisine_type?: string;
+      place_type?: string;
+      tags?: string[];
     }>;
   }> {
     try {
@@ -246,26 +299,39 @@ IMPORTANT INSTRUCTIONS:
 3. Each comment may mention multiple places - extract each one separately
 4. Use the exact name as mentioned in the comments
 5. If addresses or locations are provided, extract the area/neighborhood
+6. ALWAYS determine the destination country and city from context
 
-Provide:
-1. A brief summary of what this discussion is about (1-2 sentences)
-2. ALL individual places mentioned (EACH place should be a separate entry)
+For FOOD items, identify cuisine_type:
+- Japanese: "ramen", "sushi", "wagyu", "tempura", "udon", "yakitori", "izakaya", "kaiseki", "tonkatsu", "curry"
+- Desserts: "cheesecake", "matcha sweets", "mochi", "ice cream", "cafe", "bakery"
+- Street food: "takoyaki", "okonomiyaki", "gyoza", "street food"
+- Thai: "pad thai", "curry", "street food", "seafood"
+- General: "steakhouse", "fine dining", "casual dining", "fast food"
 
-For each place:
-- Name: Exact name as mentioned (e.g., "Ginza Steak", "Daimaru department stores", "298", etc.)
-- Category: Choose ONE from: food, accommodation, place, shopping, activity, tip
-- Description: What type of place it is and why it's recommended (based on comments)
-- Location: City, neighborhood, or area (extract from context if available)
+For PLACE items, identify place_type:
+- Cultural: "temple", "shrine", "castle", "palace", "museum", "gallery"
+- Nature: "garden", "park", "viewpoint", "mountain", "beach", "onsen"
+- Urban: "neighborhood", "street", "market", "station", "observation deck"
+
+For SHOPPING items, identify place_type:
+- "department store", "mall", "vintage shop", "thrift store", "electronics", "fashion", "souvenir", "market"
+
+Add relevant tags like:
+- ["michelin", "budget-friendly", "hidden gem", "local favorite", "instagram-worthy", "reservation needed"]
 
 RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
 {
   "summary": "Brief summary of the discussion",
+  "destination": "Tokyo",
+  "destination_country": "Japan",
   "places": [
     {
       "name": "Place Name",
       "category": "food",
       "description": "Specific details about this place",
-      "location": "Area, City"
+      "location": "Area, City",
+      "cuisine_type": "ramen",
+      "tags": ["local favorite"]
     }
   ]
 }
@@ -292,9 +358,12 @@ If no specific places mentioned, return empty places array.`;
       const parsed = JSON.parse(jsonMatch[0]);
 
       logger.info(`Gemini extracted ${parsed.places?.length || 0} places from Reddit post`);
+      logger.info(`Destination: ${parsed.destination || 'Unknown'} (${parsed.destination_country || 'Unknown'})`);
 
       return {
         summary: parsed.summary || 'No summary available',
+        destination: parsed.destination,
+        destination_country: parsed.destination_country,
         places: parsed.places || [],
       };
     } catch (error: any) {
@@ -305,17 +374,23 @@ If no specific places mentioned, return empty places array.`;
 
   /**
    * Analyze Instagram post (caption + image) and extract places
+   * Now also extracts cuisine_type, place_type, tags, and destination
    */
   static async analyzeInstagramPost(
     caption: string,
     imageUrl?: string
   ): Promise<{
     summary: string;
+    destination?: string;
+    destination_country?: string;
     places: Array<{
       name: string;
       category: ItemCategory;
       description: string;
       location?: string;
+      cuisine_type?: string;
+      place_type?: string;
+      tags?: string[];
     }>;
   }> {
     try {
@@ -336,32 +411,45 @@ IMPORTANT INSTRUCTIONS:
 2. If the post recommends multiple places (e.g. "Top 5 Cafes in Paris"), extract EACH ONE separately
 3. Look for location details in hashtags (e.g. #tokyofood, #shibuya)
 4. Determine the vibe/category from the emojis and description
+5. ALWAYS determine the destination country and city from context/hashtags
 
-Provide:
-1. A brief summary of what this post is about (1-2 sentences)
-2. ALL individual places mentioned
+For FOOD items, identify cuisine_type:
+- Japanese: "ramen", "sushi", "wagyu", "tempura", "udon", "yakitori", "izakaya", "kaiseki", "tonkatsu", "curry"
+- Desserts: "cheesecake", "matcha sweets", "mochi", "ice cream", "cafe", "bakery"
+- Street food: "takoyaki", "okonomiyaki", "gyoza", "street food"
+- Thai: "pad thai", "curry", "street food", "seafood"
+- General: "steakhouse", "fine dining", "casual dining", "brunch"
 
-For each place:
-- Name: Exact name of the place/restaurant/hotel
-- Category: Choose ONE from: food, accommodation, place, shopping, activity, tip
-- Description: What makes it special (based on the caption)
-- Location: City, neighborhood, or area (infer from context/hashtags)
+For PLACE items, identify place_type:
+- Cultural: "temple", "shrine", "castle", "palace", "museum", "gallery"
+- Nature: "garden", "park", "viewpoint", "mountain", "beach", "onsen"
+- Urban: "neighborhood", "street", "market", "station", "observation deck"
+
+For SHOPPING items, identify place_type:
+- "department store", "mall", "vintage shop", "thrift store", "electronics", "fashion", "souvenir", "market"
+
+Add relevant tags like:
+- ["michelin", "budget-friendly", "hidden gem", "local favorite", "instagram-worthy", "reservation needed", "aesthetic"]
 
 RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
 {
   "summary": "Brief summary of the post",
+  "destination": "Tokyo",
+  "destination_country": "Japan",
   "places": [
     {
       "name": "Place Name",
       "category": "food",
       "description": "Specific details about this place",
-      "location": "Area, City"
+      "location": "Area, City",
+      "cuisine_type": "cafe",
+      "tags": ["instagram-worthy", "aesthetic"]
     }
   ]
 }
 
 If the caption is short or vague, try to infer as much as possible from hashtags.
-If no specific place is mentioned (just "My trip to Paris"), return empty places array.`;
+If no specific place is mentioned (just "My trip to Paris"), return empty places array but still extract destination.`;
 
       const result = await model.generateContent(prompt);
       const response = result.response;
@@ -381,9 +469,12 @@ If no specific place is mentioned (just "My trip to Paris"), return empty places
       const parsed = JSON.parse(jsonMatch[0]);
 
       logger.info(`Gemini extracted ${parsed.places?.length || 0} places from Instagram post`);
+      logger.info(`Destination: ${parsed.destination || 'Unknown'} (${parsed.destination_country || 'Unknown'})`);
 
       return {
         summary: parsed.summary || 'No summary available',
+        destination: parsed.destination,
+        destination_country: parsed.destination_country,
         places: parsed.places || [],
       };
     } catch (error: any) {

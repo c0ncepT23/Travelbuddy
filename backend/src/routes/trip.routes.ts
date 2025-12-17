@@ -18,6 +18,28 @@ router.get(
   SavedItemController.getItemsByDay
 );
 
+// Get smart sub-clusters (cuisine types, place types, etc.)
+// Returns: { cuisine_types: [{type: "ramen", count: 3, items: [...]}], place_types: [...] }
+router.get(
+  '/:tripId/items/clusters',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+    query('category').optional().isString(),
+  ]),
+  SavedItemController.getSubClusters
+);
+
+// Get items by sub-type (e.g., all ramen places, all temples)
+router.get(
+  '/:tripId/items/subtype/:subType',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+    param('subType').isString().withMessage('Sub-type is required'),
+    query('field').optional().isIn(['cuisine_type', 'place_type']),
+  ]),
+  SavedItemController.getBySubType
+);
+
 // Get all items for a trip
 router.get(
   '/:tripId/items',

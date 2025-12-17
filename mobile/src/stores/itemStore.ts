@@ -8,6 +8,8 @@ import {
   TagFacet,
   TagGroupItems,
   DayGroup,
+  SubClusters,
+  SubCluster,
 } from '../types';
 
 interface ItemState {
@@ -17,6 +19,7 @@ interface ItemState {
   tagFacets: TagFacet[];
   groupedItems: TagGroupItems[];
   dayGroups: DayGroup[];  // For day planner view
+  subClusters: SubClusters | null;  // Smart sub-clustering (ramen, wagyu, temple, etc.)
   
   // Actions
   fetchTripItems: (
@@ -57,6 +60,9 @@ interface ItemState {
   // Enrichment
   enrichItemWithGoogle: (itemId: string) => Promise<SavedItem>;
   enrichAllItems: (tripId: string) => Promise<void>;
+  // Smart sub-clustering
+  fetchSubClusters: (tripId: string, category?: ItemCategory) => Promise<SubClusters>;
+  fetchItemsBySubType: (tripId: string, subType: string, field: 'cuisine_type' | 'place_type') => Promise<SavedItem[]>;
   setItems: (items: SavedItem[]) => void;
   clearItems: () => void;
 }
@@ -68,6 +74,7 @@ export const useItemStore = create<ItemState>((set, get) => ({
   tagFacets: [],
   groupedItems: [],
   dayGroups: [],
+  subClusters: null,
 
   fetchTripItems: async (tripId, filters) => {
     set({ isLoading: true });
@@ -373,11 +380,51 @@ export const useItemStore = create<ItemState>((set, get) => ({
     }
   },
 
+  // Smart sub-clustering - fetch cuisine_types, place_types, etc.
+  fetchSubClusters: async (tripId, category?) => {
+    try {
+      const params: Record<string, any> = {};
+      if (category) params.category = category;
+      
+      const response = await api.get<{ data: SubClusters }>(
+        `/trips/${tripId}/items/clusters`,
+        { params }
+      );
+      
+      const clusters = response.data.data;
+      set({ subClusters: clusters });
+      return clusters;
+    } catch (error) {
+      console.error('Fetch sub-clusters error:', error);
+      set({ subClusters: null });
+      throw error;
+    }
+  },
+
+  // Fetch items by specific sub-type (e.g., all "ramen" places)
+  fetchItemsBySubType: async (tripId, subType, field) => {
+    set({ isLoading: true });
+    try {
+      const response = await api.get<{ data: SavedItem[] }>(
+        `/trips/${tripId}/items/subtype/${encodeURIComponent(subType)}`,
+        { params: { field } }
+      );
+      
+      const items = response.data.data;
+      set({ isLoading: false });
+      return items;
+    } catch (error) {
+      console.error('Fetch items by sub-type error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
   setItems: (items) => {
     set({ items });
   },
 
   clearItems: () => {
-    set({ items: [], currentItem: null, tagFacets: [], groupedItems: [], dayGroups: [] });
+    set({ items: [], currentItem: null, tagFacets: [], groupedItems: [], dayGroups: [], subClusters: null });
   },
 }));
