@@ -31,7 +31,7 @@ import { DayPlannerView } from '../../components/DayPlannerView';
 import { TimelineScreen } from './TimelineScreen';
 import { SubClusterBrowser } from '../../components/SubClusterBrowser';
 import api from '../../config/api';
-import { ItemCategory } from '../../types';
+import { ItemCategory, SavedItem } from '../../types';
 import { MotiView } from 'moti';
 import { HapticFeedback } from '../../utils/haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -844,7 +844,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
               </View>
               
               {/* Smart Sub-Clusters - Show browse by type button + preview pills */}
-              {subClusters && (subClusters.cuisine_types.length > 0 || subClusters.place_types.length > 0) ? (
+              {subClusters && ((subClusters.cuisine_types?.length || 0) > 0 || (subClusters.place_types?.length || 0) > 0) ? (
                 <View>
                   {/* Browse by Type Button - Opens Zenly-style browser */}
                   <TouchableOpacity
@@ -859,7 +859,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
                     <View style={styles.browseByTypeContent}>
                       <Text style={styles.browseByTypeTitle}>Browse by type</Text>
                       <Text style={styles.browseByTypeSubtitle}>
-                        {subClusters.cuisine_types.length} food types • {subClusters.place_types.length} place types
+                        {subClusters.cuisine_types?.length || 0} food types • {subClusters.place_types?.length || 0} place types
                       </Text>
                     </View>
                     <Text style={styles.browseByTypeArrow}>→</Text>
@@ -872,7 +872,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
                     contentContainerStyle={styles.subClusterScroll}
                   >
                     {/* Food sub-clusters (e.g., "3 Ramen", "2 Wagyu") */}
-                    {subClusters.cuisine_types.slice(0, 3).map((cluster) => (
+                    {(subClusters.cuisine_types || []).slice(0, 3).map((cluster) => (
                       <TouchableOpacity
                         key={`cuisine-${cluster.type}`}
                         style={styles.subClusterPill}
@@ -896,7 +896,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
                     ))}
                     
                     {/* Place sub-clusters (e.g., "4 Temples", "2 Markets") */}
-                    {subClusters.place_types.slice(0, 3).map((cluster) => (
+                    {(subClusters.place_types || []).slice(0, 3).map((cluster) => (
                       <TouchableOpacity
                         key={`place-${cluster.type}`}
                         style={[styles.subClusterPill, styles.subClusterPillPlace]}
@@ -920,7 +920,7 @@ export default function TripDetailScreen({ route, navigation }: any) {
                     ))}
                     
                     {/* More button */}
-                    {(subClusters.cuisine_types.length > 3 || subClusters.place_types.length > 3) && (
+                    {((subClusters.cuisine_types?.length || 0) > 3 || (subClusters.place_types?.length || 0) > 3) && (
                       <TouchableOpacity
                         style={styles.moreClustersPill}
                         onPress={() => {

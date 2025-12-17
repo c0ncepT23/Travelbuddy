@@ -32,6 +32,7 @@ interface GooglePlaceDetails {
   rating?: number;
   user_ratings_total?: number;
   price_level?: number;
+  types?: string[];  // Google's place types for validation
   photos?: Array<{
     photo_reference: string;
     height: number;
@@ -144,6 +145,144 @@ export class GooglePlacesService {
   }
 
   /**
+   * Extract cuisine_type and place_type from Google Places types array
+   * This validates/enriches the AI's extraction with Google's structured data
+   */
+  static extractSubTypesFromGoogleTypes(types: string[]): {
+    cuisine_type?: string;
+    place_type?: string;
+    validated_category?: string;
+  } {
+    if (!types || types.length === 0) return {};
+
+    const result: { cuisine_type?: string; place_type?: string; validated_category?: string } = {};
+
+    // Google Places cuisine/food type mappings
+    const cuisineTypeMap: Record<string, string> = {
+      'ramen_restaurant': 'ramen',
+      'sushi_restaurant': 'sushi',
+      'japanese_restaurant': 'japanese',
+      'korean_restaurant': 'korean',
+      'chinese_restaurant': 'chinese',
+      'thai_restaurant': 'thai',
+      'vietnamese_restaurant': 'vietnamese',
+      'indian_restaurant': 'indian',
+      'italian_restaurant': 'italian',
+      'french_restaurant': 'french',
+      'mexican_restaurant': 'mexican',
+      'american_restaurant': 'american',
+      'seafood_restaurant': 'seafood',
+      'steak_house': 'steak',
+      'barbecue_restaurant': 'bbq',
+      'pizza_restaurant': 'pizza',
+      'hamburger_restaurant': 'burgers',
+      'sandwich_shop': 'sandwiches',
+      'bakery': 'bakery',
+      'cafe': 'cafe',
+      'coffee_shop': 'coffee',
+      'tea_house': 'tea',
+      'ice_cream_shop': 'ice cream',
+      'dessert_shop': 'dessert',
+      'bar': 'bar',
+      'izakaya': 'izakaya',
+      'food_court': 'food court',
+      'fast_food_restaurant': 'fast food',
+      'vegetarian_restaurant': 'vegetarian',
+      'vegan_restaurant': 'vegan',
+    };
+
+    // Google Places place type mappings
+    const placeTypeMap: Record<string, string> = {
+      'hindu_temple': 'temple',
+      'buddhist_temple': 'temple',
+      'temple': 'temple',
+      'shrine': 'shrine',
+      'church': 'church',
+      'mosque': 'mosque',
+      'synagogue': 'synagogue',
+      'place_of_worship': 'religious site',
+      'castle': 'castle',
+      'palace': 'palace',
+      'museum': 'museum',
+      'art_gallery': 'gallery',
+      'park': 'park',
+      'national_park': 'national park',
+      'garden': 'garden',
+      'zoo': 'zoo',
+      'aquarium': 'aquarium',
+      'amusement_park': 'theme park',
+      'tourist_attraction': 'attraction',
+      'natural_feature': 'nature',
+      'point_of_interest': 'landmark',
+      'viewpoint': 'viewpoint',
+      'beach': 'beach',
+      'spa': 'spa',
+      'hot_spring': 'onsen',
+      'market': 'market',
+      'shopping_mall': 'mall',
+      'department_store': 'department store',
+      'electronics_store': 'electronics',
+      'clothing_store': 'fashion',
+      'book_store': 'bookstore',
+      'convenience_store': 'convenience store',
+      'supermarket': 'supermarket',
+      'stadium': 'stadium',
+      'movie_theater': 'cinema',
+      'night_club': 'nightclub',
+      'casino': 'casino',
+      'bowling_alley': 'bowling',
+      'gym': 'gym',
+    };
+
+    // Category validation map
+    const categoryMap: Record<string, string> = {
+      'restaurant': 'food',
+      'food': 'food',
+      'cafe': 'food',
+      'bakery': 'food',
+      'bar': 'food',
+      'meal_delivery': 'food',
+      'meal_takeaway': 'food',
+      'store': 'shopping',
+      'shopping_mall': 'shopping',
+      'lodging': 'accommodation',
+      'hotel': 'accommodation',
+      'tourist_attraction': 'place',
+      'museum': 'place',
+      'park': 'activity',
+      'amusement_park': 'activity',
+      'spa': 'activity',
+    };
+
+    // Check for cuisine type (food places)
+    for (const type of types) {
+      if (cuisineTypeMap[type]) {
+        result.cuisine_type = cuisineTypeMap[type];
+        break;
+      }
+    }
+
+    // Check for place type (non-food places)
+    for (const type of types) {
+      if (placeTypeMap[type]) {
+        result.place_type = placeTypeMap[type];
+        break;
+      }
+    }
+
+    // Validate/suggest category
+    for (const type of types) {
+      if (categoryMap[type]) {
+        result.validated_category = categoryMap[type];
+        break;
+      }
+    }
+
+    logger.info(`[GooglePlaces] Extracted sub-types from ${types.slice(0, 5).join(', ')}: cuisine=${result.cuisine_type}, place=${result.place_type}`);
+    return result;
+  }
+
+  /**
    * Search for a place by text query to get its Place ID
    */
   static async searchPlace(query: string): Promise<string | null> {
@@ -195,7 +334,7 @@ export class GooglePlacesService {
       const response = await axios.get(`${this.BASE_URL}/details/json`, {
         params: {
           place_id: placeId,
-          fields: 'place_id,name,formatted_address,rating,user_ratings_total,price_level,photos,opening_hours,geometry,address_components',
+          fields: 'place_id,name,formatted_address,rating,user_ratings_total,price_level,photos,opening_hours,geometry,address_components,types',
           key: this.API_KEY,
         },
       });
@@ -262,8 +401,14 @@ export class GooglePlacesService {
 
   /**
    * Enrich a place query with Google Maps data
+   * Now includes sub-type extraction from Google's types for validation
    */
-  static async enrichPlace(name: string, locationHint?: string): Promise<Partial<GooglePlaceDetails> & { area_name?: string } | null> {
+  static async enrichPlace(name: string, locationHint?: string): Promise<Partial<GooglePlaceDetails> & { 
+    area_name?: string;
+    google_cuisine_type?: string;
+    google_place_type?: string;
+    google_validated_category?: string;
+  } | null> {
     try {
       const query = locationHint ? `${name} ${locationHint}` : name;
       logger.info(`[GooglePlaces] Searching for: "${query}"`);
@@ -284,11 +429,18 @@ export class GooglePlacesService {
       }
 
       const areaName = this.identifyArea(details.address_components);
-      logger.info(`[GooglePlaces] Enrichment success! Rating: ${details.rating}, Area: ${areaName}`);
+      
+      // Extract sub-types from Google's types for validation
+      const subTypes = this.extractSubTypesFromGoogleTypes(details.types || []);
+      
+      logger.info(`[GooglePlaces] Enrichment success! Rating: ${details.rating}, Area: ${areaName}, Types: ${details.types?.slice(0, 3).join(', ')}`);
 
       return {
         ...details,
         area_name: areaName || undefined,
+        google_cuisine_type: subTypes.cuisine_type,
+        google_place_type: subTypes.place_type,
+        google_validated_category: subTypes.validated_category,
       };
     } catch (error: any) {
       logger.error('[GooglePlaces] Enrichment error:', error.message);

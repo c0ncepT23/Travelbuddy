@@ -1,3 +1,6 @@
+// Load .env file for local development
+require('dotenv').config();
+
 // Read sensitive values from environment variables
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
