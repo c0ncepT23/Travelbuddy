@@ -532,4 +532,3 @@ If no places are identifiable, return an empty places array.`;
     }
   }
 }
-
