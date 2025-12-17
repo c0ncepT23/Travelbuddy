@@ -20,6 +20,7 @@ import notificationRoutes from './routes/notification.routes';
 import segmentRoutes from './routes/segment.routes';
 import dailyPlanRoutes from './routes/dailyPlan.routes';
 import guideRoutes from './routes/guide.routes';
+import smartShareRoutes from './routes/smartShare.routes';
 
 const app: Application = express();
 
@@ -76,6 +77,7 @@ app.use('/api/companion', aiCompanionRoutes); // AI Companion queries
 app.use('/api', checkInRoutes); // Check-ins and trip stories
 app.use('/api', groupMessageRoutes); // Group chat messages
 app.use('/api/notifications', notificationRoutes); // Push notifications
+app.use('/api/share', smartShareRoutes); // Zero-friction smart sharing
 
 // Public story web viewer route
 app.get('/story/:shareCode', (_req, res) => {

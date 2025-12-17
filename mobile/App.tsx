@@ -12,7 +12,7 @@ import { useTripStore } from './src/stores/tripStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { pushNotificationService } from './src/services/pushNotification.service';
 import shareIntentService, { SharedContent } from './src/services/shareIntent.service';
-import { ShareTripSelectorModal } from './src/components/ShareTripSelectorModal';
+import { SmartShareProcessor } from './src/components/SmartShareProcessor';
 import theme from './src/config/theme';
 
 // Onboarding
@@ -148,23 +148,23 @@ export default function App() {
     return () => subscription.remove();
   }, [isAuthenticated]);
 
-  const handleShareSuccess = (tripId: string) => {
+  const handleShareComplete = (result: any) => {
+    setShowShareModal(false);
+    setSharedContent(null);
+    
+    // Navigate directly to the trip map!
+    if (navigationRef.current && result.tripId) {
+      navigationRef.current.navigate('TripHome', { tripId: result.tripId });
+    }
+  };
+
+  const handleShareError = (error: string) => {
     setShowShareModal(false);
     setSharedContent(null);
     Alert.alert(
-      '✨ Link Added!',
-      'The AI is processing your link. Check the trip chat for updates!',
-      [
-        {
-          text: 'View Trip',
-          onPress: () => {
-            if (navigationRef.current) {
-              navigationRef.current.navigate('TripHome', { tripId });
-            }
-          },
-        },
-        { text: 'OK' },
-      ]
+      '😕 Oops!',
+      error || 'Failed to process the link. Try again later.',
+      [{ text: 'OK' }]
     );
   };
 
@@ -302,12 +302,13 @@ export default function App() {
     <ErrorBoundary>
       <StatusBar style="dark" />
       <NavigationContainer ref={navigationRef} linking={linking}>
-        {/* Share Intent Modal - Shows when user shares from YouTube/Instagram/etc */}
+        {/* Smart Share Processor - Zero friction! Shows when user shares from YouTube/Instagram/etc */}
         {showShareModal && sharedContent && isAuthenticated && (
-          <ShareTripSelectorModal
-            sharedContent={sharedContent}
+          <SmartShareProcessor
+            url={sharedContent.data}
+            onComplete={handleShareComplete}
+            onError={handleShareError}
             onClose={handleShareClose}
-            onSuccess={handleShareSuccess}
           />
         )}
         
