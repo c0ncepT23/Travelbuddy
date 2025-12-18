@@ -187,7 +187,14 @@ const PlaceCard: React.FC<{
 export default function CategoryListScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, 'params'>>();
-  const { tripId, countryName, categoryLabel, categoryType, items } = route.params;
+  
+  // Defensive extraction of route params
+  const params = route.params || {};
+  const tripId = params.tripId || '';
+  const countryName = params.countryName || 'Unknown';
+  const categoryLabel = params.categoryLabel || 'Places';
+  const categoryType = params.categoryType || 'place';
+  const items = Array.isArray(params.items) ? params.items : [];
 
   const { location } = useLocationStore();
   const userLocation = location ? {
@@ -195,8 +202,9 @@ export default function CategoryListScreen() {
     longitude: location.coords.longitude,
   } : null;
 
-  // Sort items by distance
+  // Sort items by distance (with defensive check)
   const sortedItems = useMemo(() => {
+    if (!items || items.length === 0) return [];
     if (!userLocation) return items;
     return [...items].sort((a, b) => {
       const distA = calculateDistance(userLocation, a);
@@ -215,11 +223,13 @@ export default function CategoryListScreen() {
   };
 
   const handleAgentPress = () => {
-    navigation.navigate('GroupChat', { tripId });
+    if (tripId) {
+      navigation.navigate('GroupChat', { tripId });
+    }
   };
 
-  // Get category emoji
-  const categoryEmoji = CATEGORY_EMOJIS[categoryLabel.toLowerCase()] || '📍';
+  // Get category emoji (with defensive check)
+  const categoryEmoji = CATEGORY_EMOJIS[categoryLabel?.toLowerCase?.()] || '📍';
 
   return (
     <View style={styles.container}>
@@ -268,7 +278,7 @@ export default function CategoryListScreen() {
       {/* List */}
       <FlatList
         data={sortedItems}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item?.id || `item-${index}`}
         renderItem={({ item, index }) => (
           <PlaceCard
             item={item}

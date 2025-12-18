@@ -298,25 +298,36 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
     outputRange: ['0deg', '360deg'],
   });
 
-  // If minimized, show small indicator
+  // If minimized, show small indicator with actual status
   if (isMinimized) {
+    const isComplete = stage === 'complete';
+    const isError = stage === 'error';
+    
     return (
       <TouchableOpacity 
         style={styles.minimizedContainer}
         onPress={() => setIsMinimized(false)}
       >
         <LinearGradient
-          colors={['#A78BFA', '#818CF8']}
+          colors={isComplete ? ['#10B981', '#059669'] : isError ? ['#EF4444', '#DC2626'] : ['#A78BFA', '#818CF8']}
           style={styles.minimizedBubble}
         >
-          <MotiView
-            from={{ rotate: '0deg' }}
-            animate={{ rotate: '360deg' }}
-            transition={{ type: 'timing', duration: 2000, loop: true }}
-          >
-            <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-          </MotiView>
-          <Text style={styles.minimizedText}>Processing...</Text>
+          {isComplete ? (
+            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+          ) : isError ? (
+            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+          ) : (
+            <MotiView
+              from={{ rotate: '0deg' }}
+              animate={{ rotate: '360deg' }}
+              transition={{ type: 'timing', duration: 2000, loop: true }}
+            >
+              <Ionicons name="sparkles" size={20} color="#FFFFFF" />
+            </MotiView>
+          )}
+          <Text style={styles.minimizedText}>
+            {isComplete ? 'Done! Tap to view' : isError ? 'Error occurred' : 'Processing...'}
+          </Text>
         </LinearGradient>
       </TouchableOpacity>
     );

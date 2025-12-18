@@ -90,7 +90,11 @@ interface BubbleData {
 export default function CountryBubbleScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, 'params'>>();
-  const { tripId, countryName } = route.params;
+  
+  // Defensive extraction of route params (for deep link access)
+  const params = route.params || {};
+  const tripId = params.tripId || '';
+  const countryName = params.countryName || 'Unknown';
 
   const [isLoading, setIsLoading] = useState(true);
   const [items, setItems] = useState<SavedItem[]>([]);
@@ -98,15 +102,26 @@ export default function CountryBubbleScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('macro');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
-  // Get country flag
+  // Get country flag (safe - countryName has fallback)
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
 
   // Fetch data
   useEffect(() => {
-    fetchItems();
+    if (tripId) {
+      fetchItems();
+    } else {
+      setIsLoading(false);
+    }
   }, [tripId]);
 
   const fetchItems = async () => {
+    // Guard against empty tripId to prevent malformed API URLs
+    if (!tripId) {
+      console.warn('[CountryBubbles] No tripId provided, skipping fetch');
+      setIsLoading(false);
+      return;
+    }
+    
     setIsLoading(true);
     try {
       console.log('[CountryBubbles] Fetching items for trip:', tripId);
@@ -277,7 +292,7 @@ export default function CountryBubbleScreen() {
       />
 
       {/* Map Background */}
-      <MapBackground country={countryName.toLowerCase()} viewType="country" />
+      <MapBackground country={(countryName || 'unknown').toLowerCase()} viewType="country" />
 
       {/* Floating Cloud Decorations */}
       <FloatingCloud color="purple" size={300} position={{ x: 10, y: 5 }} delay={0} />
