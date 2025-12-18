@@ -253,7 +253,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       // Make API call
       const response = await api.post('/share/process', { url });
       
-      if (!response.data.success && !response.data.tripId) {
+      if (!response.data.success || !response.data.tripId) {
         throw new Error(response.data.message || 'No places found');
       }
 
@@ -268,10 +268,10 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       setShowConfetti(true);
       HapticFeedback.success();
 
-      // Wait to show success with confetti
+      // Wait for confetti animation to complete (2000ms animation + 500ms delay + 1000ms to enjoy)
       setTimeout(() => {
         onComplete(response.data);
-      }, 2500);
+      }, 3500);
 
     } catch (error: any) {
       console.error('[SmartShare] Error:', error);

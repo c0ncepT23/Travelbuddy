@@ -176,8 +176,7 @@ const PlaceCard: React.FC<{
             end={{ x: 1, y: 0 }}
             style={styles.checkInButton}
           >
-            <Text style={styles.checkInText}>Check-</Text>
-            <Text style={styles.checkInText}>in</Text>
+            <Text style={styles.checkInText}>Check-in</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
