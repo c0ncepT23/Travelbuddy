@@ -24,7 +24,7 @@ export class GeminiService {
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-flash',
         generationConfig: {
           responseMimeType: 'application/json',
         }
@@ -118,16 +118,16 @@ If no specific places are mentioned, return an empty places array but still prov
     }>;
   }> {
     try {
-      // Use gemini-2.0-flash (stable) with structured output for guaranteed JSON
+      // Use gemini-3-flash (GA) with structured output for guaranteed JSON
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-flash',
         generationConfig: {
           responseMimeType: 'application/json',
         }
       });
 
       // Use transcript if available, otherwise fall back to description
-      // Note: gemini-2.0-flash has 1M token context, so we can use full transcript
+      // Note: gemini-3-flash has 1M token context, so we can use full transcript
       const contentToAnalyze = transcript && transcript.length > 0 
         ? `Transcript:\n${transcript}`
         : `Description:\n${description}`;
@@ -314,7 +314,7 @@ ALWAYS include destination and destination_country even for places/howto videos.
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-flash',
         generationConfig: {
           responseMimeType: 'application/json',
         }
@@ -433,7 +433,7 @@ If no specific places mentioned, return empty places array.`;
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-flash',
         generationConfig: {
           responseMimeType: 'application/json',
         }
