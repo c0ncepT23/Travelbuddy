@@ -68,7 +68,7 @@ export class SavedItemModel {
         areaName,
         photosJson ? JSON.stringify(photosJson) : null,
         openingHoursJson ? JSON.stringify(openingHoursJson) : null,
-        tags ? JSON.stringify(tags) : null,
+        tags ? JSON.stringify(tags) : '[]',
         cuisineType,
         placeType,
         destination,
