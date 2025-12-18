@@ -4,7 +4,10 @@ import logger from '../config/logger';
 
 // Simple in-memory cache for nearby search results (TTL: 1 hour)
 const nearbySearchCache = new Map<string, { data: NearbyPlace[]; timestamp: number }>();
+// Cache for place enrichment (TTL: 24 hours - place data doesn't change often)
+const enrichmentCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const ENRICHMENT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 interface NearbyPlace {
   place_id: string;
@@ -334,7 +337,8 @@ export class GooglePlacesService {
       const response = await axios.get(`${this.BASE_URL}/details/json`, {
         params: {
           place_id: placeId,
-          fields: 'place_id,name,formatted_address,rating,user_ratings_total,price_level,photos,opening_hours,geometry,address_components,types',
+          // Removed price_level and opening_hours to save API costs (~$5/1000 requests)
+          fields: 'place_id,name,formatted_address,rating,user_ratings_total,photos,geometry,address_components,types',
           key: this.API_KEY,
         },
       });
@@ -402,6 +406,7 @@ export class GooglePlacesService {
   /**
    * Enrich a place query with Google Maps data
    * Now includes sub-type extraction from Google's types for validation
+   * Uses caching to avoid redundant API calls (24h TTL)
    */
   static async enrichPlace(name: string, locationHint?: string): Promise<Partial<GooglePlaceDetails> & { 
     area_name?: string;
@@ -412,6 +417,15 @@ export class GooglePlacesService {
   } | null> {
     try {
       const query = locationHint ? `${name} ${locationHint}` : name;
+      
+      // Check cache first
+      const cacheKey = `enrich:${query.toLowerCase().trim()}`;
+      const cached = enrichmentCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < ENRICHMENT_CACHE_TTL) {
+        logger.info(`[GooglePlaces] Cache hit for: "${query}"`);
+        return cached.data;
+      }
+      
       logger.info(`[GooglePlaces] Searching for: "${query}"`);
       
       const placeId = await this.searchPlace(query);
@@ -442,7 +456,7 @@ export class GooglePlacesService {
       
       logger.info(`[GooglePlaces] Enrichment success! Rating: ${details.rating}, Area: ${areaName}, Types: ${details.types?.slice(0, 3).join(', ')}, Tags: ${googleTags.slice(0, 3).join(', ')}`);
 
-      return {
+      const result = {
         ...details,
         area_name: areaName || undefined,
         google_cuisine_type: subTypes.cuisine_type,
@@ -450,6 +464,11 @@ export class GooglePlacesService {
         google_validated_category: subTypes.validated_category,
         google_tags: googleTags,
       };
+      
+      // Cache the result
+      enrichmentCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      
+      return result;
     } catch (error: any) {
       logger.error('[GooglePlaces] Enrichment error:', error.message);
       return null;
