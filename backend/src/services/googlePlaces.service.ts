@@ -408,6 +408,7 @@ export class GooglePlacesService {
     google_cuisine_type?: string;
     google_place_type?: string;
     google_validated_category?: string;
+    google_tags?: string[];
   } | null> {
     try {
       const query = locationHint ? `${name} ${locationHint}` : name;
@@ -433,7 +434,13 @@ export class GooglePlacesService {
       // Extract sub-types from Google's types for validation
       const subTypes = this.extractSubTypesFromGoogleTypes(details.types || []);
       
-      logger.info(`[GooglePlaces] Enrichment success! Rating: ${details.rating}, Area: ${areaName}, Types: ${details.types?.slice(0, 3).join(', ')}`);
+      // Create tags from Google's types (filter out generic ones)
+      const genericTypes = ['point_of_interest', 'establishment', 'premise', 'political'];
+      const googleTags = (details.types || [])
+        .filter((t: string) => !genericTypes.includes(t))
+        .map((t: string) => t.replace(/_/g, ' ')); // "japanese_restaurant" -> "japanese restaurant"
+      
+      logger.info(`[GooglePlaces] Enrichment success! Rating: ${details.rating}, Area: ${areaName}, Types: ${details.types?.slice(0, 3).join(', ')}, Tags: ${googleTags.slice(0, 3).join(', ')}`);
 
       return {
         ...details,
@@ -441,6 +448,7 @@ export class GooglePlacesService {
         google_cuisine_type: subTypes.cuisine_type,
         google_place_type: subTypes.place_type,
         google_validated_category: subTypes.validated_category,
+        google_tags: googleTags,
       };
     } catch (error: any) {
       logger.error('[GooglePlaces] Enrichment error:', error.message);

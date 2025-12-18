@@ -585,7 +585,7 @@ export class ContentProcessorService {
                 }
               }
               
-              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Photos=${enriched.photos?.length || 0}`);
+              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Photos=${enriched.photos?.length || 0}, Tags=${enriched.google_tags?.length || 0}`);
               return {
                 ...place,
                 google_place_id: enriched.place_id,
@@ -601,6 +601,8 @@ export class ContentProcessorService {
                 // Use validated sub-types
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                // Add tags from Google
+                tags: enriched.google_tags || [],
               };
             } else {
               logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
@@ -730,7 +732,7 @@ export class ContentProcessorService {
                 logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
               }
               
-              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}`);
+              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Tags=${enriched.google_tags?.length || 0}`);
               return {
                 ...place,
                 google_place_id: enriched.place_id,
@@ -745,6 +747,7 @@ export class ContentProcessorService {
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                tags: enriched.google_tags || [],
               };
             } else {
               logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
@@ -889,7 +892,7 @@ export class ContentProcessorService {
                 logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
               }
               
-              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}`);
+              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Tags=${enriched.google_tags?.length || 0}`);
               return {
                 ...place,
                 google_place_id: enriched.place_id,
@@ -904,6 +907,7 @@ export class ContentProcessorService {
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                tags: enriched.google_tags || [],
               };
             } else {
               logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
