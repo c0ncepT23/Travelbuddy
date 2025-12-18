@@ -253,8 +253,14 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       // Make API call
       const response = await api.post('/share/process', { url });
       
-      if (!response.data.success || !response.data.tripId) {
-        throw new Error(response.data.message || 'No places found');
+      // Check for actual API failure
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to process');
+      }
+      
+      // Check if we got a valid trip (even if no places were extracted, trip should exist)
+      if (!response.data.tripId) {
+        throw new Error(response.data.message || 'No destination could be determined');
       }
 
       // Stage 3: Enriching
