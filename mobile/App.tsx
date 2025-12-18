@@ -3,8 +3,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View, Text, Alert } from 'react-native';
+import { ActivityIndicator, View, Text, Alert, Platform, NativeModules, NativeEventEmitter } from 'react-native';
 import * as Linking from 'expo-linking';
+
+// Native module for getting shared URLs on Android
+const { ShareIntentModule } = NativeModules;
+const shareIntentEmitter = Platform.OS === 'android' && ShareIntentModule 
+  ? new NativeEventEmitter(ShareIntentModule) 
+  : null;
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from './src/stores/authStore';
@@ -22,12 +28,11 @@ import OnboardingScreen from './src/screens/Onboarding/OnboardingScreen';
 import LoginScreen from './src/screens/Auth/LoginScreen';
 import RegisterScreen from './src/screens/Auth/RegisterScreen';
 
-// Trip Screens
-import TripListScreen from './src/screens/Trip/TripListScreen';
-import TripDetailScreen from './src/screens/Trip/TripDetailScreen';
-import TripHomeScreen from './src/screens/Trip/TripHomeScreen';
+// V2 World Screens (new UI)
+import { WorldMapScreen, CountryBubbleScreen, CategoryListScreen } from './src/screens/World';
+
+// Legacy Trip Screens (keeping for compatibility during transition)
 import TripTabScreen from './src/screens/Trip/TripTabScreen';
-import CreateTripScreen from './src/screens/Trip/CreateTripScreen';
 import JoinTripScreen from './src/screens/Trip/JoinTripScreen';
 
 // Chat & Items
@@ -53,7 +58,9 @@ const linking = {
   prefixes: ['https://travelagent.app', 'travelagent://'],
   config: {
     screens: {
+      WorldMap: '',
       JoinTrip: 'join/:inviteCode',
+      CountryBubbles: 'country/:tripId',
     },
   },
 };
@@ -87,29 +94,97 @@ export default function App() {
     prepare();
   }, []);
 
+  // Helper function to extract URL from our custom share deep link
+  const extractSharedUrl = (deepLink: string): string | null => {
+    // Handle our custom share scheme: travelagent://share?url=...
+    if (deepLink.startsWith('travelagent://share')) {
+      try {
+        const url = new URL(deepLink);
+        const sharedUrl = url.searchParams.get('url');
+        if (sharedUrl) {
+          return decodeURIComponent(sharedUrl);
+        }
+      } catch (e) {
+        // Fallback: manual parsing
+        const match = deepLink.match(/[?&]url=([^&]+)/);
+        if (match) {
+          return decodeURIComponent(match[1]);
+        }
+      }
+    }
+    return null;
+  };
+
+  // Check if URL is a social/travel link worth processing
+  const isSocialLink = (url: string): boolean => {
+    const urlLower = url.toLowerCase();
+    return (
+      urlLower.includes('youtube.com') ||
+      urlLower.includes('youtu.be') ||
+      urlLower.includes('instagram.com') ||
+      urlLower.includes('reddit.com') ||
+      urlLower.includes('tiktok.com') ||
+      urlLower.includes('maps.google') ||
+      urlLower.includes('goo.gl/maps')
+    );
+  };
+
   // Handle share intent - content shared from other apps
   useEffect(() => {
     const handleShareIntent = async () => {
       try {
-        // Check initial URL for shared content
-        const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) {
-          // Check if it's a shared link (contains common video/social URLs)
-          const urlLower = initialUrl.toLowerCase();
-          const isSocialLink = 
-            urlLower.includes('youtube.com') ||
-            urlLower.includes('youtu.be') ||
-            urlLower.includes('instagram.com') ||
-            urlLower.includes('reddit.com') ||
-            urlLower.includes('tiktok.com');
-
-          // If it's not our own deep link (join invite), treat it as shared content
-          if (isSocialLink && !initialUrl.includes('travelagent.app/join')) {
-            console.log('[App] Received shared content:', initialUrl);
-            setSharedContent({ type: 'url', data: initialUrl });
-            if (isAuthenticated) {
-              setShowShareModal(true);
+        console.log('[App] handleShareIntent started');
+        
+        // On Android, use our native module to get the shared URL
+        if (Platform.OS === 'android' && ShareIntentModule) {
+          try {
+            const nativeSharedUrl = await ShareIntentModule.getSharedUrl();
+            console.log('[App] Native shared URL:', nativeSharedUrl);
+            
+            if (nativeSharedUrl) {
+              // Clear it so we don't process it again
+              ShareIntentModule.clearSharedUrl();
+              
+              // Process the shared URL - show beautiful AI processor!
+              if (isSocialLink(nativeSharedUrl)) {
+                console.log('[App] ✅ Processing shared URL from native module:', nativeSharedUrl);
+                setSharedContent({ type: 'url', data: nativeSharedUrl });
+                setShowShareModal(true);
+                return;
+              }
             }
+          } catch (nativeErr) {
+            console.log('[App] Native module error (expected on iOS):', nativeErr);
+          }
+        }
+        
+        // Fallback: Check Linking API (works for deep links)
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const initialUrl = await Linking.getInitialURL();
+          console.log(`[App] Linking URL check #${attempt + 1}:`, initialUrl);
+          
+          if (initialUrl) {
+            // Check if it's our custom share deep link
+            const extractedUrl = extractSharedUrl(initialUrl);
+            if (extractedUrl) {
+              console.log('[App] ✅ Extracted shared URL:', extractedUrl);
+              setSharedContent({ type: 'url', data: extractedUrl });
+              setShowShareModal(true);
+              return;
+            }
+            
+            // Direct social link check (fallback)
+            if (isSocialLink(initialUrl) && !initialUrl.includes('travelagent.app/join')) {
+              console.log('[App] ✅ Direct social link:', initialUrl);
+              setSharedContent({ type: 'url', data: initialUrl });
+              setShowShareModal(true);
+              return;
+            }
+          }
+          
+          // Wait before next attempt
+          if (attempt < 2) {
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
         }
       } catch (err) {
@@ -122,21 +197,25 @@ export default function App() {
     }
   }, [isReady, isAuthenticated]);
 
-  // Listen for incoming shared links while app is running
+  // Listen for incoming shared links while app is running (Expo Linking)
   useEffect(() => {
     const subscription = Linking.addEventListener('url', (event) => {
       const url = event.url;
-      const urlLower = url.toLowerCase();
+      console.log('[App] URL event:', url);
       
-      // Check if it's shared content from social apps
-      const isSocialLink = 
-        urlLower.includes('youtube.com') ||
-        urlLower.includes('youtu.be') ||
-        urlLower.includes('instagram.com') ||
-        urlLower.includes('reddit.com') ||
-        urlLower.includes('tiktok.com');
-
-      if (isSocialLink && !url.includes('travelagent.app/join')) {
+      // Check if it's our custom share deep link
+      const extractedUrl = extractSharedUrl(url);
+      if (extractedUrl) {
+        console.log('[App] Extracted shared URL from event:', extractedUrl);
+        setSharedContent({ type: 'url', data: extractedUrl });
+        if (isAuthenticated) {
+          setShowShareModal(true);
+        }
+        return;
+      }
+      
+      // Direct social link check (fallback)
+      if (isSocialLink(url) && !url.includes('travelagent.app/join')) {
         console.log('[App] Received shared URL:', url);
         setSharedContent({ type: 'url', data: url });
         if (isAuthenticated) {
@@ -148,13 +227,38 @@ export default function App() {
     return () => subscription.remove();
   }, [isAuthenticated]);
 
+  // Listen for share intent events from native Android module (when app is already open)
+  useEffect(() => {
+    if (!shareIntentEmitter || !isAuthenticated) return;
+
+    const subscription = shareIntentEmitter.addListener('onShareIntent', (url: string) => {
+      console.log('[App] Native share intent event:', url);
+      
+      if (url && isSocialLink(url)) {
+        // Clear the stored URL
+        if (ShareIntentModule) {
+          ShareIntentModule.clearSharedUrl();
+        }
+        
+        // Show beautiful AI processor!
+        setSharedContent({ type: 'url', data: url });
+        setShowShareModal(true);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isAuthenticated]);
+
   const handleShareComplete = (result: any) => {
     setShowShareModal(false);
     setSharedContent(null);
     
-    // Navigate directly to the trip map!
+    // Navigate to country bubble view
     if (navigationRef.current && result.tripId) {
-      navigationRef.current.navigate('TripHome', { tripId: result.tripId });
+      navigationRef.current.navigate('CountryBubbles', { 
+        tripId: result.tripId,
+        countryName: result.destinationCountry || result.destination || 'Unknown',
+      });
     }
   };
 
@@ -301,17 +405,8 @@ export default function App() {
   return (
     <ErrorBoundary>
       <StatusBar style="dark" />
+      
       <NavigationContainer ref={navigationRef} linking={linking}>
-        {/* Smart Share Processor - Zero friction! Shows when user shares from YouTube/Instagram/etc */}
-        {showShareModal && sharedContent && isAuthenticated && (
-          <SmartShareProcessor
-            url={sharedContent.data}
-            onComplete={handleShareComplete}
-            onError={handleShareError}
-            onClose={handleShareClose}
-          />
-        )}
-        
         <Stack.Navigator
           screenOptions={{
             headerStyle: { 
@@ -344,38 +439,38 @@ export default function App() {
               />
             </>
           ) : (
-            // Main Stack
+            // Main Stack - V2 UI
             <>
+              {/* V2: World Map as Home */}
               <Stack.Screen
-                name="TripList"
-                component={TripListScreen}
+                name="WorldMap"
+                component={WorldMapScreen}
                 options={{ headerShown: false }}
               />
+              <Stack.Screen
+                name="CountryBubbles"
+                component={CountryBubbleScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="CategoryList"
+                component={CategoryListScreen}
+                options={{ headerShown: false }}
+              />
+              
+              {/* Legacy: Keep TripHome for backward compatibility */}
               <Stack.Screen
                 name="TripHome"
                 component={TripTabScreen}
                 options={{ headerShown: false }}
               />
               <Stack.Screen
-                name="TripDetail"
-                component={TripDetailScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="TripHomeOld"
-                component={TripHomeScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="CreateTrip"
-                component={CreateTripScreen}
-                options={{ title: 'Create Trip' }}
-              />
-              <Stack.Screen
                 name="JoinTrip"
                 component={JoinTripScreen}
                 options={{ title: 'Join Trip' }}
               />
+              
+              {/* Chat & Agent */}
               <Stack.Screen
                 name="Chat"
                 component={ChatScreen}
@@ -391,6 +486,8 @@ export default function App() {
                 component={CompanionScreen}
                 options={{ headerShown: false }}
               />
+              
+              {/* Utility Screens */}
               <Stack.Screen
                 name="BrowseItems"
                 component={BrowseItemsScreen}
@@ -399,9 +496,7 @@ export default function App() {
               <Stack.Screen
                 name="Profile"
                 component={ProfileScreen}
-                options={{ 
-                  title: 'Profile',
-                }}
+                options={{ title: 'Profile' }}
               />
               <Stack.Screen
                 name="ItinerarySetup"
@@ -417,6 +512,16 @@ export default function App() {
           )}
         </Stack.Navigator>
       </NavigationContainer>
+      
+      {/* Smart Share Processor - AFTER NavigationContainer to render on top */}
+      {showShareModal && sharedContent && isAuthenticated && (
+        <SmartShareProcessor
+          url={sharedContent.data}
+          onComplete={handleShareComplete}
+          onError={handleShareError}
+          onClose={handleShareClose}
+        />
+      )}
     </ErrorBoundary>
   );
 }

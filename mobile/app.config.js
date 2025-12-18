@@ -12,12 +12,14 @@ export default {
     orientation: "portrait",
     userInterfaceStyle: "light",
     assetBundlePatterns: ["**/*"],
-    updates: {
-      url: "https://u.expo.dev/03f5aa21-93d3-46d6-b572-f41aa2eee57a"
-    },
-    runtimeVersion: {
-      policy: "appVersion"
-    },
+    // TEMPORARILY DISABLED - expo-updates causes Windows build issues with SQLite
+    // Re-enable after testing share feature
+    // updates: {
+    //   url: "https://u.expo.dev/03f5aa21-93d3-46d6-b572-f41aa2eee57a"
+    // },
+    // runtimeVersion: {
+    //   policy: "appVersion"
+    // },
     splash: {
       resizeMode: "contain",
       backgroundColor: "#0000FF"
@@ -62,7 +64,7 @@ export default {
     android: {
       package: "com.travelagent.app",
       // Use EAS secret for google-services.json during builds, fallback to local file for development
-      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./android/app/google-services.json",
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./config/google-services.json",
       versionCode: 3,
       permissions: [
         "ACCESS_FINE_LOCATION",
@@ -87,19 +89,34 @@ export default {
       },
       intentFilters: [
         {
-          action: "android.intent.action.SEND",
-          category: ["android.intent.category.DEFAULT"],
+          action: "SEND",
+          category: ["DEFAULT"],
           data: [{ mimeType: "text/plain" }]
         },
         {
-          action: "android.intent.action.SEND",
-          category: ["android.intent.category.DEFAULT"],
+          action: "SEND",
+          category: ["DEFAULT"],
           data: [{ mimeType: "text/*" }]
         },
         {
-          action: "android.intent.action.VIEW",
-          category: ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"],
+          action: "VIEW",
+          category: ["DEFAULT", "BROWSABLE"],
           data: [{ scheme: "travelagent" }]
+        },
+        {
+          action: "VIEW",
+          category: ["DEFAULT", "BROWSABLE"],
+          data: [{ scheme: "https", host: "*.youtube.com" }]
+        },
+        {
+          action: "VIEW",
+          category: ["DEFAULT", "BROWSABLE"],
+          data: [{ scheme: "https", host: "youtu.be" }]
+        },
+        {
+          action: "VIEW",
+          category: ["DEFAULT", "BROWSABLE"],
+          data: [{ scheme: "https", host: "*.instagram.com" }]
         }
       ]
     },
