@@ -276,7 +276,11 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
 
       // Wait for confetti animation to complete (2000ms animation + 500ms delay + 1000ms to enjoy)
       setTimeout(() => {
-        onComplete(response.data);
+        try {
+          onComplete(response.data);
+        } catch (navError) {
+          console.error('[SmartShare] Navigation error:', navError);
+        }
       }, 3500);
 
     } catch (error: any) {
@@ -552,9 +556,11 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
             style={styles.resultContainer}
           >
             <Text style={styles.resultEmoji}>🗺️</Text>
-            <Text style={styles.resultCountry}>{result.destinationCountry}</Text>
+            <Text style={styles.resultCountry}>
+              {result.destinationCountry || result.destination || 'Adventure'}
+            </Text>
             <Text style={styles.resultPlaces}>
-              {result.placesExtracted} place{result.placesExtracted !== 1 ? 's' : ''} discovered!
+              {result.placesExtracted ?? 0} place{(result.placesExtracted ?? 0) !== 1 ? 's' : ''} discovered!
             </Text>
             {result.isNewTrip && (
               <View style={styles.newTripBadge}>
