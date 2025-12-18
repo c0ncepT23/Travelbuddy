@@ -7,7 +7,9 @@ const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 
 export class GeminiService {
   /**
-   * Analyze YouTube video and extract places with summary
+   * @deprecated Use analyzeVideoMetadata() instead - it uses transcript from yt-dlp
+   * This method passes URL directly to Gemini which cannot "watch" videos
+   * Kept for backwards compatibility but not recommended
    */
   static async analyzeYouTubeVideo(
     videoUrl: string
@@ -21,7 +23,12 @@ export class GeminiService {
     }>;
   }> {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
 
       const prompt = `Analyze this YouTube video: ${videoUrl}
 
@@ -111,11 +118,18 @@ If no specific places are mentioned, return an empty places array but still prov
     }>;
   }> {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      // Use gemini-2.0-flash (stable) with structured output for guaranteed JSON
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
 
       // Use transcript if available, otherwise fall back to description
+      // Note: gemini-2.0-flash has 1M token context, so we can use full transcript
       const contentToAnalyze = transcript && transcript.length > 0 
-        ? `Transcript:\n${transcript.substring(0, 15000)}` // Limit to avoid token limits
+        ? `Transcript:\n${transcript}`
         : `Description:\n${description}`;
 
       const prompt = `Analyze this YouTube travel video and determine its type, then extract relevant information.
@@ -143,6 +157,17 @@ ALWAYS extract the destination country and city/region:
 - destination_country: The country name (e.g., "Japan", "Thailand", "France")
 
 STEP 3 - EXTRACT PLACES WITH SUB-CATEGORIES:
+
+**CRITICAL RULES FOR PLACE EXTRACTION:**
+1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT the dish name
+   - ✅ CORRECT: "Pad Thai Fai Ta Lu" (the restaurant)
+   - ❌ WRONG: "Smoky Pad Thai" (the dish)
+   - ✅ CORRECT: "Go Ang" (the restaurant)  
+   - ❌ WRONG: "Hainanese Chicken" (the dish)
+2. Each restaurant/place should appear ONLY ONCE, even if multiple dishes are mentioned
+3. Use the exact name as spoken/shown in the video
+4. If a place name is unclear, include context like "Go Ang Chicken Rice" or "Kor Panich Sticky Rice"
+
 For EACH place, extract detailed categorization:
 
 For FOOD items, identify cuisine_type:
@@ -179,7 +204,7 @@ RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
   ],
   "places": [
     {
-      "name": "Ichiran Ramen",
+      "name": "Ichiran Ramen Shibuya",
       "category": "food",
       "description": "Famous tonkotsu ramen chain with solo dining booths",
       "location": "Shibuya, Tokyo",
@@ -195,6 +220,14 @@ RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
       "day": 2,
       "place_type": "temple",
       "tags": ["iconic", "must-see", "free entry"]
+    },
+    {
+      "name": "Pad Thai Fai Ta Lu",
+      "category": "food",
+      "description": "Michelin-recommended street food for smoky Pad Thai with grilled pork or prawns",
+      "location": "Bangkok, Thailand",
+      "cuisine_type": "street food",
+      "tags": ["michelin", "budget-friendly", "street food"]
     }
   ]
 }
@@ -280,7 +313,12 @@ ALWAYS include destination and destination_country even for places/howto videos.
     }>;
   }> {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
 
       // Combine comments into readable format
       const commentsText = comments.map((c, i) => `Comment ${i + 1}: ${c}`).join('\n\n');
@@ -394,7 +432,12 @@ If no specific places mentioned, return empty places array.`;
     }>;
   }> {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
 
       // Note: For now we are only analyzing text, but we could add image analysis later
       // using the multimodal capabilities of Gemini Pro Vision
