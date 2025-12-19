@@ -95,6 +95,8 @@ export class ContentProcessorService {
 
   /**
    * Fetch YouTube video data using yt-dlp (most reliable method)
+   * Falls back to Apify if yt-dlp is blocked by YouTube
+   * Final fallback to oEmbed API for basic metadata
    */
   private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData> {
     const videoId = extractYouTubeVideoId(url);
@@ -102,6 +104,7 @@ export class ContentProcessorService {
       throw new Error('Invalid YouTube URL');
     }
 
+    // Strategy 1: Try yt-dlp first (fastest, free)
     try {
       logger.info(`[ContentProcessor] Fetching video using yt-dlp: ${videoId}`);
 
@@ -116,8 +119,101 @@ export class ContentProcessorService {
         channel: videoData.channelName,
       };
     } catch (error: any) {
-      logger.error('[ContentProcessor] YouTube fetch error:', error.message);
-      throw new Error(`Failed to fetch YouTube video: ${error.message}`);
+      logger.error('[ContentProcessor] yt-dlp error:', error.message);
+      
+      // Check if it's a bot detection error
+      const isBotBlocked = error.message.includes('bot') || error.message.includes('Sign in');
+      
+      if (!isBotBlocked) {
+        throw new Error(`Failed to fetch YouTube video: ${error.message}`);
+      }
+      
+      logger.info('[ContentProcessor] yt-dlp blocked by YouTube, trying Apify...');
+    }
+
+    // Strategy 2: Try Apify (handles bot detection, extracts transcripts)
+    try {
+      const { ApifyYoutubeService } = await import('./apifyYoutube.service');
+      
+      if (ApifyYoutubeService.isConfigured()) {
+        const apifyResult = await ApifyYoutubeService.getVideoTranscript(url);
+        
+        if (apifyResult && apifyResult.transcript) {
+          logger.info(`[ContentProcessor] Apify success: "${apifyResult.title}" - ${apifyResult.transcript.length} chars`);
+          
+          return {
+            title: apifyResult.title,
+            description: apifyResult.description || '',
+            transcript: apifyResult.transcript,
+            thumbnail_url: apifyResult.thumbnailUrl,
+            thumbnail: apifyResult.thumbnailUrl,
+            channel: apifyResult.channelName,
+          };
+        }
+        
+        // Apify worked but no transcript - still use metadata
+        if (apifyResult) {
+          logger.info(`[ContentProcessor] Apify got metadata but no transcript`);
+          return {
+            title: apifyResult.title,
+            description: apifyResult.description || '',
+            transcript: '', // Will trigger video analysis
+            thumbnail_url: apifyResult.thumbnailUrl,
+            thumbnail: apifyResult.thumbnailUrl,
+            channel: apifyResult.channelName,
+          };
+        }
+      } else {
+        logger.warn('[ContentProcessor] Apify not configured, skipping');
+      }
+    } catch (apifyError: any) {
+      logger.error('[ContentProcessor] Apify fallback error:', apifyError.message);
+    }
+
+    // Strategy 3: Final fallback to oEmbed (always works, no transcript)
+    logger.info('[ContentProcessor] Falling back to oEmbed API');
+    return await this.fetchYouTubeWithOembed(videoId);
+  }
+
+  /**
+   * Final fallback: Fetch basic YouTube metadata using oEmbed API
+   * Used when both yt-dlp and Apify fail
+   */
+  private static async fetchYouTubeWithOembed(videoId: string): Promise<YouTubeVideoData> {
+    try {
+      logger.info(`[ContentProcessor] Using oEmbed for: ${videoId}`);
+      
+      const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+      const response = await axios.get(oembedUrl, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      
+      const data = response.data;
+      logger.info(`[ContentProcessor] oEmbed success: "${data.title}" by ${data.author_name}`);
+      
+      return {
+        title: data.title || 'YouTube Video',
+        description: '', // oEmbed doesn't provide description
+        transcript: '', // No transcript - will trigger video analysis
+        thumbnail_url: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        channel: data.author_name || 'Unknown',
+      };
+    } catch (oembedError: any) {
+      logger.error('[ContentProcessor] oEmbed also failed:', oembedError.message);
+      
+      // Ultimate fallback: Return minimal data to trigger video analysis
+      return {
+        title: 'YouTube Video',
+        description: '',
+        transcript: '',
+        thumbnail_url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        channel: 'Unknown',
+      };
     }
   }
 
