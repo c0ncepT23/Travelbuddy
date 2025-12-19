@@ -239,5 +239,34 @@ export class YtDlpService {
       return false;
     }
   }
+
+  /**
+   * Get direct video download URL (for video analysis)
+   * Returns the best quality video URL that can be downloaded
+   */
+  static async getVideoDownloadUrl(url: string): Promise<string | null> {
+    try {
+      logger.info(`[YtDlp] Getting video download URL for: ${url}`);
+      
+      // Get the best video URL (prefer mp4, max 720p to save bandwidth)
+      const { stdout } = await execAsync(
+        `yt-dlp -f "best[height<=720][ext=mp4]/best[height<=720]/best" --get-url "${url}"`,
+        { timeout: 30000 }
+      );
+      
+      const videoUrl = stdout.trim();
+      
+      if (videoUrl && videoUrl.startsWith('http')) {
+        logger.info(`[YtDlp] Got video URL (${videoUrl.substring(0, 50)}...)`);
+        return videoUrl;
+      }
+      
+      logger.warn('[YtDlp] Could not extract video URL');
+      return null;
+    } catch (error: any) {
+      logger.error('[YtDlp] Failed to get video URL:', error.message);
+      return null;
+    }
+  }
 }
 

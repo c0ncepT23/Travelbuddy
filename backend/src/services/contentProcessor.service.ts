@@ -413,12 +413,65 @@ export class ContentProcessorService {
       logger.info(`Video: ${videoData.title}`);
       logger.info(`Transcript length: ${videoData.transcript.length} characters`);
 
-      // Use Gemini to analyze with REAL TRANSCRIPT (not just description!)
-      const analysis = await GeminiService.analyzeVideoMetadata(
-        videoData.title,
-        videoData.description,
-        videoData.transcript  // ✅ NOW USING REAL TRANSCRIPT!
-      );
+      let analysis;
+      
+      // Smart decision: Use video analysis if no good transcript available
+      const hasGoodTranscript = videoData.transcript && videoData.transcript.length > 100;
+      
+      if (hasGoodTranscript) {
+        // Use text-based analysis (cheaper, faster)
+        logger.info('[YouTube] Using transcript-based analysis');
+        analysis = await GeminiService.analyzeVideoMetadata(
+          videoData.title,
+          videoData.description,
+          videoData.transcript
+        );
+      } else {
+        // Fallback to video analysis (for silent/music videos with burned-in subtitles)
+        logger.info('[YouTube] No transcript - falling back to VIDEO analysis');
+        try {
+          // Get direct video URL from yt-dlp (we need the actual video file URL)
+          const { YtDlpService } = await import('./ytdlp.service');
+          const videoFileUrl = await YtDlpService.getVideoDownloadUrl(url);
+          
+          if (videoFileUrl) {
+            const videoAnalysis = await GeminiService.analyzeVideoContent(videoFileUrl, {
+              platform: 'youtube',
+              title: videoData.title,
+              caption: videoData.description,
+            });
+            
+            // Convert to expected format
+            analysis = {
+              summary: videoAnalysis.summary,
+              video_type: videoAnalysis.video_type,
+              destination: videoAnalysis.destination,
+              destination_country: videoAnalysis.destination_country,
+              places: videoAnalysis.places.map(p => ({
+                ...p,
+                category: p.category as any,
+              })),
+              duration_days: undefined,
+              itinerary: undefined,
+            };
+          } else {
+            // Double fallback: use title/description only
+            logger.warn('[YouTube] Could not get video URL, using metadata only');
+            analysis = await GeminiService.analyzeVideoMetadata(
+              videoData.title,
+              videoData.description,
+              ''
+            );
+          }
+        } catch (videoError: any) {
+          logger.error('[YouTube] Video analysis failed, using metadata only:', videoError.message);
+          analysis = await GeminiService.analyzeVideoMetadata(
+            videoData.title,
+            videoData.description,
+            ''
+          );
+        }
+      }
 
       logger.info(`Video type: ${analysis.video_type}`);
       logger.info(`Found ${analysis.places.length} places in video`);
@@ -436,7 +489,7 @@ export class ContentProcessorService {
       if (analysis.video_type === 'guide') {
         logger.info(`Guide video detected: ${analysis.duration_days} days in ${analysis.destination}`);
 
-        const processedPlaces = analysis.places.map((place) => ({
+        const processedPlaces = analysis.places.map((place: any) => ({
           name: place.name,
           category: place.category,
           description: place.description,
@@ -444,7 +497,7 @@ export class ContentProcessorService {
           location_lat: undefined as number | undefined,
           location_lng: undefined as number | undefined,
           source_title: videoData.title,
-          day: place.day,
+          day: place.day, // May be undefined for video analysis fallback
           // Sub-categorization
           cuisine_type: place.cuisine_type,
           place_type: place.place_type,

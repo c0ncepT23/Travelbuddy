@@ -276,11 +276,15 @@ export class ApifyInstagramService {
     locationHint?: string
   ): Promise<{
     summary: string;
+    destination?: string;
+    destination_country?: string;
     places: Array<{
       name: string;
       category: ItemCategory;
       description: string;
       location?: string;
+      cuisine_type?: string;
+      place_type?: string;
     }>;
   }> {
     try {
@@ -313,43 +317,55 @@ export class ApifyInstagramService {
         throw new Error('Video processing failed');
       }
 
-      logger.info('[Apify] Video ready, analyzing with Gemini 2.5...');
+      logger.info('[Apify] Video ready, analyzing with Gemini...');
 
       // Use Gemini 2.0 Flash Exp for multimodal analysis (supports video)
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash-exp',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
 
-      const prompt = `You are a travel assistant. Analyze this Instagram Reel/Video.
+      const prompt = `Analyze this Instagram Reel and extract ALL places mentioned or shown.
 
 Caption: "${caption}"
-${locationHint ? `Location Hint: ${locationHint}` : ''}
+${locationHint ? `Location tagged: ${locationHint}` : ''}
 
-INSTRUCTIONS:
-1. WATCH the entire video carefully
-2. LISTEN to any spoken audio (the creator might mention place names)
-3. READ any on-screen text, overlays, or captions in the video
-4. IDENTIFY the specific location(s) being featured
+**IMPORTANT: Read ALL on-screen text carefully!**
+- Look for restaurant names, shop names, place names shown as text overlays/captions
+- Look for addresses or location indicators
+- Look for signs, logos, storefront text
+- Listen for spoken place names
 
-For each place shown/mentioned:
-- Extract the EXACT name if visible/spoken
-- Determine the city and country
-- Categorize as: food, accommodation, place, shopping, activity, or tip
-- Note what makes it special (based on visuals/audio)
+**CRITICAL RULES FOR PLACE EXTRACTION:**
+1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT dish descriptions
+   - ✅ CORRECT: "Pad Thai Fai Ta Lu" (the restaurant)
+   - ❌ WRONG: "Smoky Pad Thai" (the dish)
+2. Each place should appear ONLY ONCE
+3. Use the exact name as shown/spoken in the video
 
-RESPOND ONLY WITH VALID JSON (no markdown):
+For FOOD places, identify cuisine_type: "ramen", "street food", "cafe", "fine dining", etc.
+For OTHER places, identify place_type: "temple", "market", "viewpoint", "shopping mall", etc.
+
+RESPOND WITH VALID JSON:
 {
-  "summary": "Brief summary of what the reel shows",
+  "summary": "Brief description of what this reel shows",
+  "destination": "City name (e.g., Bangkok, Tokyo)",
+  "destination_country": "Country name (e.g., Thailand, Japan)",
   "places": [
     {
-      "name": "Exact Place Name",
-      "category": "food",
-      "description": "What makes it special based on video",
-      "location": "City, Country"
+      "name": "Exact business/place name",
+      "category": "food" or "place" or "shopping" or "activity",
+      "description": "What makes this place special",
+      "location": "Area/neighborhood if mentioned",
+      "cuisine_type": "For food places",
+      "place_type": "For non-food places"
     }
   ]
 }
 
-If you cannot identify a specific place, still try to extract the city/area shown.
-If no places are identifiable, return an empty places array.`;
+If no specific places are identifiable, return empty places array but still try to identify destination.`;
 
       const result = await model.generateContent([
         prompt,
@@ -376,6 +392,9 @@ If no places are identifiable, return an empty places array.`;
       const parsed = JSON.parse(jsonMatch[0]);
 
       logger.info(`[Apify] Gemini extracted ${parsed.places?.length || 0} places from video`);
+      if (parsed.destination) {
+        logger.info(`[Apify] Destination: ${parsed.destination} (${parsed.destination_country})`);
+      }
 
       // Cleanup: Delete the uploaded file
       try {
@@ -387,6 +406,8 @@ If no places are identifiable, return an empty places array.`;
 
       return {
         summary: parsed.summary || 'Instagram Reel',
+        destination: parsed.destination,
+        destination_country: parsed.destination_country,
         places: parsed.places || [],
       };
     } catch (error: any) {

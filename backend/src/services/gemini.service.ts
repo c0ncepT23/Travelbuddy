@@ -1,9 +1,15 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { config } from '../config/env';
 import { ItemCategory } from '../types';
 import logger from '../config/logger';
+import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
+const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
 
 export class GeminiService {
   /**
@@ -527,6 +533,197 @@ If no specific place is mentioned (just "My trip to Paris"), return empty places
         summary: caption.substring(0, 100) + '...',
         places: []
       };
+    }
+  }
+
+  /**
+   * Analyze video content directly using Gemini's vision capabilities
+   * Used for: Instagram Reels (always), YouTube (when no transcript)
+   * Downloads video, uploads to Gemini File API, extracts places from visual content
+   */
+  static async analyzeVideoContent(
+    videoUrl: string,
+    options: {
+      platform: 'youtube' | 'instagram' | 'tiktok';
+      caption?: string; // Additional text context (Instagram caption, video title)
+      title?: string;
+    }
+  ): Promise<{
+    summary: string;
+    video_type: 'places' | 'howto' | 'guide';
+    destination?: string;
+    destination_country?: string;
+    places: Array<{
+      name: string;
+      category: string;
+      description: string;
+      location?: string;
+      cuisine_type?: string;
+      place_type?: string;
+      tags?: string[];
+    }>;
+  }> {
+    let tempFilePath: string | null = null;
+    
+    try {
+      logger.info(`[Gemini Video] Starting video analysis for ${options.platform}: ${videoUrl}`);
+      
+      // Step 1: Download video to temp file
+      logger.info('[Gemini Video] Downloading video...');
+      const response = await axios({
+        method: 'GET',
+        url: videoUrl,
+        responseType: 'arraybuffer',
+        timeout: 120000, // 2 minute timeout for large videos
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      
+      // Determine file extension from content-type or URL
+      const contentType = response.headers['content-type'] || 'video/mp4';
+      const ext = contentType.includes('mp4') ? '.mp4' : 
+                  contentType.includes('webm') ? '.webm' : '.mp4';
+      
+      tempFilePath = path.join(os.tmpdir(), `yori_video_${Date.now()}${ext}`);
+      fs.writeFileSync(tempFilePath, response.data);
+      
+      const fileSizeKB = Math.round(response.data.length / 1024);
+      logger.info(`[Gemini Video] Downloaded ${fileSizeKB}KB to ${tempFilePath}`);
+      
+      // Step 2: Upload to Gemini File API
+      logger.info('[Gemini Video] Uploading to Gemini...');
+      const uploadResult = await fileManager.uploadFile(tempFilePath, {
+        mimeType: contentType.split(';')[0], // Remove charset if present
+        displayName: `video_${Date.now()}`,
+      });
+      
+      logger.info(`[Gemini Video] Upload complete: ${uploadResult.file.name}`);
+      
+      // Step 3: Wait for processing (Gemini needs to process the video)
+      let file = uploadResult.file;
+      while (file.state === 'PROCESSING') {
+        logger.info('[Gemini Video] Waiting for video processing...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const getResult = await fileManager.getFile(file.name);
+        file = getResult;
+      }
+      
+      if (file.state === 'FAILED') {
+        throw new Error('Video processing failed');
+      }
+      
+      logger.info('[Gemini Video] Video ready for analysis');
+      
+      // Step 4: Analyze with Gemini
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash-exp', // Use 2.0 for video (3.0 may not support yet)
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
+      
+      const contextInfo = options.caption 
+        ? `\n\nAdditional context from caption/title: "${options.caption}"` 
+        : '';
+      const titleInfo = options.title ? `\nVideo title: "${options.title}"` : '';
+      
+      const prompt = `Analyze this ${options.platform} travel video and extract ALL places mentioned or shown.
+
+${titleInfo}${contextInfo}
+
+**IMPORTANT: Read ALL on-screen text carefully!**
+- Look for restaurant names, shop names, place names shown as text overlays
+- Look for addresses or location indicators
+- Look for price tags, menu items with restaurant context
+- Look for signs, logos, storefront text
+
+**CRITICAL RULES FOR PLACE EXTRACTION:**
+1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT dish descriptions
+   - ✅ CORRECT: "Pad Thai Fai Ta Lu" (the restaurant)
+   - ❌ WRONG: "Smoky Pad Thai" (the dish)
+2. Each place should appear ONLY ONCE
+3. Use the exact name as shown/spoken in the video
+
+For FOOD places, identify cuisine_type: "ramen", "street food", "cafe", "fine dining", etc.
+For OTHER places, identify place_type: "temple", "market", "viewpoint", "shopping mall", etc.
+
+RESPOND WITH VALID JSON:
+{
+  "summary": "Brief description of what this video shows",
+  "video_type": "places" or "guide" or "howto",
+  "destination": "City name (e.g., Bangkok, Tokyo)",
+  "destination_country": "Country name (e.g., Thailand, Japan)",
+  "places": [
+    {
+      "name": "Exact business/place name",
+      "category": "food" or "place" or "shopping" or "activity",
+      "description": "What makes this place special",
+      "location": "Area/neighborhood if mentioned",
+      "cuisine_type": "For food places",
+      "place_type": "For non-food places",
+      "tags": ["michelin", "budget-friendly", "hidden gem", etc.]
+    }
+  ]
+}
+
+If no specific places are identifiable, return empty places array.`;
+
+      const result = await model.generateContent([
+        {
+          fileData: {
+            mimeType: file.mimeType,
+            fileUri: file.uri,
+          },
+        },
+        { text: prompt },
+      ]);
+      
+      const text = result.response.text();
+      logger.info(`[Gemini Video] Raw response: ${text.substring(0, 200)}...`);
+      
+      // Parse JSON response
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+      
+      const parsed = JSON.parse(cleanText);
+      
+      logger.info(`[Gemini Video] Extracted ${parsed.places?.length || 0} places from video`);
+      if (parsed.destination) {
+        logger.info(`[Gemini Video] Destination: ${parsed.destination} (${parsed.destination_country})`);
+      }
+      
+      // Step 5: Cleanup - delete uploaded file from Gemini
+      try {
+        await fileManager.deleteFile(file.name);
+        logger.info('[Gemini Video] Cleaned up uploaded file');
+      } catch (cleanupError) {
+        logger.warn('[Gemini Video] Failed to cleanup uploaded file:', cleanupError);
+      }
+      
+      return {
+        summary: parsed.summary || '',
+        video_type: parsed.video_type || 'places',
+        destination: parsed.destination,
+        destination_country: parsed.destination_country,
+        places: parsed.places || [],
+      };
+      
+    } catch (error: any) {
+      logger.error('[Gemini Video] Analysis error:', error.message);
+      throw error;
+    } finally {
+      // Always cleanup temp file
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+          logger.info('[Gemini Video] Cleaned up temp file');
+        } catch (e) {
+          logger.warn('[Gemini Video] Failed to cleanup temp file');
+        }
+      }
     }
   }
 }
