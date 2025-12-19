@@ -206,62 +206,102 @@ export default function CountryBubbleScreen() {
 
   // Generate MICRO bubbles (subcategories: Ramen, Sushi, Cheesecake, etc.)
   const microBubbles = useMemo((): BubbleData[] => {
-    if (items.length === 0 || !selectedCategory) return [];
+    try {
+      if (!items || items.length === 0 || !selectedCategory) return [];
 
-    const categoryItems = items.filter(item => {
-      const cat = item.category || 'place';
-      if (selectedCategory === 'activity') {
-        return cat === 'activity' || cat === 'place';
-      }
-      return cat === selectedCategory;
-    });
+      const categoryItems = items.filter(item => {
+        if (!item) return false;
+        const cat = item.category || 'place';
+        if (selectedCategory === 'activity') {
+          return cat === 'activity' || cat === 'place';
+        }
+        return cat === selectedCategory;
+      });
 
-    // Group by cuisine_type or place_type
-    const subGroups: Record<string, SavedItem[]> = {};
-    categoryItems.forEach(item => {
-      const subType = item.cuisine_type || item.place_type || 'other';
-      if (!subGroups[subType]) subGroups[subType] = [];
-      subGroups[subType].push(item);
-    });
+      if (categoryItems.length === 0) return [];
 
-    // Positions for micro bubbles (matching Figma)
-    const positions = [
-      { x: 25, y: 28 },
-      { x: 72, y: 32 },
-      { x: 35, y: 52 },
-      { x: 68, y: 58 },
-      { x: 50, y: 75 },
-      { x: 28, y: 70 },
-    ];
+      // Group by cuisine_type or place_type
+      const subGroups: Record<string, SavedItem[]> = {};
+      categoryItems.forEach(item => {
+        const subType = String(item.cuisine_type || item.place_type || 'other');
+        if (!subGroups[subType]) subGroups[subType] = [];
+        subGroups[subType].push(item);
+      });
 
-    return Object.entries(subGroups)
-      .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, 6)
-      .map(([subType, subItems], index) => ({
-        id: `micro-${subType}`,
-        label: subType.toUpperCase(),
-        count: subItems.length,
-        color: SUBCATEGORY_COLORS[index % SUBCATEGORY_COLORS.length],
-        position: positions[index] || { x: 50, y: 50 },
-        items: subItems,
-      }));
+      // Positions for micro bubbles (matching Figma)
+      const positions = [
+        { x: 25, y: 28 },
+        { x: 72, y: 32 },
+        { x: 35, y: 52 },
+        { x: 68, y: 58 },
+        { x: 50, y: 75 },
+        { x: 28, y: 70 },
+      ];
+
+      return Object.entries(subGroups)
+        .sort((a, b) => b[1].length - a[1].length)
+        .slice(0, 6)
+        .map(([subType, subItems], index) => ({
+          id: `micro-${subType || 'unknown'}`,
+          label: String(subType || 'OTHER').toUpperCase(),
+          count: subItems?.length || 0,
+          color: SUBCATEGORY_COLORS[index % SUBCATEGORY_COLORS.length],
+          position: positions[index] || { x: 50, y: 50 },
+          items: subItems || [],
+        }));
+    } catch (error) {
+      console.error('[CountryBubble] Error generating micro bubbles:', error);
+      return [];
+    }
   }, [items, selectedCategory]);
 
   const handleMacroBubblePress = (bubble: BubbleData) => {
-    if (bubble.category) {
-      setSelectedCategory(bubble.category);
-      setViewMode('micro');
+    try {
+      if (bubble.category) {
+        console.log('[CountryBubble] Macro bubble pressed:', bubble.category);
+        setSelectedCategory(bubble.category);
+        setViewMode('micro');
+      }
+    } catch (error) {
+      console.error('[CountryBubble] Error in handleMacroBubblePress:', error);
     }
   };
 
   const handleMicroBubblePress = (bubble: BubbleData) => {
-    navigation.navigate('CategoryList', {
-      tripId,
-      countryName,
-      categoryLabel: bubble.label,
-      categoryType: selectedCategory,
-      items: bubble.items,
-    });
+    try {
+      console.log('[CountryBubble] Micro bubble pressed:', bubble.label, 'items:', bubble.items?.length);
+      
+      // Simplify items to avoid serialization issues with large/complex objects
+      const simplifiedItems = (bubble.items || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        description: item.description,
+        location_name: item.location_name,
+        location_lat: item.location_lat,
+        location_lng: item.location_lng,
+        rating: item.rating,
+        user_ratings_total: item.user_ratings_total,
+        cuisine_type: item.cuisine_type,
+        place_type: item.place_type,
+        area_name: item.area_name,
+        google_place_id: item.google_place_id,
+        // Simplify photos - only pass first photo URL if exists
+        photos_json: item.photos_json ? 
+          (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) 
+          : null,
+      }));
+      
+      navigation.navigate('CategoryList', {
+        tripId,
+        countryName,
+        categoryLabel: bubble.label || 'Places',
+        categoryType: selectedCategory || 'place',
+        items: simplifiedItems,
+      });
+    } catch (error) {
+      console.error('[CountryBubble] Error in handleMicroBubblePress:', error);
+    }
   };
 
   const handleBack = () => {

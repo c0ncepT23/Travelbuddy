@@ -194,7 +194,19 @@ export default function CategoryListScreen() {
   const countryName = params.countryName || 'Unknown';
   const categoryLabel = params.categoryLabel || 'Places';
   const categoryType = params.categoryType || 'place';
-  const items = Array.isArray(params.items) ? params.items : [];
+  
+  // Safely extract and validate items array
+  const items = useMemo(() => {
+    try {
+      if (!params.items) return [];
+      if (!Array.isArray(params.items)) return [];
+      // Filter out any null/undefined items
+      return params.items.filter((item: any) => item && typeof item === 'object' && item.id);
+    } catch (error) {
+      console.error('[CategoryList] Error processing items:', error);
+      return [];
+    }
+  }, [params.items]);
 
   const { location } = useLocationStore();
   const userLocation = location ? {
