@@ -417,7 +417,56 @@ If no specific places are identifiable, return empty places array but still try 
   }
 
   /**
+   * Check if caption has useful content for place extraction
+   * Returns true if caption has enough content to try text-based analysis
+   */
+  private static hasUsefulCaption(caption: string): boolean {
+    if (!caption) return false;
+    
+    // Remove emojis, hashtags, and common filler words
+    const cleaned = caption
+      .replace(/[\u{1F600}-\u{1F6FF}]/gu, '') // emojis
+      .replace(/#\w+/g, '') // hashtags
+      .replace(/@\w+/g, '') // mentions
+      .replace(/\n+/g, ' ')
+      .trim();
+    
+    // Check minimum length (at least 50 chars of actual content)
+    if (cleaned.length < 50) {
+      logger.info(`[Apify] Caption too short (${cleaned.length} chars) - not useful`);
+      return false;
+    }
+    
+    // Check if it mentions location-related keywords
+    const locationKeywords = [
+      'restaurant', 'cafe', 'bar', 'hotel', 'resort', 'temple', 'museum',
+      'market', 'shop', 'store', 'beach', 'park', 'street', 'road',
+      'visit', 'went to', 'at the', 'located', 'address', 'find us',
+      'place', 'spot', 'try', 'must', 'best', 'recommend'
+    ];
+    
+    const hasLocationContext = locationKeywords.some(kw => 
+      cleaned.toLowerCase().includes(kw)
+    );
+    
+    if (hasLocationContext) {
+      logger.info('[Apify] Caption has location-related keywords - useful');
+      return true;
+    }
+    
+    // If long enough but no keywords, still try it
+    if (cleaned.length > 100) {
+      logger.info('[Apify] Caption is long enough - worth trying');
+      return true;
+    }
+    
+    logger.info('[Apify] Caption lacks useful location content');
+    return false;
+  }
+
+  /**
    * Full pipeline: Scrape Instagram + Analyze with Gemini + Enrich with Google Places
+   * Smart approach: Try caption first (cheaper), video analysis as fallback
    */
   static async extractPlacesFromInstagram(url: string): Promise<InstagramExtractionResult> {
     let videoPath: string | null = null;
@@ -452,28 +501,77 @@ If no specific places are identifiable, return empty places array but still try 
           category: ItemCategory;
           description: string;
           location?: string;
+          cuisine_type?: string;
+          place_type?: string;
         }>;
       };
 
-      // Step 2: Analyze content
-      if (scraped.videoUrl) {
-        // Video/Reel - Use full multimodal analysis
-        logger.info('[Apify] Video detected, using multimodal analysis');
+      // Step 2: Smart analysis - try caption first, video as fallback
+      const hasGoodCaption = this.hasUsefulCaption(scraped.caption);
+      let usedVideoAnalysis = false;
+      
+      if (hasGoodCaption) {
+        // Try caption-based analysis first (cheaper, faster)
+        logger.info('[Apify] Caption looks useful, trying text analysis first...');
+        try {
+          const captionResult = await GeminiService.analyzeInstagramPost(
+            scraped.caption,
+            scraped.displayUrl
+          );
+          
+          // Check if caption analysis found places
+          if (captionResult.places && captionResult.places.length > 0) {
+            logger.info(`[Apify] Caption analysis found ${captionResult.places.length} places - using text results`);
+            analysisResult = captionResult;
+          } else if (scraped.videoUrl) {
+            // No places from caption, try video analysis
+            logger.info('[Apify] Caption analysis found 0 places, falling back to video analysis...');
+            videoPath = await this.downloadVideo(scraped.videoUrl);
+            analysisResult = await this.analyzeVideoWithGemini(
+              videoPath,
+              scraped.caption,
+              scraped.locationName
+            );
+            usedVideoAnalysis = true;
+          } else {
+            // No video to analyze, use caption result
+            analysisResult = captionResult;
+          }
+        } catch (captionError: any) {
+          logger.warn(`[Apify] Caption analysis failed: ${captionError.message}`);
+          if (scraped.videoUrl) {
+            logger.info('[Apify] Falling back to video analysis...');
+            videoPath = await this.downloadVideo(scraped.videoUrl);
+            analysisResult = await this.analyzeVideoWithGemini(
+              videoPath,
+              scraped.caption,
+              scraped.locationName
+            );
+            usedVideoAnalysis = true;
+          } else {
+            throw captionError;
+          }
+        }
+      } else if (scraped.videoUrl) {
+        // Caption not useful - use video analysis directly (reads burned-in subtitles)
+        logger.info('[Apify] Caption not useful, using VIDEO analysis (reads on-screen text)...');
         videoPath = await this.downloadVideo(scraped.videoUrl);
-
         analysisResult = await this.analyzeVideoWithGemini(
           videoPath,
           scraped.caption,
           scraped.locationName
         );
+        usedVideoAnalysis = true;
       } else {
-        // Image post - Use text analysis with caption
-        logger.info('[Apify] Image post, using caption analysis');
+        // Image post with poor caption - best effort with caption
+        logger.info('[Apify] Image post with poor caption, trying anyway...');
         analysisResult = await GeminiService.analyzeInstagramPost(
           scraped.caption,
           scraped.displayUrl
         );
       }
+      
+      logger.info(`[Apify] Analysis complete. Method: ${usedVideoAnalysis ? 'VIDEO' : 'CAPTION'}, Places found: ${analysisResult.places?.length || 0}`)
 
       // Step 3: Enrich with Google Places
       const enrichedPlaces = await Promise.all(
@@ -487,6 +585,17 @@ If no specific places are identifiable, return empty places array but still try 
             );
 
             if (enriched) {
+              // Validate/enrich cuisine and place types with Google data
+              let finalCuisineType = place.cuisine_type;
+              let finalPlaceType = place.place_type;
+              
+              if (enriched.google_cuisine_type && !place.cuisine_type) {
+                finalCuisineType = enriched.google_cuisine_type;
+              }
+              if (enriched.google_place_type && !place.place_type) {
+                finalPlaceType = enriched.google_place_type;
+              }
+              
               return {
                 name: place.name,
                 category: place.category,
@@ -502,9 +611,12 @@ If no specific places are identifiable, return empty places array but still try 
                 area_name: enriched.area_name,
                 photos_json: enriched.photos,
                 opening_hours_json: enriched.opening_hours,
+                cuisine_type: finalCuisineType,
+                place_type: finalPlaceType,
+                tags: enriched.google_tags || [],
                 originalContent: {
                   ...scraped,
-                  analysisMethod: scraped.videoUrl ? 'gemini_video' : 'gemini_caption',
+                  analysisMethod: usedVideoAnalysis ? 'gemini_video' : 'gemini_caption',
                 },
               };
             }
@@ -514,6 +626,8 @@ If no specific places are identifiable, return empty places array but still try 
               category: place.category,
               description: place.description,
               location_name: place.location,
+              cuisine_type: place.cuisine_type,
+              place_type: place.place_type,
               originalContent: scraped,
             };
           } catch (error: any) {
@@ -523,6 +637,8 @@ If no specific places are identifiable, return empty places array but still try 
               category: place.category,
               description: place.description,
               location_name: place.location,
+              cuisine_type: place.cuisine_type,
+              place_type: place.place_type,
               originalContent: scraped,
             };
           }
