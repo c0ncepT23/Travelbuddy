@@ -22,7 +22,6 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
-  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,7 +33,6 @@ import { useLocationStore } from '../../stores/locationStore';
 import { useTripStore } from '../../stores/tripStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const PANEL_HEIGHT = SCREEN_HEIGHT * 0.85;
 
 // Zenly-inspired color palette
 const colors = {
@@ -94,33 +92,11 @@ export default function AgentChatScreen() {
   
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
   // Initialize location tracking
   useEffect(() => {
     startTracking();
-  }, []);
-
-  // Handle keyboard events
-  useEffect(() => {
-    const keyboardDidShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShow.remove();
-      keyboardDidHide.remove();
-    };
   }, []);
 
   // Add welcome message if first time
@@ -329,271 +305,194 @@ export default function AgentChatScreen() {
   // Show error state if no trips
   if (!tripId) {
     return (
-      <View style={styles.overlay}>
-        <StatusBar barStyle="light-content" />
-        <TouchableOpacity style={styles.backdrop} onPress={handleClose} activeOpacity={1} />
-        <View style={styles.panel}>
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <LinearGradient
-                colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
-                style={styles.aiIconBox}
-              >
-                <Ionicons name="sparkles" size={24} color={colors.textWhite} />
-              </LinearGradient>
-              <View style={styles.headerText}>
-                <Text style={styles.headerTitle}>AI Travel Agent</Text>
-                <View style={styles.statusRow}>
-                  <View style={styles.onlineDot} />
-                  <Text style={styles.statusText}>Online & Ready</Text>
-                </View>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleClose} activeOpacity={0.7}>
+            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <LinearGradient
+              colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
+              style={styles.aiIconBox}
+            >
+              <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+            </LinearGradient>
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>AI Travel Agent</Text>
+              <View style={styles.statusRow}>
+                <View style={styles.onlineDot} />
+                <Text style={styles.statusText}>Online & Ready</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-              <Ionicons name="close" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
           </View>
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🗺️</Text>
-            <Text style={styles.emptyTitle}>No trips yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Share a YouTube or Instagram link to get started!
-            </Text>
-          </View>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>🗺️</Text>
+          <Text style={styles.emptyTitle}>No trips yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Share a YouTube or Instagram link to get started!
+          </Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.overlay} pointerEvents="box-none">
-      <StatusBar barStyle="light-content" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      {/* Backdrop - only closes when tapped directly */}
-      <TouchableOpacity 
-        style={styles.backdrop} 
-        onPress={handleClose} 
-        activeOpacity={1}
-      />
-      
-      {/* Main Panel - receives all touch events */}
-      <MotiView
-        from={{ translateY: PANEL_HEIGHT }}
-        animate={{ translateY: 0 }}
-        transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-        style={styles.panel}
-        pointerEvents="box-none"
-      >
-        <View style={styles.blurContainer} pointerEvents="auto">
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              {/* AI Icon with rotation animation */}
-              <MotiView
-                from={{ rotate: '0deg' }}
-                animate={{ rotate: '5deg' }}
-                transition={{
-                  type: 'timing',
-                  duration: 1000,
-                  loop: true,
-                  repeatReverse: true,
-                }}
-              >
-                <LinearGradient
-                  colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
-                  style={styles.aiIconBox}
-                >
-                  <Ionicons name="sparkles" size={24} color={colors.textWhite} />
-                </LinearGradient>
-              </MotiView>
-              
-              <View style={styles.headerText}>
-                <Text style={styles.headerTitle}>AI Travel Agent</Text>
-                <View style={styles.statusRow}>
-                  <MotiView
-                    from={{ scale: 0.8, opacity: 0.5 }}
-                    animate={{ scale: 1.2, opacity: 1 }}
-                    transition={{
-                      type: 'timing',
-                      duration: 800,
-                      loop: true,
-                      repeatReverse: true,
-                    }}
-                    style={styles.onlineDot}
-                  />
-                  <Text style={styles.statusText}>Online & Ready</Text>
-                </View>
-              </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={handleClose} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <LinearGradient
+            colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
+            style={styles.aiIconBox}
+          >
+            <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+          </LinearGradient>
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitle}>AI Travel Agent</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.statusText}>Online & Ready</Text>
             </View>
-            
-            {/* Close Button */}
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose} activeOpacity={0.7}>
-              <Ionicons name="close" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Messages Area */}
-          <View style={styles.messagesArea}>
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.messagesList}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={isTyping ? <TypingIndicator /> : null}
-              keyboardShouldPersistTaps="handled"
-            />
-          </View>
-
-          {/* Input Area - Fixed at bottom */}
-          <View style={[
-            styles.inputArea,
-            { paddingBottom: keyboardHeight > 0 ? keyboardHeight : (Platform.OS === 'ios' ? 28 : 12) }
-          ]}>
-            <View style={styles.inputContainer}>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  placeholder="Ask me anything..."
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  maxLength={500}
-                  editable={!isLoading}
-                />
-              </View>
-              
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!inputText.trim() || isLoading) && styles.sendButtonDisabled
-                ]}
-                onPress={handleSend}
-                disabled={!inputText.trim() || isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.textWhite} size="small" />
-                ) : (
-                  <LinearGradient
-                    colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
-                    style={styles.sendButtonGradient}
-                  >
-                    <Ionicons name="send" size={18} color={colors.textWhite} />
-                  </LinearGradient>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Footer text */}
-            <Text style={styles.footerText}>
-              Powered by AI · Always learning 🧠 ✨
-            </Text>
           </View>
         </View>
-      </MotiView>
+        
+        <View style={styles.headerRight} />
+      </View>
+
+      {/* Messages Area */}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.messagesList}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        showsVerticalScrollIndicator={false}
+        ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+        keyboardShouldPersistTaps="handled"
+        style={styles.messagesArea}
+      />
+
+      {/* Input Area */}
+      <View style={styles.inputArea}>
+        <View style={styles.inputContainer}>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder="Ask me anything..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              maxLength={500}
+              editable={!isLoading}
+            />
+          </View>
+          
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!inputText.trim() || isLoading) && styles.sendButtonDisabled
+            ]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color={colors.textWhite} size="small" />
+            ) : (
+              <LinearGradient
+                colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
+                style={styles.sendButtonGradient}
+              >
+                <Ionicons name="send" size={18} color={colors.textWhite} />
+              </LinearGradient>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer text */}
+        <Text style={styles.footerText}>
+          Powered by AI · Always learning 🧠 ✨
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Overlay & Backdrop
-  overlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    zIndex: 40,
-  },
-  
-  // Panel
-  panel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: PANEL_HEIGHT,
-    maxWidth: 448,
-    alignSelf: 'center',
-    width: '100%',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    overflow: 'hidden',
-    zIndex: 50,
-    // Purple glow shadow
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 60,
-    elevation: 20,
-  },
-  blurContainer: {
+  // Container
+  container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderBottomWidth: 0,
-    overflow: 'hidden',
   },
 
   // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: colors.purpleBorder,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  aiIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerText: {
-    marginLeft: 12,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.onlineDot,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  closeButton: {
+  backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: colors.closeButtonBg,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  headerRight: {
+    width: 40,
+  },
+  aiIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerText: {
+    marginLeft: 10,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.onlineDot,
+    marginRight: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
 
   // Messages
@@ -752,6 +651,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: colors.purpleBorder,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
   },
   inputContainer: {
     flexDirection: 'row',
