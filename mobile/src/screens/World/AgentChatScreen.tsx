@@ -24,7 +24,6 @@ import {
   Dimensions,
   StatusBar,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -345,24 +344,25 @@ export default function AgentChatScreen() {
   }
 
   return (
-    <View style={styles.overlay}>
+    <View style={styles.overlay} pointerEvents="box-none">
       <StatusBar barStyle="light-content" />
       
-      {/* Backdrop */}
+      {/* Backdrop - only closes when tapped directly */}
       <TouchableOpacity 
         style={styles.backdrop} 
         onPress={handleClose} 
-        activeOpacity={1} 
+        activeOpacity={1}
       />
       
-      {/* Main Panel */}
+      {/* Main Panel - receives all touch events */}
       <MotiView
         from={{ translateY: PANEL_HEIGHT }}
         animate={{ translateY: 0 }}
         transition={{ type: 'spring', damping: 20, stiffness: 200 }}
         style={styles.panel}
+        pointerEvents="box-none"
       >
-        <BlurView intensity={40} tint="light" style={styles.blurContainer}>
+        <View style={styles.blurContainer} pointerEvents="auto">
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -405,15 +405,9 @@ export default function AgentChatScreen() {
             </View>
             
             {/* Close Button */}
-            <MotiView
-              from={{ scale: 1 }}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </MotiView>
+            <TouchableOpacity style={styles.closeButton} onPress={handleClose} activeOpacity={0.7}>
+              <Ionicons name="close" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {/* Messages Area */}
@@ -474,7 +468,7 @@ export default function AgentChatScreen() {
               Powered by AI · Always learning 🧠 ✨
             </Text>
           </KeyboardAvoidingView>
-        </BlurView>
+        </View>
       </MotiView>
     </View>
   );
@@ -515,12 +509,13 @@ const styles = StyleSheet.create({
   },
   blurContainer: {
     flex: 1,
-    backgroundColor: colors.panelBg,
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     borderWidth: 1,
     borderColor: colors.borderLight,
     borderBottomWidth: 0,
+    overflow: 'hidden',
   },
 
   // Header
