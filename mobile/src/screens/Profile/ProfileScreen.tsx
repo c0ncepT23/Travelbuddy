@@ -12,6 +12,7 @@ import {
   Image,
   ActivityIndicator,
   Dimensions,
+  Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import { useTripStore } from '../../stores/tripStore';
 import { useXPStore } from '../../stores/xpStore';
+import { useLocationStore } from '../../stores/locationStore';
 import api from '../../config/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -32,6 +34,15 @@ export default function ProfileScreen({ navigation, embedded = false }: ProfileS
   const { user, logout, updateUser } = useAuthStore();
   const { trips, fetchTrips } = useTripStore();
   const { xp: totalXP, level, getLevelTitle, getProgress } = useXPStore();
+  const { 
+    isBackgroundTrackingEnabled, 
+    isBackgroundTracking,
+    hasBackgroundPermission,
+    setBackgroundTrackingEnabled, 
+    loadBackgroundTrackingPreference,
+    startBackgroundTracking,
+    requestBackgroundPermission,
+  } = useLocationStore();
   
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(user?.name || '');
@@ -48,6 +59,7 @@ export default function ProfileScreen({ navigation, embedded = false }: ProfileS
 
   useEffect(() => {
     loadProfileData();
+    loadBackgroundTrackingPreference();
   }, []);
 
   useEffect(() => {
@@ -160,6 +172,36 @@ export default function ProfileScreen({ navigation, embedded = false }: ProfileS
           onPress: () => logout(),
         },
       ]);
+    }
+  };
+
+  const handleBackgroundTrackingToggle = async (enabled: boolean) => {
+    if (enabled && !hasBackgroundPermission) {
+      // Need to request permission first
+      Alert.alert(
+        'Location Permission',
+        'Yori needs background location access to notify you when you\'re near saved places. This helps you discover spots from your travel research!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              const granted = await requestBackgroundPermission();
+              if (granted) {
+                await setBackgroundTrackingEnabled(true);
+                await startBackgroundTracking();
+              } else {
+                Alert.alert(
+                  'Permission Required',
+                  'Please enable "Allow all the time" location access in your device settings for Yori.'
+                );
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      await setBackgroundTrackingEnabled(enabled);
     }
   };
 
@@ -392,6 +434,62 @@ export default function ProfileScreen({ navigation, embedded = false }: ProfileS
               <Text style={styles.emptySubtext}>Your travel history will appear here</Text>
             </View>
           )}
+        </View>
+
+        {/* Settings Section */}
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          
+          {/* Background Location Tracking */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingIconContainer}>
+                <Ionicons name="location" size={22} color="#3B82F6" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingTitle}>Nearby Place Alerts</Text>
+                <Text style={styles.settingDescription}>
+                  Get notified when you're near saved places from any of your trips
+                </Text>
+              </View>
+              <Switch
+                value={isBackgroundTrackingEnabled}
+                onValueChange={handleBackgroundTrackingToggle}
+                trackColor={{ false: '#E2E8F0', true: '#93C5FD' }}
+                thumbColor={isBackgroundTrackingEnabled ? '#3B82F6' : '#F1F5F9'}
+                ios_backgroundColor="#E2E8F0"
+              />
+            </View>
+            {isBackgroundTracking && (
+              <View style={styles.settingStatus}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusText}>Location tracking active</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Notification Preferences Link */}
+          <TouchableOpacity 
+            style={styles.settingCard}
+            onPress={() => {
+              // Future: Navigate to notification preferences
+              Alert.alert('Coming Soon', 'Fine-grained notification controls coming soon!');
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.settingRow}>
+              <View style={[styles.settingIconContainer, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="notifications" size={22} color="#F59E0B" />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingTitle}>Notification Preferences</Text>
+                <Text style={styles.settingDescription}>
+                  Customize when and how you receive alerts
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Logout Button */}
@@ -774,6 +872,72 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#94A3B8',
     textAlign: 'center',
+  },
+
+  // Settings Section
+  settingsSection: {
+    padding: 20,
+    paddingTop: 8,
+  },
+  settingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  settingIconContainer: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  settingInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  settingTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  settingDescription: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  settingStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#10B981',
   },
 
   // Logout Button

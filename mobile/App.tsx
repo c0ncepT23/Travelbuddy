@@ -29,7 +29,7 @@ import LoginScreen from './src/screens/Auth/LoginScreen';
 import RegisterScreen from './src/screens/Auth/RegisterScreen';
 
 // V2 World Screens (new UI)
-import { WorldMapScreen, CountryBubbleScreen, CategoryListScreen } from './src/screens/World';
+import { WorldMapScreen, CountryBubbleScreen, CategoryListScreen, AgentChatScreen } from './src/screens/World';
 
 // Legacy Trip Screens (keeping for compatibility during transition)
 import TripTabScreen from './src/screens/Trip/TripTabScreen';
@@ -298,12 +298,34 @@ export default function App() {
               const data = response.notification.request.content.data;
               console.log('[App] Notification tapped:', data);
               
-              // Navigate based on notification data
-              if (data?.tripId && navigationRef.current) {
-                if (data.screen === 'GroupChat') {
-                  navigationRef.current.navigate('GroupChat', { tripId: data.tripId });
-                } else if (data.screen === 'TripDetail' || data.screen === 'TripHome') {
-                  navigationRef.current.navigate('TripHome', { tripId: data.tripId });
+              // Navigate based on notification type and data
+              if (data && navigationRef.current) {
+                const { type, tripId, placeId, placeName, screen } = data as any;
+                
+                // Handle nearby_alert notifications - navigate to country bubble view
+                if (type === 'nearby_alert' && tripId) {
+                  console.log('[App] Nearby alert tapped - navigating to country view');
+                  // Navigate to country bubble screen with the trip
+                  navigationRef.current.navigate('CountryBubbles', { 
+                    tripId,
+                    countryName: '', // Will be fetched from trip
+                    highlightPlaceId: placeId,
+                  });
+                }
+                // Handle group chat notifications
+                else if (screen === 'GroupChat' && tripId) {
+                  navigationRef.current.navigate('GroupChat', { tripId });
+                }
+                // Handle trip home/detail notifications
+                else if ((screen === 'TripDetail' || screen === 'TripHome') && tripId) {
+                  navigationRef.current.navigate('TripHome', { 
+                    tripId,
+                    highlightItemId: placeId,
+                  });
+                }
+                // Default: if we have tripId, go to country bubbles
+                else if (tripId) {
+                  navigationRef.current.navigate('CountryBubbles', { tripId });
                 }
               }
             }
@@ -484,6 +506,11 @@ export default function App() {
               <Stack.Screen
                 name="Companion"
                 component={CompanionScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="AgentChat"
+                component={AgentChatScreen}
                 options={{ headerShown: false }}
               />
               

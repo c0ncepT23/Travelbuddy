@@ -314,7 +314,7 @@ export default function CountryBubbleScreen() {
   };
 
   const handleAgentPress = () => {
-    navigation.navigate('GroupChat', { tripId });
+    navigation.navigate('AgentChat', { tripId, countryName });
   };
 
   const currentBubbles = viewMode === 'macro' ? macroBubbles : microBubbles;

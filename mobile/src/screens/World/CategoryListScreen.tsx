@@ -236,7 +236,7 @@ export default function CategoryListScreen() {
 
   const handleAgentPress = () => {
     if (tripId) {
-      navigation.navigate('GroupChat', { tripId });
+      navigation.navigate('AgentChat', { tripId, countryName });
     }
   };
 

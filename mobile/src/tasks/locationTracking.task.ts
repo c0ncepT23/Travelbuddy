@@ -12,7 +12,8 @@ interface LocationTaskData {
 
 /**
  * Background location tracking task
- * Reports location to backend, which handles push notifications
+ * Reports location to backend GLOBALLY - checks ALL user's trips for nearby places
+ * Backend handles push notifications when user is near any saved place
  */
 TaskManager.defineTask(
   LOCATION_TASK_NAME,
@@ -37,25 +38,35 @@ TaskManager.defineTask(
       });
 
       try {
-        // Get current trip ID from AsyncStorage
-        const currentTripId = await AsyncStorage.getItem('currentTripId');
-        
-        if (!currentTripId) {
-          console.log('[BackgroundLocation] No active trip');
+        // Check if tracking is enabled
+        const trackingEnabled = await AsyncStorage.getItem('backgroundTrackingEnabled');
+        if (trackingEnabled === 'false') {
+          console.log('[BackgroundLocation] Tracking disabled by user');
           return;
         }
 
-        // Send location to backend - backend handles push notifications
-        await api.post('/location/update', {
-          tripGroupId: currentTripId,
+        // Send location to backend GLOBALLY - checks ALL trips
+        const response = await api.post('/location/update-global', {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
 
-        console.log('[BackgroundLocation] Location sent to backend');
+        const result = response.data?.data;
+        if (result?.notificationSent) {
+          console.log('[BackgroundLocation] 🔔 Notification sent! Nearby:', result.nearbyCount);
+        } else if (result?.nearbyCount > 0) {
+          console.log('[BackgroundLocation] Found', result.nearbyCount, 'nearby places (no notification)');
+        } else {
+          console.log('[BackgroundLocation] No nearby places');
+        }
 
-      } catch (error) {
-        console.error('[BackgroundLocation] Error:', error);
+      } catch (error: any) {
+        // Don't log auth errors loudly - user might be logged out
+        if (error.response?.status === 401) {
+          console.log('[BackgroundLocation] User not authenticated');
+        } else {
+          console.error('[BackgroundLocation] Error:', error.message);
+        }
       }
     }
   }

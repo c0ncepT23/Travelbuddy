@@ -3,7 +3,7 @@ import { TripGroupModel } from '../models/tripGroup.model';
 import { SavedItemModel } from '../models/savedItem.model';
 import { ChatMessageModel } from '../models/chatMessage.model';
 import { PushNotificationService } from './pushNotification.service';
-import { MessageSenderType, MessageType } from '../types';
+import { MessageSenderType, MessageType, TripGroup } from '../types';
 import logger from '../config/logger';
 
 // Category emoji mapping
@@ -290,6 +290,213 @@ export class LocationService {
     } catch (error) {
       logger.error('Get user location error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Update user location globally - checks ALL trips the user is a member of
+   * This is the main endpoint for background location tracking
+   */
+  static async updateLocationGlobal(
+    userId: string,
+    latitude: number,
+    longitude: number
+  ): Promise<{ nearbyPlaces: any[]; notificationSent: boolean }> {
+    try {
+      logger.info(`[Location] Global update for user ${userId}: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+
+      // Get all trips the user is a member of
+      const userTrips = await TripGroupModel.findByUser(userId);
+      
+      if (!userTrips || userTrips.length === 0) {
+        logger.info(`[Location] User ${userId} has no trips`);
+        return { nearbyPlaces: [], notificationSent: false };
+      }
+
+      logger.info(`[Location] Checking ${userTrips.length} trips for user ${userId}`);
+
+      // Check for nearby places across ALL trips
+      const allNearbyPlaces: any[] = [];
+      
+      for (const trip of userTrips) {
+        try {
+          const nearbyItems = await SavedItemModel.findNearby(
+            trip.id,
+            latitude,
+            longitude,
+            500 // 500m radius
+          );
+
+          // Add trip context to each item
+          const itemsWithTrip = nearbyItems.map((item: any) => ({
+            ...item,
+            tripId: trip.id,
+            tripName: trip.name,
+            destination: trip.destination,
+          }));
+
+          allNearbyPlaces.push(...itemsWithTrip);
+        } catch (err) {
+          // Skip trips with errors (e.g., deleted)
+          logger.debug(`[Location] Skipping trip ${trip.id}:`, err);
+        }
+      }
+
+      if (allNearbyPlaces.length === 0) {
+        return { nearbyPlaces: [], notificationSent: false };
+      }
+
+      // Filter to only unvisited places
+      const unvisitedPlaces = allNearbyPlaces.filter((item: any) => item.status === 'saved');
+
+      if (unvisitedPlaces.length === 0) {
+        logger.info(`[Location] All ${allNearbyPlaces.length} nearby places already visited`);
+        return { nearbyPlaces: allNearbyPlaces, notificationSent: false };
+      }
+
+      // Check if we've recently sent an alert (globally, not per trip)
+      const hasRecentAlert = await this.hasRecentGlobalProximityAlert(userId);
+      if (hasRecentAlert) {
+        logger.info(`[Location] Skipping notification - recent alert exists for user ${userId}`);
+        return { nearbyPlaces: unvisitedPlaces, notificationSent: false };
+      }
+
+      // Sort by distance and get closest
+      unvisitedPlaces.sort((a: any, b: any) => a.distance - b.distance);
+      const closestPlace = unvisitedPlaces[0];
+
+      const distanceText = closestPlace.distance < 100 
+        ? 'right here!' 
+        : `${Math.round(closestPlace.distance)}m away`;
+
+      const emoji = CATEGORY_EMOJI[closestPlace.category] || '📍';
+
+      // Send push notification
+      await PushNotificationService.sendToUser(userId, {
+        title: `${emoji} ${closestPlace.name} is ${distanceText}`,
+        body: unvisitedPlaces.length > 1 
+          ? `You have ${unvisitedPlaces.length} saved spots nearby from your trips. Tap to explore!`
+          : `From your ${closestPlace.destination || closestPlace.tripName} trip. Tap to check in!`,
+        data: {
+          type: 'nearby_alert',
+          tripId: closestPlace.tripId,
+          placeId: closestPlace.id,
+          placeName: closestPlace.name,
+          screen: 'TripHome',
+        },
+        channelId: 'nearby',
+      });
+
+      // Record that we sent an alert
+      await this.recordGlobalProximityAlert(userId, closestPlace.id);
+
+      logger.info(`[Location] 🔔 Global notification sent to user ${userId}: Near ${closestPlace.name}`);
+
+      return { nearbyPlaces: unvisitedPlaces, notificationSent: true };
+    } catch (error: any) {
+      logger.error('[Location] Global update error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if we've recently sent a global proximity alert (within 30 mins)
+   */
+  private static async hasRecentGlobalProximityAlert(userId: string): Promise<boolean> {
+    try {
+      const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
+      
+      const result = await query(
+        `SELECT COUNT(*) as count FROM proximity_alerts
+         WHERE user_id = $1
+         AND created_at > $2`,
+        [userId, thirtyMinsAgo]
+      );
+
+      return parseInt(result.rows[0].count) > 0;
+    } catch (error) {
+      // Table might not exist yet
+      logger.debug('Global proximity alert check error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Record that we sent a global proximity alert
+   */
+  private static async recordGlobalProximityAlert(
+    userId: string,
+    placeId: string
+  ): Promise<void> {
+    try {
+      // Ensure table exists
+      await query(`
+        CREATE TABLE IF NOT EXISTS proximity_alerts (
+          id SERIAL PRIMARY KEY,
+          user_id VARCHAR(255) NOT NULL,
+          trip_group_id VARCHAR(255),
+          place_id VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await query(
+        `INSERT INTO proximity_alerts (user_id, place_id)
+         VALUES ($1, $2)`,
+        [userId, placeId]
+      );
+    } catch (error) {
+      logger.error('Record global proximity alert error:', error);
+    }
+  }
+
+  /**
+   * Get all nearby places across all user's trips
+   */
+  static async getAllNearbyItems(
+    userId: string,
+    latitude: number,
+    longitude: number,
+    radiusMeters: number = 500
+  ): Promise<any[]> {
+    try {
+      const userTrips = await TripGroupModel.findByUser(userId);
+      
+      if (!userTrips || userTrips.length === 0) {
+        return [];
+      }
+
+      const allNearbyPlaces: any[] = [];
+      
+      for (const trip of userTrips) {
+        try {
+          const nearbyItems = await SavedItemModel.findNearby(
+            trip.id,
+            latitude,
+            longitude,
+            radiusMeters
+          );
+
+          const itemsWithTrip = nearbyItems.map((item: any) => ({
+            ...item,
+            tripId: trip.id,
+            tripName: trip.name,
+            destination: trip.destination,
+          }));
+
+          allNearbyPlaces.push(...itemsWithTrip);
+        } catch (err) {
+          // Skip trips with errors
+        }
+      }
+
+      // Sort by distance
+      allNearbyPlaces.sort((a: any, b: any) => a.distance - b.distance);
+
+      return allNearbyPlaces;
+    } catch (error: any) {
+      logger.error('Get all nearby items error:', error);
+      throw error;
     }
   }
 }

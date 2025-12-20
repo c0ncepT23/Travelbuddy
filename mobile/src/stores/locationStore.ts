@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../config/api';
 import { SavedItem } from '../types';
 import {
@@ -19,6 +20,7 @@ interface LocationState {
   hasBackgroundPermission: boolean;
   isTracking: boolean;
   isBackgroundTracking: boolean;
+  isBackgroundTrackingEnabled: boolean; // User preference
   nearbyItems: SavedItem[];
   
   // Actions
@@ -26,10 +28,14 @@ interface LocationState {
   requestBackgroundPermission: () => Promise<boolean>;
   startTracking: () => Promise<void>;
   stopTracking: () => void;
-  startBackgroundTracking: (tripId: string) => Promise<void>;
+  startBackgroundTracking: (tripId?: string) => Promise<void>;
   stopBackgroundTracking: () => Promise<void>;
+  setBackgroundTrackingEnabled: (enabled: boolean) => Promise<void>;
+  loadBackgroundTrackingPreference: () => Promise<void>;
   updateLocation: (tripId: string, location: LocationObject) => Promise<void>;
+  updateLocationGlobal: (location: LocationObject) => Promise<void>;
   fetchNearbyItems: (tripId: string, latitude: number, longitude: number) => Promise<void>;
+  fetchAllNearbyItems: (latitude: number, longitude: number) => Promise<void>;
   initializeNotifications: () => Promise<void>;
 }
 
@@ -41,6 +47,7 @@ export const useLocationStore = create<LocationState>((set, get) => ({
   hasBackgroundPermission: false,
   isTracking: false,
   isBackgroundTracking: false,
+  isBackgroundTrackingEnabled: true, // Default enabled
   nearbyItems: [],
 
   requestPermission: async () => {
@@ -112,10 +119,13 @@ export const useLocationStore = create<LocationState>((set, get) => ({
     set({ isTracking: false });
   },
 
-  startBackgroundTracking: async (tripId: string) => {
+  // Start global background tracking (checks ALL trips)
+  startBackgroundTracking: async (tripId?: string) => {
     try {
-      // Set the active trip - ensures trip ID is available for background task
-      await setActiveTrip(tripId);
+      // Optionally set active trip for backwards compatibility
+      if (tripId) {
+        await setActiveTrip(tripId);
+      }
       
       // Check if already tracking
       const isAlreadyActive = await isBackgroundTrackingActive();
@@ -139,6 +149,8 @@ export const useLocationStore = create<LocationState>((set, get) => ({
       // Check if it's actually running
       const isActive = await isBackgroundTrackingActive();
       set({ isBackgroundTracking: isActive });
+      
+      console.log('[LocationStore] Background tracking started globally');
     } catch (error) {
       console.error('[LocationStore] Start background tracking error:', error);
       throw error;
@@ -155,6 +167,41 @@ export const useLocationStore = create<LocationState>((set, get) => ({
     }
   },
 
+  // Enable/disable background tracking (user preference)
+  setBackgroundTrackingEnabled: async (enabled: boolean) => {
+    try {
+      await AsyncStorage.setItem('backgroundTrackingEnabled', enabled ? 'true' : 'false');
+      set({ isBackgroundTrackingEnabled: enabled });
+      
+      if (enabled) {
+        // Start tracking if not already
+        const isActive = await isBackgroundTrackingActive();
+        if (!isActive) {
+          await get().startBackgroundTracking();
+        }
+      } else {
+        // Stop tracking
+        await get().stopBackgroundTracking();
+      }
+      
+      console.log('[LocationStore] Background tracking', enabled ? 'enabled' : 'disabled');
+    } catch (error) {
+      console.error('[LocationStore] Set background tracking enabled error:', error);
+    }
+  },
+
+  // Load user's background tracking preference
+  loadBackgroundTrackingPreference: async () => {
+    try {
+      const enabled = await AsyncStorage.getItem('backgroundTrackingEnabled');
+      // Default to true if not set
+      const isEnabled = enabled !== 'false';
+      set({ isBackgroundTrackingEnabled: isEnabled });
+    } catch (error) {
+      console.error('[LocationStore] Load preference error:', error);
+    }
+  },
+
   updateLocation: async (tripId, location) => {
     try {
       await api.post('/location/update', {
@@ -168,6 +215,19 @@ export const useLocationStore = create<LocationState>((set, get) => ({
     }
   },
 
+  // Update location globally (checks all trips)
+  updateLocationGlobal: async (location) => {
+    try {
+      await api.post('/location/update-global', {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+    } catch (error) {
+      console.error('Update location global error:', error);
+      // Don't throw - this is a background operation
+    }
+  },
+
   fetchNearbyItems: async (tripId, latitude, longitude) => {
     try {
       const response = await api.get<{ data: SavedItem[] }>(
@@ -176,6 +236,19 @@ export const useLocationStore = create<LocationState>((set, get) => ({
       set({ nearbyItems: response.data.data });
     } catch (error) {
       console.error('Fetch nearby items error:', error);
+      throw error;
+    }
+  },
+
+  // Fetch nearby items from ALL trips
+  fetchAllNearbyItems: async (latitude, longitude) => {
+    try {
+      const response = await api.get<{ data: SavedItem[] }>(
+        `/location/nearby-all?latitude=${latitude}&longitude=${longitude}&radius=500`
+      );
+      set({ nearbyItems: response.data.data });
+    } catch (error) {
+      console.error('Fetch all nearby items error:', error);
       throw error;
     }
   },
