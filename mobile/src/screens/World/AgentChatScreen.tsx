@@ -18,11 +18,11 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -94,11 +94,33 @@ export default function AgentChatScreen() {
   
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
   // Initialize location tracking
   useEffect(() => {
     startTracking();
+  }, []);
+
+  // Handle keyboard events
+  useEffect(() => {
+    const keyboardDidShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShow.remove();
+      keyboardDidHide.remove();
+    };
   }, []);
 
   // Add welcome message if first time
@@ -411,11 +433,7 @@ export default function AgentChatScreen() {
           </View>
 
           {/* Messages Area */}
-          <KeyboardAvoidingView
-            style={styles.keyboardAvoid}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
-          >
+          <View style={styles.messagesArea}>
             <FlatList
               ref={flatListRef}
               data={messages}
@@ -425,9 +443,15 @@ export default function AgentChatScreen() {
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
               showsVerticalScrollIndicator={false}
               ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+              keyboardShouldPersistTaps="handled"
             />
+          </View>
 
-            {/* Input Area */}
+          {/* Input Area - Fixed at bottom */}
+          <View style={[
+            styles.inputArea,
+            { paddingBottom: keyboardHeight > 0 ? keyboardHeight : (Platform.OS === 'ios' ? 28 : 12) }
+          ]}>
             <View style={styles.inputContainer}>
               <View style={styles.inputWrapper}>
                 <TextInput
@@ -467,7 +491,7 @@ export default function AgentChatScreen() {
             <Text style={styles.footerText}>
               Powered by AI · Always learning 🧠 ✨
             </Text>
-          </KeyboardAvoidingView>
+          </View>
         </View>
       </MotiView>
     </View>
@@ -573,12 +597,13 @@ const styles = StyleSheet.create({
   },
 
   // Messages
-  keyboardAvoid: {
+  messagesArea: {
     flex: 1,
   },
   messagesList: {
     paddingHorizontal: 24,
     paddingVertical: 16,
+    flexGrow: 1,
   },
   messageContainer: {
     marginBottom: 16,
@@ -723,10 +748,15 @@ const styles = StyleSheet.create({
   },
 
   // Input
+  inputArea: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: colors.purpleBorder,
+  },
   inputContainer: {
     flexDirection: 'row',
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingTop: 12,
     alignItems: 'flex-end',
   },
   inputWrapper: {
@@ -765,7 +795,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     color: colors.textSecondary,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    paddingTop: 8,
   },
 
   // Empty state
