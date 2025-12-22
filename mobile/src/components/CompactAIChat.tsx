@@ -1,10 +1,10 @@
 /**
  * Compact AI Chat - Minimal Input Bar + Latest Response
  * 
- * Shows:
+ * Features:
  * - Minimal input bar at bottom
- * - Only the latest AI response (not full history)
- * - Expand button to open full chat
+ * - Latest AI response auto-hides after 10 seconds
+ * - Expand button in input bar (always visible)
  * - Typing indicator
  */
 
@@ -15,15 +15,17 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Keyboard,
   Dimensions,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { MotiView, AnimatePresence } from 'moti';
+import { MotiView } from 'moti';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Auto-hide response bubble after this many seconds
+const RESPONSE_TIMEOUT_MS = 10000; // 10 seconds
 
 interface Message {
   id: string;
@@ -50,7 +52,13 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
   isTyping,
 }) => {
   const [inputValue, setInputValue] = useState('');
+  const [showResponse, setShowResponse] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get the latest AI message
+  const latestAIMessage = [...messages].reverse().find(m => m.type === 'ai');
+  const hasUserSentMessage = messages.some(m => m.type === 'user');
 
   // Auto-focus when opened
   useEffect(() => {
@@ -59,15 +67,43 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
     }
   }, [isOpen]);
 
+  // Show response bubble when new AI message arrives, then auto-hide after timeout
+  useEffect(() => {
+    if (latestAIMessage && hasUserSentMessage && !isTyping) {
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Show the response
+      setShowResponse(true);
+      
+      // Set timeout to hide it
+      timeoutRef.current = setTimeout(() => {
+        setShowResponse(false);
+      }, RESPONSE_TIMEOUT_MS);
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [latestAIMessage?.id, isTyping]); // Re-trigger on new message ID
+
+  // Hide response when typing starts
+  useEffect(() => {
+    if (isTyping) {
+      setShowResponse(false);
+    }
+  }, [isTyping]);
+
   const handleSend = () => {
     if (!inputValue.trim()) return;
     onSendMessage(inputValue.trim());
     setInputValue('');
   };
-
-  // Get the latest AI message
-  const latestAIMessage = [...messages].reverse().find(m => m.type === 'ai');
-  const hasUserSentMessage = messages.some(m => m.type === 'user');
 
   if (!isOpen) return null;
 
@@ -79,35 +115,33 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
       transition={{ type: 'spring', damping: 20 }}
       style={styles.container}
     >
-      {/* Latest AI Response Bubble (only if user has sent a message) */}
-      {latestAIMessage && hasUserSentMessage && !isTyping && (
+      {/* Latest AI Response Bubble (auto-hides after 10s) */}
+      {showResponse && latestAIMessage && hasUserSentMessage && !isTyping && (
         <MotiView
           from={{ opacity: 0, scale: 0.95, translateY: 10 }}
           animate={{ opacity: 1, scale: 1, translateY: 0 }}
+          exit={{ opacity: 0, scale: 0.95, translateY: 10 }}
           transition={{ type: 'spring', damping: 15 }}
           style={styles.responseBubbleContainer}
         >
-          <LinearGradient
-            colors={['#8B5CF6', '#6366F1']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.responseBubble}
+          <TouchableOpacity 
+            activeOpacity={0.9}
+            onPress={() => setShowResponse(false)}
           >
-            <View style={styles.responseHeader}>
-              <Ionicons name="sparkles" size={14} color="rgba(255,255,255,0.9)" />
-            </View>
-            <Text style={styles.responseText} numberOfLines={4}>
-              {latestAIMessage.content}
-            </Text>
-          </LinearGradient>
-
-          {/* Expand Button */}
-          <TouchableOpacity
-            style={styles.expandButton}
-            onPress={onOpenFullChat}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="expand" size={16} color="#8B5CF6" />
+            <LinearGradient
+              colors={['#8B5CF6', '#6366F1']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.responseBubble}
+            >
+              <View style={styles.responseHeader}>
+                <Ionicons name="sparkles" size={14} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.tapToHide}>tap to hide</Text>
+              </View>
+              <Text style={styles.responseText} numberOfLines={4}>
+                {latestAIMessage.content}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         </MotiView>
       )}
@@ -171,6 +205,15 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
           blurOnSubmit={false}
         />
 
+        {/* Expand to Full Chat Button */}
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={onOpenFullChat}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chatbubbles-outline" size={20} color="#8B5CF6" />
+        </TouchableOpacity>
+
         {/* Send Button */}
         <TouchableOpacity
           style={[
@@ -226,28 +269,20 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   responseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
+    gap: 6,
+  },
+  tapToHide: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.6)',
+    fontStyle: 'italic',
   },
   responseText: {
     color: '#FFFFFF',
     fontSize: 14,
     lineHeight: 20,
-  },
-  expandButton: {
-    position: 'absolute',
-    bottom: -8,
-    left: -8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
   },
 
   // Typing
@@ -309,12 +344,20 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 12 : 8,
     paddingHorizontal: 4,
   },
+  expandButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
   sendButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     overflow: 'hidden',
-    marginLeft: 8,
   },
   sendButtonGradient: {
     width: 44,
@@ -336,4 +379,3 @@ const styles = StyleSheet.create({
 });
 
 export default CompactAIChat;
-
