@@ -1,14 +1,11 @@
 /**
- * Country Bubble Screen - V2 with Interactive Map Background
+ * Country Bubble Screen - V2 with Interactive Map + Compact AI Chat
  * 
  * Features:
- * - REAL interactive Google Map as background (zoomable, pannable)
- * - Map centered on the country
- * - Floating glassmorphic bubbles on top
- * - Two views: Macro (categories) and Micro (subcategories)
- * - AI Agent pill button at bottom
- * 
- * Future: Zoom into cities/areas to filter places
+ * - REAL interactive Google Map as background
+ * - Floating glassmorphic bubbles
+ * - Compact AI Chat (non-intrusive)
+ * - FloatingAIOrb to open chat
  */
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -21,6 +18,7 @@ import {
   ActivityIndicator,
   Platform,
   StatusBar,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,10 +28,14 @@ import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import api from '../../config/api';
 import { SavedItem, ItemCategory, SubClusters } from '../../types';
 import { FloatingCloud, GlowingBubble } from '../../components/bubbles';
+import { FloatingAIOrb } from '../../components/FloatingAIOrb';
+import { CompactAIChat } from '../../components/CompactAIChat';
+import { useCompanionStore } from '../../stores/companionStore';
+import { useLocationStore } from '../../stores/locationStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Country center coordinates and zoom levels
+// Country center coordinates
 const COUNTRY_COORDS: Record<string, { latitude: number; longitude: number; latDelta: number; lngDelta: number }> = {
   japan: { latitude: 36.2048, longitude: 138.2529, latDelta: 10, lngDelta: 10 },
   thailand: { latitude: 15.8700, longitude: 100.9925, latDelta: 12, lngDelta: 8 },
@@ -53,7 +55,6 @@ const COUNTRY_COORDS: Record<string, { latitude: number; longitude: number; latD
   default: { latitude: 20, longitude: 0, latDelta: 60, lngDelta: 60 },
 };
 
-// Country flag emojis
 const COUNTRY_FLAGS: Record<string, string> = {
   japan: '🇯🇵',
   korea: '🇰🇷',
@@ -72,7 +73,6 @@ const COUNTRY_FLAGS: Record<string, string> = {
   australia: '🇦🇺',
 };
 
-// Bubble color mapping
 const CATEGORY_COLORS: Record<string, 'green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'orange'> = {
   food: 'green',
   activity: 'blue',
@@ -82,19 +82,16 @@ const CATEGORY_COLORS: Record<string, 'green' | 'blue' | 'yellow' | 'purple' | '
   tip: 'pink',
 };
 
-// Subcategory colors for variety
 const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'orange')[] = [
   'green', 'blue', 'pink', 'orange', 'purple', 'yellow'
 ];
 
-// Map style for clean look
 const MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
   { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
   { featureType: 'road.arterial', elementType: 'labels', stylers: [{ visibility: 'off' }] },
@@ -103,7 +100,6 @@ const MAP_STYLE = [
   { featureType: 'road.local', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9d6ff' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
 ];
 
 type ViewMode = 'macro' | 'micro';
@@ -123,23 +119,46 @@ interface BubbleData {
   category?: string;
 }
 
+// Simple message type for compact chat
+interface ChatMessage {
+  id: string;
+  type: 'user' | 'ai';
+  content: string;
+  timestamp: Date;
+}
+
 export default function CountryBubbleScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, 'params'>>();
   const mapRef = useRef<MapView>(null);
   
-  // Defensive extraction of route params
   const params = route.params || {};
   const tripId = params.tripId || '';
   const countryName = params.countryName || 'Unknown';
 
+  // Data state
   const [isLoading, setIsLoading] = useState(true);
   const [items, setItems] = useState<SavedItem[]>([]);
   const [subClusters, setSubClusters] = useState<SubClusters | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('macro');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
-  // Get country coordinates
+  // Compact Chat state
+  const [isCompactChatOpen, setIsCompactChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: 'welcome',
+      type: 'ai',
+      content: `Hey there! 👋 I'm your travel buddy for ${countryName}. What would you like to explore?`,
+      timestamp: new Date(),
+    }
+  ]);
+  const [isAITyping, setIsAITyping] = useState(false);
+
+  // Stores
+  const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
+  const { location } = useLocationStore();
+
   const countryCoords = COUNTRY_COORDS[countryName.toLowerCase()] || COUNTRY_COORDS.default;
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
 
@@ -154,24 +173,20 @@ export default function CountryBubbleScreen() {
 
   const fetchItems = async () => {
     if (!tripId) {
-      console.warn('[CountryBubbles] No tripId provided, skipping fetch');
       setIsLoading(false);
       return;
     }
     
     setIsLoading(true);
     try {
-      console.log('[CountryBubbles] Fetching items for trip:', tripId);
       const itemsResponse = await api.get(`/trips/${tripId}/items`);
       const fetchedItems: SavedItem[] = itemsResponse.data.data || itemsResponse.data || [];
-      console.log('[CountryBubbles] Fetched', fetchedItems.length, 'items');
       setItems(fetchedItems);
 
       try {
         const clustersResponse = await api.get(`/trips/${tripId}/items/sub-clusters`);
         setSubClusters(clustersResponse.data.data || clustersResponse.data);
       } catch (e) {
-        console.log('[CountryBubbles] Sub-clusters not available');
         setSubClusters(null);
       }
     } catch (error) {
@@ -181,7 +196,7 @@ export default function CountryBubbleScreen() {
     }
   };
 
-  // Generate MACRO bubbles (main categories: Food, Activities, Shopping)
+  // Generate MACRO bubbles
   const macroBubbles = useMemo((): BubbleData[] => {
     if (items.length === 0) return [];
 
@@ -192,11 +207,10 @@ export default function CountryBubbleScreen() {
       categoryGroups[cat].push(item);
     });
 
-    // Fixed positions for macro bubbles
     const positions = [
-      { x: 30, y: 35 },  // Food - left center
-      { x: 70, y: 48 },  // Activities - right
-      { x: 50, y: 68 },  // Shopping - bottom center
+      { x: 30, y: 35 },
+      { x: 70, y: 48 },
+      { x: 50, y: 68 },
     ];
 
     const mainCategories = ['food', 'activity', 'shopping'];
@@ -222,7 +236,6 @@ export default function CountryBubbleScreen() {
       }
     });
 
-    // Add any remaining categories
     Object.entries(categoryGroups).forEach(([cat, catItems]) => {
       if (!mainCategories.includes(cat) && catItems.length > 0) {
         bubbles.push({
@@ -240,7 +253,7 @@ export default function CountryBubbleScreen() {
     return bubbles;
   }, [items]);
 
-  // Generate MICRO bubbles (subcategories)
+  // Generate MICRO bubbles
   const microBubbles = useMemo((): BubbleData[] => {
     try {
       if (!items || items.length === 0 || !selectedCategory) return [];
@@ -284,56 +297,45 @@ export default function CountryBubbleScreen() {
           items: subItems || [],
         }));
     } catch (error) {
-      console.error('[CountryBubble] Error generating micro bubbles:', error);
       return [];
     }
   }, [items, selectedCategory]);
 
+  // Handlers
   const handleMacroBubblePress = (bubble: BubbleData) => {
-    try {
-      if (bubble.category) {
-        console.log('[CountryBubble] Macro bubble pressed:', bubble.category);
-        setSelectedCategory(bubble.category);
-        setViewMode('micro');
-      }
-    } catch (error) {
-      console.error('[CountryBubble] Error in handleMacroBubblePress:', error);
+    if (bubble.category) {
+      setSelectedCategory(bubble.category);
+      setViewMode('micro');
     }
   };
 
   const handleMicroBubblePress = (bubble: BubbleData) => {
-    try {
-      console.log('[CountryBubble] Micro bubble pressed:', bubble.label, 'items:', bubble.items?.length);
-      
-      const simplifiedItems = (bubble.items || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        description: item.description,
-        location_name: item.location_name,
-        location_lat: item.location_lat,
-        location_lng: item.location_lng,
-        rating: item.rating,
-        user_ratings_total: item.user_ratings_total,
-        cuisine_type: item.cuisine_type,
-        place_type: item.place_type,
-        area_name: item.area_name,
-        google_place_id: item.google_place_id,
-        photos_json: item.photos_json ? 
-          (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) 
-          : null,
-      }));
-      
-      navigation.navigate('CategoryList', {
-        tripId,
-        countryName,
-        categoryLabel: bubble.label || 'Places',
-        categoryType: selectedCategory || 'place',
-        items: simplifiedItems,
-      });
-    } catch (error) {
-      console.error('[CountryBubble] Error in handleMicroBubblePress:', error);
-    }
+    const simplifiedItems = (bubble.items || []).map(item => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      location_name: item.location_name,
+      location_lat: item.location_lat,
+      location_lng: item.location_lng,
+      rating: item.rating,
+      user_ratings_total: item.user_ratings_total,
+      cuisine_type: item.cuisine_type,
+      place_type: item.place_type,
+      area_name: item.area_name,
+      google_place_id: item.google_place_id,
+      photos_json: item.photos_json ? 
+        (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) 
+        : null,
+    }));
+    
+    navigation.navigate('CategoryList', {
+      tripId,
+      countryName,
+      categoryLabel: bubble.label || 'Places',
+      categoryType: selectedCategory || 'place',
+      items: simplifiedItems,
+    });
   };
 
   const handleBack = () => {
@@ -345,8 +347,66 @@ export default function CountryBubbleScreen() {
     }
   };
 
-  const handleAgentPress = () => {
+  // Compact Chat handlers
+  const handleOrbPress = () => {
+    setIsCompactChatOpen(true);
+  };
+
+  const handleCloseCompactChat = () => {
+    setIsCompactChatOpen(false);
+    Keyboard.dismiss();
+  };
+
+  const handleOpenFullChat = () => {
+    setIsCompactChatOpen(false);
     navigation.navigate('AgentChat', { tripId, countryName });
+  };
+
+  const handleSendMessage = async (message: string) => {
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      type: 'user',
+      content: message,
+      timestamp: new Date(),
+    };
+    setChatMessages(prev => [...prev, userMessage]);
+
+    // Show typing
+    setIsAITyping(true);
+
+    try {
+      const locationData = location
+        ? { lat: location.coords.latitude, lng: location.coords.longitude }
+        : undefined;
+
+      // Send to AI (this updates companionStore internally)
+      await sendQuery(tripId, message, locationData);
+      
+      // Get the latest message from the store
+      const storeMessages = getMessages(tripId);
+      const latestAIMessage = storeMessages.filter(m => m.type === 'companion').pop();
+      
+      // Add AI response to local state
+      const aiMessage: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        type: 'ai',
+        content: latestAIMessage?.content || "I found some great places! Tap expand to see details 🗺️",
+        timestamp: new Date(),
+      };
+      setChatMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      // Add error message
+      const errorMessage: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        type: 'ai',
+        content: "Oops! Something went wrong. Try again? 😅",
+        timestamp: new Date(),
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsAITyping(false);
+    }
   };
 
   const currentBubbles = viewMode === 'macro' ? macroBubbles : microBubbles;
@@ -355,7 +415,7 @@ export default function CountryBubbleScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
-      {/* Real Interactive Map Background */}
+      {/* Map Background */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -370,19 +430,13 @@ export default function CountryBubbleScreen() {
         showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={false}
-        showsScale={false}
-        showsBuildings={false}
-        showsTraffic={false}
-        showsIndoors={false}
-        pitchEnabled={false}
-        rotateEnabled={false}
         scrollEnabled={true}
         zoomEnabled={true}
-        zoomControlEnabled={false}
-        toolbarEnabled={false}
+        pitchEnabled={false}
+        rotateEnabled={false}
       />
 
-      {/* Gradient Overlay for bubbles visibility */}
+      {/* Gradient Overlay */}
       <LinearGradient
         colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.5)']}
         locations={[0, 0.5, 1]}
@@ -390,7 +444,7 @@ export default function CountryBubbleScreen() {
         pointerEvents="none"
       />
 
-      {/* Floating Cloud Decorations (subtle) */}
+      {/* Floating Clouds */}
       <FloatingCloud color="purple" size={200} position={{ x: 10, y: 5 }} delay={0} />
       <FloatingCloud color="blue" size={150} position={{ x: 80, y: 8 }} delay={1} />
 
@@ -400,7 +454,6 @@ export default function CountryBubbleScreen() {
           <MotiView
             from={{ opacity: 0, translateX: -20 }}
             animate={{ opacity: 1, translateX: 0 }}
-            transition={{ type: 'timing', duration: 300 }}
           >
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
               <Ionicons name="arrow-back" size={20} color="#374151" />
@@ -410,7 +463,6 @@ export default function CountryBubbleScreen() {
           <MotiView
             from={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ type: 'timing', duration: 400 }}
           >
             <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
               <View style={styles.countryFlagContainer}>
@@ -424,7 +476,6 @@ export default function CountryBubbleScreen() {
           </MotiView>
         )}
 
-        {/* View mode label */}
         {viewMode === 'micro' && selectedCategory && (
           <MotiView
             from={{ opacity: 0, translateY: -10 }}
@@ -445,11 +496,7 @@ export default function CountryBubbleScreen() {
             key={bubble.id}
             from={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ 
-              type: 'spring',
-              delay: index * 100,
-              damping: 12,
-            }}
+            transition={{ type: 'spring', delay: index * 100, damping: 12 }}
           >
             <GlowingBubble
               label={bubble.label}
@@ -484,48 +531,21 @@ export default function CountryBubbleScreen() {
         </MotiView>
       )}
 
-      {/* Map hint */}
-      <MotiView
-        from={{ opacity: 0, translateY: 20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ delay: 500 }}
-        style={styles.mapHintContainer}
-      >
-        <View style={styles.mapHint}>
-          <Ionicons name="hand-left-outline" size={14} color="#6B7280" />
-          <Text style={styles.mapHintText}>Pinch to zoom the map</Text>
-        </View>
-      </MotiView>
+      {/* Floating AI Orb (hidden when compact chat is open) */}
+      <FloatingAIOrb
+        onPress={handleOrbPress}
+        visible={!isCompactChatOpen}
+      />
 
-      {/* AI Agent Button */}
-      <MotiView
-        from={{ translateY: 100 }}
-        animate={{ translateY: 0 }}
-        transition={{ type: 'spring', delay: 300 }}
-        style={styles.agentContainer}
-      >
-        <TouchableOpacity onPress={handleAgentPress}>
-          <LinearGradient
-            colors={['#8B5CF6', '#6366F1']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.agentButton}
-          >
-            <Ionicons name="sparkles" size={18} color="#FFFFFF" />
-            <Text style={styles.agentText}>AI Agent</Text>
-            <MotiView
-              from={{ scale: 1, opacity: 1 }}
-              animate={{ scale: 1.2, opacity: 0.7 }}
-              transition={{
-                type: 'timing',
-                duration: 1000,
-                loop: true,
-              }}
-              style={styles.agentDot}
-            />
-          </LinearGradient>
-        </TouchableOpacity>
-      </MotiView>
+      {/* Compact AI Chat */}
+      <CompactAIChat
+        isOpen={isCompactChatOpen}
+        onClose={handleCloseCompactChat}
+        onOpenFullChat={handleOpenFullChat}
+        messages={chatMessages}
+        onSendMessage={handleSendMessage}
+        isTyping={isAITyping || companionLoading}
+      />
 
       {/* Loading overlay */}
       {isLoading && (
@@ -600,7 +620,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#1F2937',
-    letterSpacing: 0.3,
   },
   placeCount: {
     fontSize: 13,
@@ -619,7 +638,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#8B5CF6',
-    letterSpacing: 0.5,
   },
   bubblesContainer: {
     flex: 1,
@@ -657,65 +675,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
-  },
-  mapHintContainer: {
-    position: 'absolute',
-    bottom: 100,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 15,
-  },
-  mapHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  mapHintText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginLeft: 6,
-  },
-  agentContainer: {
-    position: 'absolute',
-    bottom: 32,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 20,
-  },
-  agentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  agentText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginLeft: 8,
-    marginRight: 8,
-    fontSize: 15,
-  },
-  agentDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
