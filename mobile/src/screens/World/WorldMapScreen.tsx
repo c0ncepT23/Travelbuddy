@@ -2,10 +2,10 @@
  * World Map Screen - V2 Home
  * 
  * Replaces TripListScreen with interactive world map
- * - Shows flat world map (globe toggle coming in Phase 4)
+ * - Toggle between 3D Globe view and Flat Map view
  * - Highlights countries with saved places in green
  * - Tap country → CountryBubbleScreen
- * - Minimalist design
+ * - Minimalist design with premium aesthetics
  */
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -18,8 +18,10 @@ import {
   ActivityIndicator,
   Platform,
   StatusBar,
+  Animated,
 } from 'react-native';
 import MapView, { Marker, Geojson, PROVIDER_GOOGLE } from 'react-native-maps';
+import GlobeView from '../../components/GlobeView';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -118,6 +120,8 @@ export default function WorldMapScreen() {
   
   const [countryMarkers, setCountryMarkers] = useState<CountryMarkerData[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'globe' | 'flat'>('globe'); // Default to globe view
+  const toggleAnim = useRef(new Animated.Value(1)).current; // 1 = globe, 0 = flat
 
   // Fetch trips on focus
   useFocusEffect(
@@ -199,6 +203,33 @@ export default function WorldMapScreen() {
     }
   };
 
+  // Handle globe country press
+  const handleGlobeCountryPress = (countryName: string, tripId: string) => {
+    navigation.navigate('CountryBubbles', { 
+      tripId,
+      countryName,
+    });
+  };
+
+  // Toggle between globe and flat map
+  const toggleViewMode = () => {
+    const newMode = viewMode === 'globe' ? 'flat' : 'globe';
+    setViewMode(newMode);
+    
+    Animated.spring(toggleAnim, {
+      toValue: newMode === 'globe' ? 1 : 0,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7,
+    }).start();
+  };
+
+  // Get countries for globe view
+  const globeCountries = trips.map(trip => ({
+    destination: trip.destination,
+    tripId: trip.id,
+  }));
+
   // Initial map region - world view
   const initialRegion = {
     latitude: 20,
@@ -209,87 +240,127 @@ export default function WorldMapScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
+      <StatusBar 
+        barStyle={viewMode === 'globe' ? 'light-content' : 'dark-content'} 
+        backgroundColor={viewMode === 'globe' ? '#0a0a1a' : colors.bg} 
+      />
       
-      {/* Map */}
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        initialRegion={initialRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-        mapType="standard"
-        rotateEnabled={false}
-        pitchEnabled={false}
-      >
-        {/* Country markers */}
-        {countryMarkers.map((marker, index) => (
-          <Marker
-            key={`${marker.tripId}-${index}`}
-            coordinate={marker.coordinate}
-            onPress={() => handleCountryPress(marker)}
-          >
-            <MotiView
-              from={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ 
-                type: 'spring', 
-                delay: index * 100,
-                damping: 15,
-              }}
+      {/* Globe View */}
+      {viewMode === 'globe' && (
+        <GlobeView
+          onCountryPress={handleGlobeCountryPress}
+          countries={globeCountries}
+          style={styles.map}
+        />
+      )}
+      
+      {/* Flat Map View */}
+      {viewMode === 'flat' && (
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          initialRegion={initialRegion}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          mapType="standard"
+          rotateEnabled={false}
+          pitchEnabled={false}
+        >
+          {/* Country markers */}
+          {countryMarkers.map((marker, index) => (
+            <Marker
+              key={`${marker.tripId}-${index}`}
+              coordinate={marker.coordinate}
+              onPress={() => handleCountryPress(marker)}
             >
-              <View style={styles.markerContainer}>
-                <View style={styles.markerDot}>
-                  <Text style={styles.markerFlag}>
-                    {getCountryFlag(marker.destination)}
-                  </Text>
+              <MotiView
+                from={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ 
+                  type: 'spring', 
+                  delay: index * 100,
+                  damping: 15,
+                }}
+              >
+                <View style={styles.markerContainer}>
+                  <View style={styles.markerDot}>
+                    <Text style={styles.markerFlag}>
+                      {getCountryFlag(marker.destination)}
+                    </Text>
+                  </View>
+                  <View style={styles.markerLabel}>
+                    <Text style={styles.markerText} numberOfLines={1}>
+                      {marker.destination}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.markerLabel}>
-                  <Text style={styles.markerText} numberOfLines={1}>
-                    {marker.destination}
-                  </Text>
-                </View>
-              </View>
-            </MotiView>
-          </Marker>
-        ))}
-      </MapView>
+              </MotiView>
+            </Marker>
+          ))}
+        </MapView>
+      )}
 
       {/* Header overlay */}
-      <View style={styles.header}>
+      <View style={[styles.header, viewMode === 'globe' && styles.headerDark]}>
         <MotiView
           from={{ opacity: 0, translateY: -20 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 400 }}
         >
-          <Text style={styles.logo}>yori</Text>
-          <Text style={styles.tagline}>your saved places, everywhere</Text>
+          <Text style={[styles.logo, viewMode === 'globe' && styles.logoDark]}>yori</Text>
+          <Text style={[styles.tagline, viewMode === 'globe' && styles.taglineDark]}>
+            your saved places, everywhere
+          </Text>
         </MotiView>
         
-        <TouchableOpacity 
-          style={styles.profileButton}
-          onPress={handleProfilePress}
-        >
-          {user?.avatar_url ? (
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>
-                {user.name?.charAt(0).toUpperCase() || '?'}
-              </Text>
-            </View>
-          ) : (
-            <Ionicons name="person-circle-outline" size={32} color={colors.text} />
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {/* View Mode Toggle */}
+          <TouchableOpacity 
+            style={[styles.toggleButton, viewMode === 'globe' && styles.toggleButtonDark]}
+            onPress={toggleViewMode}
+          >
+            <Ionicons 
+              name={viewMode === 'globe' ? 'map-outline' : 'globe-outline'} 
+              size={20} 
+              color={viewMode === 'globe' ? '#ffffff' : colors.text} 
+            />
+            <Text style={[styles.toggleText, viewMode === 'globe' && styles.toggleTextDark]}>
+              {viewMode === 'globe' ? 'Flat' : 'Globe'}
+            </Text>
+          </TouchableOpacity>
+          
+          {/* Profile button */}
+          <TouchableOpacity 
+            style={[styles.profileButton, viewMode === 'globe' && styles.profileButtonDark]}
+            onPress={handleProfilePress}
+          >
+            {user?.avatar_url ? (
+              <View style={styles.avatarContainer}>
+                <Text style={styles.avatarText}>
+                  {user.name?.charAt(0).toUpperCase() || '?'}
+                </Text>
+              </View>
+            ) : (
+              <Ionicons 
+                name="person-circle-outline" 
+                size={32} 
+                color={viewMode === 'globe' ? '#ffffff' : colors.text} 
+              />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* My location button */}
-      <TouchableOpacity 
-        style={styles.myLocationButton}
-        onPress={handleMyLocationPress}
-      >
-        <Ionicons name="locate" size={22} color={colors.text} />
-      </TouchableOpacity>
+      {/* My location button - only show in flat map */}
+      {viewMode === 'flat' && (
+        <TouchableOpacity 
+          style={styles.myLocationButton}
+          onPress={handleMyLocationPress}
+        >
+          <Ionicons name="locate" size={22} color={colors.text} />
+        </TouchableOpacity>
+      )}
 
       {/* Empty state */}
       {!isLoading && countryMarkers.length === 0 && (
@@ -317,23 +388,29 @@ export default function WorldMapScreen() {
       )}
 
       {/* Stats bar at bottom */}
-      {countryMarkers.length > 0 && (
+      {trips.length > 0 && (
         <MotiView
           from={{ opacity: 0, translateY: 50 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'spring', delay: 200 }}
-          style={styles.statsBar}
+          style={[styles.statsBar, viewMode === 'globe' && styles.statsBarDark]}
         >
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{countryMarkers.length}</Text>
-            <Text style={styles.statLabel}>
-              {countryMarkers.length === 1 ? 'Country' : 'Countries'}
+            <Text style={[styles.statNumber, viewMode === 'globe' && styles.statNumberDark]}>
+              {trips.length}
+            </Text>
+            <Text style={[styles.statLabel, viewMode === 'globe' && styles.statLabelDark]}>
+              {trips.length === 1 ? 'Country' : 'Countries'}
             </Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, viewMode === 'globe' && styles.statDividerDark]} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{trips.length}</Text>
-            <Text style={styles.statLabel}>Collections</Text>
+            <Text style={[styles.statNumber, viewMode === 'globe' && styles.statNumberDark]}>
+              {trips.length}
+            </Text>
+            <Text style={[styles.statLabel, viewMode === 'globe' && styles.statLabelDark]}>
+              Collections
+            </Text>
           </View>
         </MotiView>
       )}
@@ -431,16 +508,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     zIndex: 10,
   },
+  headerDark: {
+    // No background change needed, just text colors
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   logo: {
     fontSize: 32,
     fontWeight: '900',
     color: colors.text,
     letterSpacing: -1,
   },
+  logoDark: {
+    color: '#ffffff',
+  },
   tagline: {
     fontSize: 13,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  taglineDark: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    gap: 6,
+  },
+  toggleButtonDark: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  toggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  toggleTextDark: {
+    color: '#ffffff',
   },
   profileButton: {
     width: 44,
@@ -454,6 +572,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+  },
+  profileButtonDark: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   avatarContainer: {
     width: 36,
@@ -588,6 +711,11 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 5,
   },
+  statsBarDark: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
   statItem: {
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -597,15 +725,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.text,
   },
+  statNumberDark: {
+    color: '#ffffff',
+  },
   statLabel: {
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 2,
   },
+  statLabelDark: {
+    color: 'rgba(255,255,255,0.7)',
+  },
   statDivider: {
     width: 1,
     height: 32,
     backgroundColor: colors.border,
+  },
+  statDividerDark: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
