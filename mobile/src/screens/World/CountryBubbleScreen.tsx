@@ -622,17 +622,31 @@ export default function CountryBubbleScreen() {
   }, [allItems, countryCoords, animateToRegion]);
 
   const handleNearMePress = useCallback(() => {
-    if (location) {
-      applyNearMeFilter(location.coords.latitude, location.coords.longitude);
-    } else {
+    if (!location) {
       setChatMessages(prev => [...prev, {
         id: `error-${Date.now()}`,
         type: 'ai',
         content: "📍 Can't get your location. Please enable GPS.",
         timestamp: new Date(),
       }]);
+      return;
     }
-  }, [location, applyNearMeFilter]);
+    
+    const inCountry = isInCountry(location.coords.latitude, location.coords.longitude, countryName);
+    if (!inCountry) {
+      setChatMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        type: 'ai',
+        content: `✈️ You're not in ${countryName} yet!\n\n"Near Me" works when you're traveling there. Try exploring specific areas like "${countryName === 'Japan' ? 'Shibuya' : countryName === 'Thailand' ? 'Bangkok' : 'the city center'}".`,
+        timestamp: new Date(),
+      }]);
+      // Open chat so user sees the message
+      setIsCompactChatOpen(true);
+      return;
+    }
+    
+    applyNearMeFilter(location.coords.latitude, location.coords.longitude);
+  }, [location, applyNearMeFilter, countryName]);
 
   // ============================================================
   // BUBBLE GENERATION
@@ -766,8 +780,27 @@ export default function CountryBubbleScreen() {
     const { isLocationQuery, location: detectedLocation, coords, radiusKm } = detectLocationQuery(message, countryName);
 
     if (isLocationQuery) {
-      // Handle "near me"
+      // Handle "near me" - check if user is in country first
       if (detectedLocation === 'nearMe') {
+        if (!location) {
+          setChatMessages(prev => [...prev, {
+            id: `ai-${Date.now()}`, type: 'ai',
+            content: "📍 Can't get your location. Please enable GPS and try again.",
+            timestamp: new Date(),
+          }]);
+          return;
+        }
+        
+        const inCountry = isInCountry(location.coords.latitude, location.coords.longitude, countryName);
+        if (!inCountry) {
+          setChatMessages(prev => [...prev, {
+            id: `ai-${Date.now()}`, type: 'ai',
+            content: `✈️ You're not in ${countryName} yet!\n\nThis feature works when you're traveling there. Try "Take me to ${countryName === 'Japan' ? 'Shibuya' : countryName === 'Thailand' ? 'Bangkok' : 'the city'}" to explore specific areas.`,
+            timestamp: new Date(),
+          }]);
+          return;
+        }
+        
         handleNearMePress();
         setChatMessages(prev => [...prev, {
           id: `ai-${Date.now()}`, type: 'ai',
@@ -777,8 +810,18 @@ export default function CountryBubbleScreen() {
         return;
       }
       
-      // Handle radius command
+      // Handle radius command - check if user is in country first
       if (radiusKm && location) {
+        const inCountry = isInCountry(location.coords.latitude, location.coords.longitude, countryName);
+        if (!inCountry) {
+          setChatMessages(prev => [...prev, {
+            id: `ai-${Date.now()}`, type: 'ai',
+            content: `✈️ You're not in ${countryName} yet!\n\nRadius filtering works when you're traveling there. For now, try "Take me to ${countryName === 'Japan' ? 'Tokyo' : countryName === 'Thailand' ? 'Bangkok' : 'the city'}" to explore specific areas.`,
+            timestamp: new Date(),
+          }]);
+          return;
+        }
+        
         applyNearMeFilter(location.coords.latitude, location.coords.longitude, radiusKm);
         const nearbyItems = filterItemsByRadius(allItems, location.coords.latitude, location.coords.longitude, radiusKm);
         setChatMessages(prev => [...prev, {
