@@ -388,7 +388,7 @@ export default function WorldMapScreen() {
       )}
 
       {/* Stats bar at bottom */}
-      {trips.length > 0 && (
+      {countryMarkers.length > 0 && (
         <MotiView
           from={{ opacity: 0, translateY: 50 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -397,10 +397,10 @@ export default function WorldMapScreen() {
         >
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, viewMode === 'globe' && styles.statNumberDark]}>
-              {trips.length}
+              {countryMarkers.length}
             </Text>
             <Text style={[styles.statLabel, viewMode === 'globe' && styles.statLabelDark]}>
-              {trips.length === 1 ? 'Country' : 'Countries'}
+              {countryMarkers.length === 1 ? 'Country' : 'Countries'}
             </Text>
           </View>
           <View style={[styles.statDivider, viewMode === 'globe' && styles.statDividerDark]} />
