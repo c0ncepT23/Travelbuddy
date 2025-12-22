@@ -1,16 +1,17 @@
 /**
- * Country Bubble Screen - V2 Figma Design
+ * Country Bubble Screen - V2 with Interactive Map Background
  * 
  * Features:
- * - Dreamy pastel gradient background
- * - Floating cloud decorations
- * - Map silhouette background
- * - Glassmorphic glowing bubbles
+ * - REAL interactive Google Map as background (zoomable, pannable)
+ * - Map centered on the country
+ * - Floating glassmorphic bubbles on top
  * - Two views: Macro (categories) and Micro (subcategories)
  * - AI Agent pill button at bottom
+ * 
+ * Future: Zoom into cities/areas to filter places
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,20 +26,36 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInDown,
-} from 'react-native-reanimated';
+import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import api from '../../config/api';
 import { SavedItem, ItemCategory, SubClusters } from '../../types';
-import { FloatingCloud, GlowingBubble, MapBackground } from '../../components/bubbles';
+import { FloatingCloud, GlowingBubble } from '../../components/bubbles';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Country center coordinates and zoom levels
+const COUNTRY_COORDS: Record<string, { latitude: number; longitude: number; latDelta: number; lngDelta: number }> = {
+  japan: { latitude: 36.2048, longitude: 138.2529, latDelta: 10, lngDelta: 10 },
+  thailand: { latitude: 15.8700, longitude: 100.9925, latDelta: 12, lngDelta: 8 },
+  korea: { latitude: 35.9078, longitude: 127.7669, latDelta: 5, lngDelta: 4 },
+  vietnam: { latitude: 14.0583, longitude: 108.2772, latDelta: 12, lngDelta: 8 },
+  singapore: { latitude: 1.3521, longitude: 103.8198, latDelta: 0.5, lngDelta: 0.5 },
+  indonesia: { latitude: -0.7893, longitude: 113.9213, latDelta: 20, lngDelta: 25 },
+  malaysia: { latitude: 4.2105, longitude: 101.9758, latDelta: 10, lngDelta: 10 },
+  india: { latitude: 20.5937, longitude: 78.9629, latDelta: 20, lngDelta: 20 },
+  china: { latitude: 35.8617, longitude: 104.1954, latDelta: 25, lngDelta: 30 },
+  usa: { latitude: 37.0902, longitude: -95.7129, latDelta: 30, lngDelta: 50 },
+  france: { latitude: 46.2276, longitude: 2.2137, latDelta: 8, lngDelta: 8 },
+  italy: { latitude: 41.8719, longitude: 12.5674, latDelta: 8, lngDelta: 6 },
+  spain: { latitude: 40.4637, longitude: -3.7492, latDelta: 8, lngDelta: 10 },
+  uk: { latitude: 55.3781, longitude: -3.4360, latDelta: 10, lngDelta: 8 },
+  australia: { latitude: -25.2744, longitude: 133.7751, latDelta: 30, lngDelta: 35 },
+  default: { latitude: 20, longitude: 0, latDelta: 60, lngDelta: 60 },
+};
+
 // Country flag emojis
 const COUNTRY_FLAGS: Record<string, string> = {
-  japan: '🗾',
+  japan: '🇯🇵',
   korea: '🇰🇷',
   thailand: '🇹🇭',
   vietnam: '🇻🇳',
@@ -70,6 +87,25 @@ const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'or
   'green', 'blue', 'pink', 'orange', 'purple', 'yellow'
 ];
 
+// Map style for clean look
+const MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road.arterial', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+  { featureType: 'road.highway', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.local', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9d6ff' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+];
+
 type ViewMode = 'macro' | 'micro';
 
 interface RouteParams {
@@ -90,8 +126,9 @@ interface BubbleData {
 export default function CountryBubbleScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, 'params'>>();
+  const mapRef = useRef<MapView>(null);
   
-  // Defensive extraction of route params (for deep link access)
+  // Defensive extraction of route params
   const params = route.params || {};
   const tripId = params.tripId || '';
   const countryName = params.countryName || 'Unknown';
@@ -102,7 +139,8 @@ export default function CountryBubbleScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('macro');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
-  // Get country flag (safe - countryName has fallback)
+  // Get country coordinates
+  const countryCoords = COUNTRY_COORDS[countryName.toLowerCase()] || COUNTRY_COORDS.default;
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
 
   // Fetch data
@@ -115,7 +153,6 @@ export default function CountryBubbleScreen() {
   }, [tripId]);
 
   const fetchItems = async () => {
-    // Guard against empty tripId to prevent malformed API URLs
     if (!tripId) {
       console.warn('[CountryBubbles] No tripId provided, skipping fetch');
       setIsLoading(false);
@@ -155,7 +192,7 @@ export default function CountryBubbleScreen() {
       categoryGroups[cat].push(item);
     });
 
-    // Fixed positions for macro bubbles (matching Figma)
+    // Fixed positions for macro bubbles
     const positions = [
       { x: 30, y: 35 },  // Food - left center
       { x: 70, y: 48 },  // Activities - right
@@ -167,7 +204,6 @@ export default function CountryBubbleScreen() {
 
     mainCategories.forEach((cat, index) => {
       const catItems = categoryGroups[cat] || [];
-      // Also include related categories
       if (cat === 'activity') {
         const placeItems = categoryGroups['place'] || [];
         catItems.push(...placeItems);
@@ -204,7 +240,7 @@ export default function CountryBubbleScreen() {
     return bubbles;
   }, [items]);
 
-  // Generate MICRO bubbles (subcategories: Ramen, Sushi, Cheesecake, etc.)
+  // Generate MICRO bubbles (subcategories)
   const microBubbles = useMemo((): BubbleData[] => {
     try {
       if (!items || items.length === 0 || !selectedCategory) return [];
@@ -220,7 +256,6 @@ export default function CountryBubbleScreen() {
 
       if (categoryItems.length === 0) return [];
 
-      // Group by cuisine_type or place_type
       const subGroups: Record<string, SavedItem[]> = {};
       categoryItems.forEach(item => {
         const subType = String(item.cuisine_type || item.place_type || 'other');
@@ -228,7 +263,6 @@ export default function CountryBubbleScreen() {
         subGroups[subType].push(item);
       });
 
-      // Positions for micro bubbles (matching Figma)
       const positions = [
         { x: 25, y: 28 },
         { x: 72, y: 32 },
@@ -271,7 +305,6 @@ export default function CountryBubbleScreen() {
     try {
       console.log('[CountryBubble] Micro bubble pressed:', bubble.label, 'items:', bubble.items?.length);
       
-      // Simplify items to avoid serialization issues with large/complex objects
       const simplifiedItems = (bubble.items || []).map(item => ({
         id: item.id,
         name: item.name,
@@ -286,7 +319,6 @@ export default function CountryBubbleScreen() {
         place_type: item.place_type,
         area_name: item.area_name,
         google_place_id: item.google_place_id,
-        // Simplify photos - only pass first photo URL if exists
         photos_json: item.photos_json ? 
           (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) 
           : null,
@@ -323,26 +355,44 @@ export default function CountryBubbleScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
-      {/* Gradient Background */}
-      <LinearGradient
-        colors={['#F5F3FF', '#EFF6FF', '#FAF5FF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
+      {/* Real Interactive Map Background */}
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={{
+          latitude: countryCoords.latitude,
+          longitude: countryCoords.longitude,
+          latitudeDelta: countryCoords.latDelta,
+          longitudeDelta: countryCoords.lngDelta,
+        }}
+        customMapStyle={MAP_STYLE}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        showsScale={false}
+        showsBuildings={false}
+        showsTraffic={false}
+        showsIndoors={false}
+        pitchEnabled={false}
+        rotateEnabled={false}
+        scrollEnabled={true}
+        zoomEnabled={true}
+        zoomControlEnabled={false}
+        toolbarEnabled={false}
       />
 
-      {/* Map Background */}
-      <MapBackground country={(countryName || 'unknown').toLowerCase()} viewType="country" />
+      {/* Gradient Overlay for bubbles visibility */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.5)']}
+        locations={[0, 0.5, 1]}
+        style={styles.gradientOverlay}
+        pointerEvents="none"
+      />
 
-      {/* Floating Cloud Decorations */}
-      <FloatingCloud color="purple" size={300} position={{ x: 10, y: 5 }} delay={0} />
-      <FloatingCloud color="blue" size={250} position={{ x: 75, y: 10 }} delay={1} />
-      <FloatingCloud color="pink" size={200} position={{ x: 20, y: 70 }} delay={2} />
-      <FloatingCloud color="green" size={220} position={{ x: 80, y: 75 }} delay={1.5} />
-      <FloatingCloud color="yellow" size={180} position={{ x: 50, y: 85 }} delay={2.5} />
-
-      {/* Subtle gradient overlay */}
-      <View style={styles.gradientOverlay} />
+      {/* Floating Cloud Decorations (subtle) */}
+      <FloatingCloud color="purple" size={200} position={{ x: 10, y: 5 }} delay={0} />
+      <FloatingCloud color="blue" size={150} position={{ x: 80, y: 8 }} delay={1} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -362,17 +412,34 @@ export default function CountryBubbleScreen() {
             animate={{ opacity: 1 }}
             transition={{ type: 'timing', duration: 400 }}
           >
-            <TouchableOpacity onPress={handleBack}>
-              <Text style={styles.countryTitle}>
-                {countryFlag} {countryName}
-              </Text>
+            <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
+              <View style={styles.countryFlagContainer}>
+                <Text style={styles.countryFlag}>{countryFlag}</Text>
+              </View>
+              <View>
+                <Text style={styles.countryTitle}>{countryName}</Text>
+                <Text style={styles.placeCount}>{items.length} places saved</Text>
+              </View>
             </TouchableOpacity>
+          </MotiView>
+        )}
+
+        {/* View mode label */}
+        {viewMode === 'micro' && selectedCategory && (
+          <MotiView
+            from={{ opacity: 0, translateY: -10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            style={styles.viewModeLabel}
+          >
+            <Text style={styles.viewModeLabelText}>
+              {selectedCategory.toUpperCase()} • {microBubbles.length} types
+            </Text>
           </MotiView>
         )}
       </View>
 
       {/* Bubbles */}
-      <View style={styles.bubblesContainer}>
+      <View style={styles.bubblesContainer} pointerEvents="box-none">
         {!isLoading && currentBubbles.map((bubble, index) => (
           <MotiView
             key={bubble.id}
@@ -407,13 +474,28 @@ export default function CountryBubbleScreen() {
           animate={{ opacity: 1 }}
           style={styles.emptyState}
         >
-          <Text style={styles.emptyEmoji}>🗺️</Text>
-          <Text style={styles.emptyTitle}>No places yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Share videos about {countryName} to add places
-          </Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>🗺️</Text>
+            <Text style={styles.emptyTitle}>No places yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Share videos about {countryName} to add places
+            </Text>
+          </View>
         </MotiView>
       )}
+
+      {/* Map hint */}
+      <MotiView
+        from={{ opacity: 0, translateY: 20 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ delay: 500 }}
+        style={styles.mapHintContainer}
+      >
+        <View style={styles.mapHint}>
+          <Ionicons name="hand-left-outline" size={14} color="#6B7280" />
+          <Text style={styles.mapHintText}>Pinch to zoom the map</Text>
+        </View>
+      </MotiView>
 
       {/* AI Agent Button */}
       <MotiView
@@ -424,7 +506,7 @@ export default function CountryBubbleScreen() {
       >
         <TouchableOpacity onPress={handleAgentPress}>
           <LinearGradient
-            colors={['#A78BFA', '#818CF8']}
+            colors={['#8B5CF6', '#6366F1']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.agentButton}
@@ -448,8 +530,10 @@ export default function CountryBubbleScreen() {
       {/* Loading overlay */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
-          <Text style={styles.loadingText}>Loading places...</Text>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#8B5CF6" />
+            <Text style={styles.loadingText}>Loading places...</Text>
+          </View>
         </View>
       )}
     </View>
@@ -459,15 +543,17 @@ export default function CountryBubbleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
   gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-    // Subtle top-to-bottom gradient effect
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 45,
-    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 60 : 48,
+    paddingHorizontal: 20,
     paddingBottom: 16,
     zIndex: 10,
   },
@@ -475,31 +561,87 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  countryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+    alignSelf: 'flex-start',
+  },
+  countryFlagContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  countryFlag: {
+    fontSize: 24,
   },
   countryTitle: {
-    fontSize: 24,
-    fontWeight: '500',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#1F2937',
+    letterSpacing: 0.3,
+  },
+  placeCount: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  viewModeLabel: {
+    marginTop: 12,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  viewModeLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8B5CF6',
     letterSpacing: 0.5,
   },
   bubblesContainer: {
     flex: 1,
+    zIndex: 5,
   },
   emptyState: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+    zIndex: 10,
+  },
+  emptyCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
   },
   emptyEmoji: {
     fontSize: 64,
@@ -516,6 +658,32 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
+  mapHintContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 15,
+  },
+  mapHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  mapHintText: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginLeft: 6,
+  },
   agentContainer: {
     position: 'absolute',
     bottom: 32,
@@ -528,11 +696,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
+    paddingVertical: 14,
+    borderRadius: 28,
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 16,
     elevation: 10,
   },
@@ -541,6 +709,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
     marginRight: 8,
+    fontSize: 15,
   },
   agentDot: {
     width: 8,
@@ -553,10 +722,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 50,
+  },
+  loadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
   },
   loadingText: {
     fontSize: 14,
     color: '#6B7280',
-    marginTop: 12,
+    marginTop: 16,
   },
 });
