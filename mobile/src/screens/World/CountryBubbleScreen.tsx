@@ -1,12 +1,12 @@
 /**
- * Country Bubble Screen - V3 with AI-Powered Location Filtering
+ * Country Bubble Screen - V4 with Auto-Location Focus
  * 
  * Features:
- * - Interactive Google Map background
- * - AI Chat that understands location queries
- * - "Take me to Bangkok" → Map animates + bubbles filter
- * - Area filter chip shows active filter
- * - "Show everything" resets to full country view
+ * - Auto-detect if user is in the trip's country
+ * - Auto-focus to user's GPS location with smart radius
+ * - "Near Me" / "All Places" navigation buttons
+ * - AI Chat understands location + radius queries
+ * - Smart radius: 5km default, expands to 10km if <3 places
  */
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
@@ -36,6 +36,11 @@ import { useLocationStore } from '../../stores/locationStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Default radius settings (in km)
+const DEFAULT_RADIUS_KM = 5;
+const EXPANDED_RADIUS_KM = 10;
+const MIN_PLACES_THRESHOLD = 3;
+
 // ============================================================
 // CITY/AREA COORDINATES DATABASE
 // ============================================================
@@ -44,8 +49,27 @@ interface CityCoords {
   longitude: number;
   latDelta: number;
   lngDelta: number;
-  aliases?: string[]; // Alternative names for matching
+  aliases?: string[];
 }
+
+// Country bounding boxes (rough) for checking if user is in country
+const COUNTRY_BOUNDS: Record<string, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
+  japan: { minLat: 24, maxLat: 46, minLng: 122, maxLng: 154 },
+  thailand: { minLat: 5, maxLat: 21, minLng: 97, maxLng: 106 },
+  korea: { minLat: 33, maxLat: 39, minLng: 124, maxLng: 132 },
+  vietnam: { minLat: 8, maxLat: 24, minLng: 102, maxLng: 110 },
+  singapore: { minLat: 1.1, maxLat: 1.5, minLng: 103.6, maxLng: 104.1 },
+  indonesia: { minLat: -11, maxLat: 6, minLng: 95, maxLng: 141 },
+  malaysia: { minLat: 0, maxLat: 8, minLng: 99, maxLng: 120 },
+  india: { minLat: 6, maxLat: 36, minLng: 68, maxLng: 98 },
+  china: { minLat: 18, maxLat: 54, minLng: 73, maxLng: 135 },
+  usa: { minLat: 24, maxLat: 50, minLng: -125, maxLng: -66 },
+  france: { minLat: 41, maxLat: 51, minLng: -5, maxLng: 10 },
+  italy: { minLat: 36, maxLat: 47, minLng: 6, maxLng: 19 },
+  spain: { minLat: 36, maxLat: 44, minLng: -10, maxLng: 5 },
+  uk: { minLat: 49, maxLat: 61, minLng: -8, maxLng: 2 },
+  australia: { minLat: -44, maxLat: -10, minLng: 112, maxLng: 154 },
+};
 
 // Major cities by country
 const CITY_COORDS: Record<string, Record<string, CityCoords>> = {
@@ -269,6 +293,7 @@ const MAP_STYLE = [
 ];
 
 type ViewMode = 'macro' | 'micro';
+type FilterMode = 'all' | 'nearMe' | 'area';
 
 interface RouteParams {
   tripId: string;
@@ -293,102 +318,23 @@ interface ChatMessage {
 }
 
 // ============================================================
-// LOCATION DETECTION HELPERS
+// HELPER FUNCTIONS
 // ============================================================
 
 /**
- * Detect if message is asking about a location and extract the city/area
+ * Check if GPS coordinates are within a country's bounds
  */
-function detectLocationQuery(message: string, countryName: string): { isLocationQuery: boolean; location: string | null; coords: CityCoords | null } {
-  const lowerMessage = message.toLowerCase().trim();
-  const lowerCountry = countryName.toLowerCase();
-  
-  // Check for "show everything" / reset commands
-  const resetPhrases = ['show everything', 'show all', 'all places', 'entire country', 'whole country', 'reset', 'zoom out', 'back to all'];
-  if (resetPhrases.some(phrase => lowerMessage.includes(phrase))) {
-    return { isLocationQuery: true, location: null, coords: null };
-  }
-  
-  // Location trigger phrases
-  const locationTriggers = [
-    'take me to', 'show me', 'go to', 'places in', 'spots in', 'food in', 
-    'things in', 'what\'s in', 'whats in', 'explore', 'visit', 'around',
-    'near', 'in the', 'at the'
-  ];
-  
-  const hasLocationTrigger = locationTriggers.some(trigger => lowerMessage.includes(trigger));
-  
-  // Get cities for this country
-  const countryCities = CITY_COORDS[lowerCountry] || {};
-  
-  // Try to match a city/area
-  for (const [cityKey, cityData] of Object.entries(countryCities)) {
-    const searchTerms = [cityKey, ...(cityData.aliases || [])];
-    
-    for (const term of searchTerms) {
-      // Check if message contains this city name
-      const termLower = term.toLowerCase();
-      if (lowerMessage.includes(termLower)) {
-        // Found a location match!
-        const displayName = cityKey.charAt(0).toUpperCase() + cityKey.slice(1);
-        return { isLocationQuery: true, location: displayName, coords: cityData };
-      }
-    }
-  }
-  
-  // If has trigger but no city found, might be a general location question
-  if (hasLocationTrigger) {
-    return { isLocationQuery: true, location: null, coords: null };
-  }
-  
-  return { isLocationQuery: false, location: null, coords: null };
-}
-
-/**
- * Filter items by proximity to coordinates or matching area_name
- */
-function filterItemsByLocation(items: SavedItem[], location: string, coords: CityCoords): SavedItem[] {
-  const locationLower = location.toLowerCase();
-  
-  return items.filter(item => {
-    // Check area_name match
-    if (item.area_name) {
-      const areaLower = item.area_name.toLowerCase();
-      if (areaLower.includes(locationLower) || locationLower.includes(areaLower)) {
-        return true;
-      }
-    }
-    
-    // Check location_name match
-    if (item.location_name) {
-      const locNameLower = item.location_name.toLowerCase();
-      if (locNameLower.includes(locationLower)) {
-        return true;
-      }
-    }
-    
-    // Check proximity (if item has coordinates)
-    if (item.location_lat && item.location_lng) {
-      const distance = getDistanceKm(
-        coords.latitude, coords.longitude,
-        item.location_lat, item.location_lng
-      );
-      // Include items within reasonable radius based on zoom level
-      const radiusKm = Math.max(coords.latDelta, coords.lngDelta) * 50; // Rough km conversion
-      if (distance <= radiusKm) {
-        return true;
-      }
-    }
-    
-    return false;
-  });
+function isInCountry(lat: number, lng: number, countryName: string): boolean {
+  const bounds = COUNTRY_BOUNDS[countryName.toLowerCase()];
+  if (!bounds) return false;
+  return lat >= bounds.minLat && lat <= bounds.maxLat && lng >= bounds.minLng && lng <= bounds.maxLng;
 }
 
 /**
  * Calculate distance between two points in km (Haversine formula)
  */
 function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371; // Earth's radius in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -396,6 +342,102 @@ function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): 
             Math.sin(dLng/2) * Math.sin(dLng/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
+}
+
+/**
+ * Convert km to approximate lat/lng delta
+ */
+function kmToLatDelta(km: number): number {
+  return km / 111; // ~111km per degree of latitude
+}
+
+/**
+ * Filter items within a radius (in km) of a point
+ */
+function filterItemsByRadius(items: SavedItem[], lat: number, lng: number, radiusKm: number): SavedItem[] {
+  return items.filter(item => {
+    if (!item.location_lat || !item.location_lng) return false;
+    const distance = getDistanceKm(lat, lng, item.location_lat, item.location_lng);
+    return distance <= radiusKm;
+  });
+}
+
+/**
+ * Filter items by location name/area match + proximity
+ */
+function filterItemsByLocation(items: SavedItem[], location: string, coords: CityCoords): SavedItem[] {
+  const locationLower = location.toLowerCase();
+  
+  return items.filter(item => {
+    if (item.area_name) {
+      const areaLower = item.area_name.toLowerCase();
+      if (areaLower.includes(locationLower) || locationLower.includes(areaLower)) return true;
+    }
+    if (item.location_name) {
+      const locNameLower = item.location_name.toLowerCase();
+      if (locNameLower.includes(locationLower)) return true;
+    }
+    if (item.location_lat && item.location_lng) {
+      const distance = getDistanceKm(coords.latitude, coords.longitude, item.location_lat, item.location_lng);
+      const radiusKm = Math.max(coords.latDelta, coords.lngDelta) * 50;
+      if (distance <= radiusKm) return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * Detect location query from message
+ */
+function detectLocationQuery(message: string, countryName: string): { isLocationQuery: boolean; location: string | null; coords: CityCoords | null; radiusKm?: number } {
+  const lowerMessage = message.toLowerCase().trim();
+  const lowerCountry = countryName.toLowerCase();
+  
+  // Check for reset commands
+  const resetPhrases = ['show everything', 'show all', 'all places', 'entire country', 'whole country', 'reset', 'zoom out', 'back to all'];
+  if (resetPhrases.some(phrase => lowerMessage.includes(phrase))) {
+    return { isLocationQuery: true, location: null, coords: null };
+  }
+  
+  // Check for radius commands (e.g., "10km", "20 km", "within 15km")
+  const radiusMatch = lowerMessage.match(/(\d+)\s*km/);
+  if (radiusMatch) {
+    const radiusKm = parseInt(radiusMatch[1], 10);
+    return { isLocationQuery: true, location: 'custom', coords: null, radiusKm };
+  }
+  
+  // Check for expand commands
+  if (lowerMessage.includes('expand') || lowerMessage.includes('wider') || lowerMessage.includes('more area')) {
+    return { isLocationQuery: true, location: 'expand', coords: null };
+  }
+  
+  // Check for "near me" commands
+  const nearMePhrases = ['near me', 'nearby', 'around me', 'my location', 'where i am'];
+  if (nearMePhrases.some(phrase => lowerMessage.includes(phrase))) {
+    return { isLocationQuery: true, location: 'nearMe', coords: null };
+  }
+  
+  // Location trigger phrases
+  const locationTriggers = ['take me to', 'show me', 'go to', 'places in', 'spots in', 'food in', 'things in', 'what\'s in', 'whats in', 'explore', 'visit', 'around', 'near', 'in the', 'at the'];
+  const hasLocationTrigger = locationTriggers.some(trigger => lowerMessage.includes(trigger));
+  
+  // Try to match a city/area
+  const countryCities = CITY_COORDS[lowerCountry] || {};
+  for (const [cityKey, cityData] of Object.entries(countryCities)) {
+    const searchTerms = [cityKey, ...(cityData.aliases || [])];
+    for (const term of searchTerms) {
+      if (lowerMessage.includes(term.toLowerCase())) {
+        const displayName = cityKey.charAt(0).toUpperCase() + cityKey.slice(1);
+        return { isLocationQuery: true, location: displayName, coords: cityData };
+      }
+    }
+  }
+  
+  if (hasLocationTrigger) {
+    return { isLocationQuery: true, location: null, coords: null };
+  }
+  
+  return { isLocationQuery: false, location: null, coords: null };
 }
 
 // ============================================================
@@ -413,37 +455,47 @@ export default function CountryBubbleScreen() {
 
   // Data state
   const [isLoading, setIsLoading] = useState(true);
-  const [allItems, setAllItems] = useState<SavedItem[]>([]); // All items (unfiltered)
-  const [filteredItems, setFilteredItems] = useState<SavedItem[]>([]); // Filtered by area
+  const [allItems, setAllItems] = useState<SavedItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<SavedItem[]>([]);
   const [subClusters, setSubClusters] = useState<SubClusters | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('macro');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
-  // Area filter state
+  // Filter state
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [activeAreaFilter, setActiveAreaFilter] = useState<string | null>(null);
   const [activeAreaCoords, setActiveAreaCoords] = useState<CityCoords | null>(null);
+  const [currentRadiusKm, setCurrentRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
+  const [userInCountry, setUserInCountry] = useState<boolean>(false);
+  const [hasAutoFocused, setHasAutoFocused] = useState<boolean>(false);
 
   // Compact Chat state
   const [isCompactChatOpen, setIsCompactChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      type: 'ai',
-      content: `Hey there! 👋 I'm your travel buddy for ${countryName}.\n\nTry: "Take me to ${countryName === 'Japan' ? 'Shibuya' : countryName === 'Thailand' ? 'Bangkok' : 'the city'}"`,
-      timestamp: new Date(),
-    }
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isAITyping, setIsAITyping] = useState(false);
 
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
-  const { location } = useLocationStore();
+  const { location, startTracking } = useLocationStore();
 
   const countryCoords = COUNTRY_COORDS[countryName.toLowerCase()] || COUNTRY_COORDS.default;
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
-
-  // Use filtered items for bubbles
   const items = filteredItems;
+
+  // Start location tracking
+  useEffect(() => {
+    startTracking();
+  }, []);
+
+  // Set initial welcome message
+  useEffect(() => {
+    setChatMessages([{
+      id: 'welcome',
+      type: 'ai',
+      content: `Hey! 👋 I'm your travel buddy for ${countryName}.\n\nTry: "Take me to ${countryName === 'Japan' ? 'Shibuya' : countryName === 'Thailand' ? 'Bangkok' : 'the city'}" or "Near me"`,
+      timestamp: new Date(),
+    }]);
+  }, [countryName]);
 
   // Fetch data
   useEffect(() => {
@@ -465,7 +517,7 @@ export default function CountryBubbleScreen() {
       const itemsResponse = await api.get(`/trips/${tripId}/items`);
       const fetchedItems: SavedItem[] = itemsResponse.data.data || itemsResponse.data || [];
       setAllItems(fetchedItems);
-      setFilteredItems(fetchedItems); // Initially show all
+      setFilteredItems(fetchedItems);
 
       try {
         const clustersResponse = await api.get(`/trips/${tripId}/items/sub-clusters`);
@@ -480,52 +532,110 @@ export default function CountryBubbleScreen() {
     }
   };
 
+  // Auto-focus to user location if in country
+  useEffect(() => {
+    if (!isLoading && allItems.length > 0 && location && !hasAutoFocused) {
+      const userLat = location.coords.latitude;
+      const userLng = location.coords.longitude;
+      
+      if (isInCountry(userLat, userLng, countryName)) {
+        setUserInCountry(true);
+        setHasAutoFocused(true);
+        
+        // Apply "near me" filter
+        applyNearMeFilter(userLat, userLng);
+        
+        // Add message about auto-focus
+        setChatMessages(prev => [...prev, {
+          id: `auto-${Date.now()}`,
+          type: 'ai',
+          content: `📍 You're in ${countryName}! Showing places near you.`,
+          timestamp: new Date(),
+        }]);
+      } else {
+        setHasAutoFocused(true);
+      }
+    }
+  }, [isLoading, allItems, location, hasAutoFocused, countryName]);
+
   // ============================================================
-  // MAP & FILTER HANDLERS
+  // FILTER HANDLERS
   // ============================================================
 
-  const animateToLocation = useCallback((coords: CityCoords) => {
+  const animateToRegion = useCallback((lat: number, lng: number, latDelta: number, lngDelta: number) => {
     mapRef.current?.animateToRegion({
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      latitudeDelta: coords.latDelta,
-      longitudeDelta: coords.lngDelta,
+      latitude: lat,
+      longitude: lng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
     }, 800);
   }, []);
 
-  const resetToCountryView = useCallback(() => {
-    setActiveAreaFilter(null);
+  const applyNearMeFilter = useCallback((lat: number, lng: number, radiusKm: number = DEFAULT_RADIUS_KM) => {
+    // Filter items within radius
+    let nearbyItems = filterItemsByRadius(allItems, lat, lng, radiusKm);
+    
+    // If too few items, expand radius
+    if (nearbyItems.length < MIN_PLACES_THRESHOLD && radiusKm < EXPANDED_RADIUS_KM) {
+      nearbyItems = filterItemsByRadius(allItems, lat, lng, EXPANDED_RADIUS_KM);
+      setCurrentRadiusKm(EXPANDED_RADIUS_KM);
+    } else {
+      setCurrentRadiusKm(radiusKm);
+    }
+    
+    setFilterMode('nearMe');
+    setActiveAreaFilter('Near You');
     setActiveAreaCoords(null);
-    setFilteredItems(allItems);
-    setViewMode('macro');
-    setSelectedCategory('');
-    
-    mapRef.current?.animateToRegion({
-      latitude: countryCoords.latitude,
-      longitude: countryCoords.longitude,
-      latitudeDelta: countryCoords.latDelta,
-      longitudeDelta: countryCoords.lngDelta,
-    }, 800);
-  }, [allItems, countryCoords]);
-
-  const applyAreaFilter = useCallback((location: string, coords: CityCoords) => {
-    setActiveAreaFilter(location);
-    setActiveAreaCoords(coords);
-    
-    // Filter items
-    const filtered = filterItemsByLocation(allItems, location, coords);
-    setFilteredItems(filtered);
-    
-    // Reset to macro view with filtered data
+    setFilteredItems(nearbyItems);
     setViewMode('macro');
     setSelectedCategory('');
     
     // Animate map
-    animateToLocation(coords);
-  }, [allItems, animateToLocation]);
+    const delta = kmToLatDelta(radiusKm < EXPANDED_RADIUS_KM && nearbyItems.length < MIN_PLACES_THRESHOLD ? EXPANDED_RADIUS_KM : radiusKm);
+    animateToRegion(lat, lng, delta, delta);
+  }, [allItems, animateToRegion]);
+
+  const applyAreaFilter = useCallback((locationName: string, coords: CityCoords) => {
+    setFilterMode('area');
+    setActiveAreaFilter(locationName);
+    setActiveAreaCoords(coords);
+    setCurrentRadiusKm(Math.max(coords.latDelta, coords.lngDelta) * 50);
+    
+    const filtered = filterItemsByLocation(allItems, locationName, coords);
+    setFilteredItems(filtered);
+    setViewMode('macro');
+    setSelectedCategory('');
+    
+    animateToRegion(coords.latitude, coords.longitude, coords.latDelta, coords.lngDelta);
+  }, [allItems, animateToRegion]);
+
+  const resetToCountryView = useCallback(() => {
+    setFilterMode('all');
+    setActiveAreaFilter(null);
+    setActiveAreaCoords(null);
+    setCurrentRadiusKm(DEFAULT_RADIUS_KM);
+    setFilteredItems(allItems);
+    setViewMode('macro');
+    setSelectedCategory('');
+    
+    animateToRegion(countryCoords.latitude, countryCoords.longitude, countryCoords.latDelta, countryCoords.lngDelta);
+  }, [allItems, countryCoords, animateToRegion]);
+
+  const handleNearMePress = useCallback(() => {
+    if (location) {
+      applyNearMeFilter(location.coords.latitude, location.coords.longitude);
+    } else {
+      setChatMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        type: 'ai',
+        content: "📍 Can't get your location. Please enable GPS.",
+        timestamp: new Date(),
+      }]);
+    }
+  }, [location, applyNearMeFilter]);
 
   // ============================================================
-  // BUBBLE GENERATION (uses filtered items)
+  // BUBBLE GENERATION
   // ============================================================
 
   const macroBubbles = useMemo((): BubbleData[] => {
@@ -538,21 +648,13 @@ export default function CountryBubbleScreen() {
       categoryGroups[cat].push(item);
     });
 
-    const positions = [
-      { x: 30, y: 35 },
-      { x: 70, y: 48 },
-      { x: 50, y: 68 },
-    ];
-
+    const positions = [{ x: 30, y: 35 }, { x: 70, y: 48 }, { x: 50, y: 68 }];
     const mainCategories = ['food', 'activity', 'shopping'];
     const bubbles: BubbleData[] = [];
 
     mainCategories.forEach((cat, index) => {
       const catItems = [...(categoryGroups[cat] || [])];
-      if (cat === 'activity') {
-        const placeItems = categoryGroups['place'] || [];
-        catItems.push(...placeItems);
-      }
+      if (cat === 'activity') catItems.push(...(categoryGroups['place'] || []));
       
       if (catItems.length > 0) {
         bubbles.push({
@@ -585,46 +687,36 @@ export default function CountryBubbleScreen() {
   }, [items]);
 
   const microBubbles = useMemo((): BubbleData[] => {
-    try {
-      if (!items || items.length === 0 || !selectedCategory) return [];
+    if (!items || items.length === 0 || !selectedCategory) return [];
 
-      const categoryItems = items.filter(item => {
-        if (!item) return false;
-        const cat = item.category || 'place';
-        if (selectedCategory === 'activity') {
-          return cat === 'activity' || cat === 'place';
-        }
-        return cat === selectedCategory;
-      });
+    const categoryItems = items.filter(item => {
+      const cat = item.category || 'place';
+      if (selectedCategory === 'activity') return cat === 'activity' || cat === 'place';
+      return cat === selectedCategory;
+    });
 
-      if (categoryItems.length === 0) return [];
+    if (categoryItems.length === 0) return [];
 
-      const subGroups: Record<string, SavedItem[]> = {};
-      categoryItems.forEach(item => {
-        const subType = String(item.cuisine_type || item.place_type || 'other');
-        if (!subGroups[subType]) subGroups[subType] = [];
-        subGroups[subType].push(item);
-      });
+    const subGroups: Record<string, SavedItem[]> = {};
+    categoryItems.forEach(item => {
+      const subType = String(item.cuisine_type || item.place_type || 'other');
+      if (!subGroups[subType]) subGroups[subType] = [];
+      subGroups[subType].push(item);
+    });
 
-      const positions = [
-        { x: 25, y: 28 }, { x: 72, y: 32 }, { x: 35, y: 52 },
-        { x: 68, y: 58 }, { x: 50, y: 75 }, { x: 28, y: 70 },
-      ];
+    const positions = [{ x: 25, y: 28 }, { x: 72, y: 32 }, { x: 35, y: 52 }, { x: 68, y: 58 }, { x: 50, y: 75 }, { x: 28, y: 70 }];
 
-      return Object.entries(subGroups)
-        .sort((a, b) => b[1].length - a[1].length)
-        .slice(0, 6)
-        .map(([subType, subItems], index) => ({
-          id: `micro-${subType || 'unknown'}`,
-          label: String(subType || 'OTHER').toUpperCase(),
-          count: subItems?.length || 0,
-          color: SUBCATEGORY_COLORS[index % SUBCATEGORY_COLORS.length],
-          position: positions[index] || { x: 50, y: 50 },
-          items: subItems || [],
-        }));
-    } catch (error) {
-      return [];
-    }
+    return Object.entries(subGroups)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 6)
+      .map(([subType, subItems], index) => ({
+        id: `micro-${subType || 'unknown'}`,
+        label: String(subType || 'OTHER').toUpperCase(),
+        count: subItems?.length || 0,
+        color: SUBCATEGORY_COLORS[index % SUBCATEGORY_COLORS.length],
+        position: positions[index] || { x: 50, y: 50 },
+        items: subItems || [],
+      }));
   }, [items, selectedCategory]);
 
   // ============================================================
@@ -640,31 +732,16 @@ export default function CountryBubbleScreen() {
 
   const handleMicroBubblePress = (bubble: BubbleData) => {
     const simplifiedItems = (bubble.items || []).map(item => ({
-      id: item.id,
-      name: item.name,
-      category: item.category,
-      description: item.description,
-      location_name: item.location_name,
-      location_lat: item.location_lat,
-      location_lng: item.location_lng,
-      rating: item.rating,
-      user_ratings_total: item.user_ratings_total,
-      cuisine_type: item.cuisine_type,
-      place_type: item.place_type,
-      area_name: item.area_name,
-      google_place_id: item.google_place_id,
-      photos_json: item.photos_json ? 
-        (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) 
-        : null,
+      id: item.id, name: item.name, category: item.category, description: item.description,
+      location_name: item.location_name, location_lat: item.location_lat, location_lng: item.location_lng,
+      rating: item.rating, user_ratings_total: item.user_ratings_total, cuisine_type: item.cuisine_type,
+      place_type: item.place_type, area_name: item.area_name, google_place_id: item.google_place_id,
+      photos_json: item.photos_json ? (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) : null,
     }));
     
     navigation.navigate('CategoryList', {
-      tripId,
-      countryName,
-      categoryLabel: bubble.label || 'Places',
-      categoryType: selectedCategory || 'place',
-      items: simplifiedItems,
-      areaFilter: activeAreaFilter, // Pass area filter to CategoryList
+      tripId, countryName, categoryLabel: bubble.label || 'Places',
+      categoryType: selectedCategory || 'place', items: simplifiedItems, areaFilter: activeAreaFilter,
     });
   };
 
@@ -677,97 +754,81 @@ export default function CountryBubbleScreen() {
     }
   };
 
-  // ============================================================
-  // COMPACT CHAT HANDLERS
-  // ============================================================
-
-  const handleOrbPress = () => {
-    setIsCompactChatOpen(true);
-  };
-
-  const handleCloseCompactChat = () => {
-    setIsCompactChatOpen(false);
-    Keyboard.dismiss();
-  };
-
-  const handleOpenFullChat = () => {
-    setIsCompactChatOpen(false);
-    navigation.navigate('AgentChat', { tripId, countryName });
-  };
+  // Chat handlers
+  const handleOrbPress = () => setIsCompactChatOpen(true);
+  const handleCloseCompactChat = () => { setIsCompactChatOpen(false); Keyboard.dismiss(); };
+  const handleOpenFullChat = () => { setIsCompactChatOpen(false); navigation.navigate('AgentChat', { tripId, countryName }); };
 
   const handleSendMessage = async (message: string) => {
-    // Add user message
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      type: 'user',
-      content: message,
-      timestamp: new Date(),
-    };
+    const userMessage: ChatMessage = { id: `user-${Date.now()}`, type: 'user', content: message, timestamp: new Date() };
     setChatMessages(prev => [...prev, userMessage]);
 
-    // Detect location query FIRST
-    const { isLocationQuery, location: detectedLocation, coords } = detectLocationQuery(message, countryName);
+    const { isLocationQuery, location: detectedLocation, coords, radiusKm } = detectLocationQuery(message, countryName);
 
     if (isLocationQuery) {
-      if (detectedLocation && coords) {
-        // Apply area filter and animate map
-        applyAreaFilter(detectedLocation, coords);
-        
-        // Count items in that area
-        const areaItems = filterItemsByLocation(allItems, detectedLocation, coords);
-        
-        // Add AI response about the location
-        const aiMessage: ChatMessage = {
-          id: `ai-${Date.now()}`,
-          type: 'ai',
-          content: `📍 Moving to ${detectedLocation}!\n\nFound ${areaItems.length} places here. ${areaItems.length > 0 ? 'Explore the bubbles!' : 'Try adding more places for this area.'}`,
+      // Handle "near me"
+      if (detectedLocation === 'nearMe') {
+        handleNearMePress();
+        setChatMessages(prev => [...prev, {
+          id: `ai-${Date.now()}`, type: 'ai',
+          content: `📍 Showing places near you (${currentRadiusKm}km radius)`,
           timestamp: new Date(),
-        };
-        setChatMessages(prev => [...prev, aiMessage]);
+        }]);
         return;
-      } else if (detectedLocation === null && coords === null) {
-        // Reset command
+      }
+      
+      // Handle radius command
+      if (radiusKm && location) {
+        applyNearMeFilter(location.coords.latitude, location.coords.longitude, radiusKm);
+        const nearbyItems = filterItemsByRadius(allItems, location.coords.latitude, location.coords.longitude, radiusKm);
+        setChatMessages(prev => [...prev, {
+          id: `ai-${Date.now()}`, type: 'ai',
+          content: `📍 Showing ${nearbyItems.length} places within ${radiusKm}km`,
+          timestamp: new Date(),
+        }]);
+        return;
+      }
+      
+      // Handle specific area
+      if (detectedLocation && coords) {
+        applyAreaFilter(detectedLocation, coords);
+        const areaItems = filterItemsByLocation(allItems, detectedLocation, coords);
+        setChatMessages(prev => [...prev, {
+          id: `ai-${Date.now()}`, type: 'ai',
+          content: `📍 Moving to ${detectedLocation}!\n\nFound ${areaItems.length} places here.`,
+          timestamp: new Date(),
+        }]);
+        return;
+      }
+      
+      // Handle reset
+      if (detectedLocation === null && coords === null) {
         resetToCountryView();
-        
-        const aiMessage: ChatMessage = {
-          id: `ai-${Date.now()}`,
-          type: 'ai',
+        setChatMessages(prev => [...prev, {
+          id: `ai-${Date.now()}`, type: 'ai',
           content: `🗺️ Showing all ${allItems.length} places in ${countryName}!`,
           timestamp: new Date(),
-        };
-        setChatMessages(prev => [...prev, aiMessage]);
+        }]);
         return;
       }
     }
 
-    // If not a location query, send to AI backend
+    // Send to AI backend
     setIsAITyping(true);
-
     try {
-      const locationData = location
-        ? { lat: location.coords.latitude, lng: location.coords.longitude }
-        : undefined;
-
+      const locationData = location ? { lat: location.coords.latitude, lng: location.coords.longitude } : undefined;
       await sendQuery(tripId, message, locationData);
-      
       const storeMessages = getMessages(tripId);
       const latestAIMessage = storeMessages.filter(m => m.type === 'companion').pop();
-      
-      const aiMessage: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        type: 'ai',
+      setChatMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`, type: 'ai',
         content: latestAIMessage?.content || "I found some great places! Tap expand to see details 🗺️",
         timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, aiMessage]);
+      }]);
     } catch (error) {
-      const errorMessage: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        type: 'ai',
-        content: "Oops! Something went wrong. Try again? 😅",
-        timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, errorMessage]);
+      setChatMessages(prev => [...prev, {
+        id: `ai-${Date.now()}`, type: 'ai', content: "Oops! Something went wrong. Try again? 😅", timestamp: new Date(),
+      }]);
     } finally {
       setIsAITyping(false);
     }
@@ -795,7 +856,7 @@ export default function CountryBubbleScreen() {
           longitudeDelta: countryCoords.lngDelta,
         }}
         customMapStyle={MAP_STYLE}
-        showsUserLocation={false}
+        showsUserLocation={userInCountry}
         showsMyLocationButton={false}
         showsCompass={false}
         scrollEnabled={true}
@@ -819,10 +880,7 @@ export default function CountryBubbleScreen() {
       {/* Header */}
       <View style={styles.header}>
         {viewMode === 'micro' ? (
-          <MotiView
-            from={{ opacity: 0, translateX: -20 }}
-            animate={{ opacity: 1, translateX: 0 }}
-          >
+          <MotiView from={{ opacity: 0, translateX: -20 }} animate={{ opacity: 1, translateX: 0 }}>
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
               <Ionicons name="arrow-back" size={20} color="#374151" />
             </TouchableOpacity>
@@ -836,47 +894,55 @@ export default function CountryBubbleScreen() {
               <View>
                 <Text style={styles.countryTitle}>{countryName}</Text>
                 <Text style={styles.placeCount}>
-                  {activeAreaFilter 
-                    ? `${items.length} places in ${activeAreaFilter}`
-                    : `${items.length} places saved`
-                  }
+                  {filterMode !== 'all' ? `${items.length} places ${activeAreaFilter ? `in ${activeAreaFilter}` : `(${currentRadiusKm}km)`}` : `${items.length} places saved`}
                 </Text>
               </View>
             </TouchableOpacity>
           </MotiView>
         )}
 
-        {/* Active Area Filter Chip */}
-        {activeAreaFilter && viewMode === 'macro' && (
-          <MotiView
-            from={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            style={styles.filterChipContainer}
-          >
-            <TouchableOpacity 
-              style={styles.filterChip}
-              onPress={resetToCountryView}
-              activeOpacity={0.8}
-            >
+        {/* Filter Chip */}
+        {filterMode !== 'all' && viewMode === 'macro' && (
+          <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.filterChipContainer}>
+            <TouchableOpacity style={styles.filterChip} onPress={resetToCountryView} activeOpacity={0.8}>
               <Ionicons name="location" size={14} color="#8B5CF6" />
-              <Text style={styles.filterChipText}>{activeAreaFilter}</Text>
+              <Text style={styles.filterChipText}>
+                {activeAreaFilter || `${currentRadiusKm}km`}
+              </Text>
               <Ionicons name="close-circle" size={16} color="#8B5CF6" />
             </TouchableOpacity>
           </MotiView>
         )}
 
         {viewMode === 'micro' && selectedCategory && (
-          <MotiView
-            from={{ opacity: 0, translateY: -10 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            style={styles.viewModeLabel}
-          >
+          <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }} style={styles.viewModeLabel}>
             <Text style={styles.viewModeLabelText}>
               {selectedCategory.toUpperCase()} • {microBubbles.length} types
               {activeAreaFilter ? ` in ${activeAreaFilter}` : ''}
             </Text>
           </MotiView>
         )}
+      </View>
+
+      {/* Navigation Buttons (Near Me / All Places) */}
+      <View style={styles.navButtonsContainer}>
+        <TouchableOpacity
+          style={[styles.navButton, filterMode === 'nearMe' && styles.navButtonActive]}
+          onPress={handleNearMePress}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="locate" size={18} color={filterMode === 'nearMe' ? '#FFFFFF' : '#8B5CF6'} />
+          <Text style={[styles.navButtonText, filterMode === 'nearMe' && styles.navButtonTextActive]}>Near Me</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.navButton, filterMode === 'all' && styles.navButtonActive]}
+          onPress={resetToCountryView}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="globe-outline" size={18} color={filterMode === 'all' ? '#FFFFFF' : '#8B5CF6'} />
+          <Text style={[styles.navButtonText, filterMode === 'all' && styles.navButtonTextActive]}>All Places</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Bubbles */}
@@ -895,38 +961,25 @@ export default function CountryBubbleScreen() {
               size={viewMode === 'macro' ? 'large' : 'small'}
               position={bubble.position}
               delay={index}
-              onPress={() => viewMode === 'macro' 
-                ? handleMacroBubblePress(bubble)
-                : handleMicroBubblePress(bubble)
-              }
+              onPress={() => viewMode === 'macro' ? handleMacroBubblePress(bubble) : handleMicroBubblePress(bubble)}
             />
           </MotiView>
         ))}
       </View>
 
-      {/* Empty state */}
+      {/* Empty State */}
       {!isLoading && items.length === 0 && (
-        <MotiView
-          from={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={styles.emptyState}
-        >
+        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.emptyState}>
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>{activeAreaFilter ? '📍' : '🗺️'}</Text>
+            <Text style={styles.emptyEmoji}>{filterMode !== 'all' ? '📍' : '🗺️'}</Text>
             <Text style={styles.emptyTitle}>
-              {activeAreaFilter ? `No places in ${activeAreaFilter}` : 'No places yet'}
+              {filterMode !== 'all' ? `No places ${activeAreaFilter ? `in ${activeAreaFilter}` : 'nearby'}` : 'No places yet'}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {activeAreaFilter 
-                ? `Try another area or say "show everything"`
-                : `Share videos about ${countryName} to add places`
-              }
+              {filterMode !== 'all' ? `Try "Show all places" or explore other areas` : `Share videos about ${countryName} to add places`}
             </Text>
-            {activeAreaFilter && (
-              <TouchableOpacity 
-                style={styles.resetButton}
-                onPress={resetToCountryView}
-              >
+            {filterMode !== 'all' && (
+              <TouchableOpacity style={styles.resetButton} onPress={resetToCountryView}>
                 <Text style={styles.resetButtonText}>Show All Places</Text>
               </TouchableOpacity>
             )}
@@ -935,10 +988,7 @@ export default function CountryBubbleScreen() {
       )}
 
       {/* Floating AI Orb */}
-      <FloatingAIOrb
-        onPress={handleOrbPress}
-        visible={!isCompactChatOpen}
-      />
+      <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen} />
 
       {/* Compact AI Chat */}
       <CompactAIChat
@@ -950,7 +1000,7 @@ export default function CountryBubbleScreen() {
         isTyping={isAITyping || companionLoading}
       />
 
-      {/* Loading overlay */}
+      {/* Loading */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingCard}>
@@ -968,174 +1018,109 @@ export default function CountryBubbleScreen() {
 // ============================================================
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  map: { ...StyleSheet.absoluteFillObject },
+  gradientOverlay: { ...StyleSheet.absoluteFillObject },
+  
   header: {
     paddingTop: Platform.OS === 'ios' ? 60 : 48,
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
     zIndex: 10,
   },
   backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 48, height: 48, borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 5,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 5,
   },
   countryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 5,
+    paddingVertical: 12, paddingHorizontal: 16, borderRadius: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 5,
     alignSelf: 'flex-start',
   },
   countryFlagContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
-  countryFlag: {
-    fontSize: 24,
-  },
-  countryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  placeCount: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  filterChipContainer: {
-    marginTop: 12,
-  },
+  countryFlag: { fontSize: 24 },
+  countryTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937' },
+  placeCount: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  
+  filterChipContainer: { marginTop: 12 },
   filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
+    paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20,
+    alignSelf: 'flex-start', gap: 8,
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
   },
-  filterChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8B5CF6',
-  },
+  filterChipText: { fontSize: 14, fontWeight: '600', color: '#8B5CF6' },
+  
   viewModeLabel: {
-    marginTop: 12,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
+    marginTop: 12, backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'flex-start',
   },
-  viewModeLabelText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8B5CF6',
+  viewModeLabelText: { fontSize: 12, fontWeight: '600', color: '#8B5CF6' },
+  
+  navButtonsContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 140 : 128,
+    right: 16,
+    flexDirection: 'column',
+    gap: 8,
+    zIndex: 15,
   },
-  bubblesContainer: {
-    flex: 1,
-    zIndex: 5,
+  navButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.2)',
   },
+  navButtonActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  navButtonText: { fontSize: 13, fontWeight: '600', color: '#8B5CF6' },
+  navButtonTextActive: { color: '#FFFFFF' },
+  
+  bubblesContainer: { flex: 1, zIndex: 5 },
+  
   emptyState: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    zIndex: 10,
+    justifyContent: 'center', alignItems: 'center', padding: 40, zIndex: 10,
   },
   emptyCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
+    borderRadius: 24, padding: 32, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
   },
-  emptyEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
+  emptyEmoji: { fontSize: 64, marginBottom: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
   resetButton: {
-    marginTop: 16,
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    marginTop: 16, backgroundColor: '#8B5CF6',
+    paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12,
   },
-  resetButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  resetButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+  
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 50,
+    justifyContent: 'center', alignItems: 'center', zIndex: 50,
   },
   loadingCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 32,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 32, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
   },
-  loadingText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 16,
-  },
+  loadingText: { fontSize: 14, color: '#6B7280', marginTop: 16 },
 });
