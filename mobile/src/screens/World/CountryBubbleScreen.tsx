@@ -37,6 +37,8 @@ import { SavedItem, ItemCategory, SubClusters } from '../../types';
 import { FloatingCloud, GlowingBubble } from '../../components/bubbles';
 import { FloatingAIOrb } from '../../components/FloatingAIOrb';
 import { CompactAIChat } from '../../components/CompactAIChat';
+import { GameBottomSheet, GameBottomSheetRef } from '../../components/GameBottomSheet';
+import { OrbitalBubbles } from '../../components/OrbitalBubbles';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 
@@ -502,6 +504,16 @@ export default function CountryBubbleScreen() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isAITyping, setIsAITyping] = useState(false);
 
+  // RPG UI State - Orbital Bubbles & Bottom Sheet
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [expandedCategoryPosition, setExpandedCategoryPosition] = useState<{x: number; y: number}>({ x: 50, y: 50 });
+  const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
+  const [bottomSheetItems, setBottomSheetItems] = useState<SavedItem[]>([]);
+  const [bottomSheetLabel, setBottomSheetLabel] = useState('');
+  const [bottomSheetEmoji, setBottomSheetEmoji] = useState('📍');
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | undefined>(undefined);
+  const bottomSheetRef = useRef<GameBottomSheetRef>(null);
+
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
   const { location, startTracking } = useLocationStore();
@@ -839,39 +851,137 @@ export default function CountryBubbleScreen() {
         }));
   }, [items, selectedCategory]);
 
+  // Sub-categories for orbital explosion (computed for expanded category)
+  const orbitalSubCategories = useMemo(() => {
+    if (!expandedCategory || !items || items.length === 0) return [];
+
+    const categoryItems = items.filter(item => {
+      const cat = item.category || 'place';
+      if (expandedCategory === 'activity') return cat === 'activity' || cat === 'place';
+      return cat === expandedCategory;
+    });
+
+    if (categoryItems.length === 0) return [];
+
+    const subGroups: Record<string, SavedItem[]> = {};
+    categoryItems.forEach(item => {
+      const subType = String(item.cuisine_type || item.place_type || 'other');
+      if (!subGroups[subType]) subGroups[subType] = [];
+      subGroups[subType].push(item);
+    });
+
+    return Object.entries(subGroups)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 6)
+      .map(([subType, subItems]) => ({
+        id: `orbital-${subType || 'unknown'}`,
+        label: String(subType || 'OTHER').toUpperCase(),
+        count: subItems?.length || 0,
+        items: subItems || [],
+      }));
+  }, [expandedCategory, items]);
+
   // ============================================================
   // HANDLERS
   // ============================================================
 
+  // RPG-style: Tap macro bubble → orbital explosion (no navigation!)
   const handleMacroBubblePress = (bubble: BubbleData) => {
-      if (bubble.category) {
+    if (bubble.category) {
+      // Toggle expansion - if same category, collapse
+      if (expandedCategory === bubble.category) {
+        setExpandedCategory(null);
+      } else {
         setSelectedCategory(bubble.category);
-        setViewMode('micro');
+        setExpandedCategory(bubble.category);
+        setExpandedCategoryPosition(bubble.position);
+      }
     }
   };
 
+  // RPG-style: Tap sub-category → open bottom sheet (no navigation!)
+  const handleSubCategoryPress = (subCategory: { id: string; label: string; count: number; items: SavedItem[] }) => {
+    // Collapse orbital bubbles
+    setExpandedCategory(null);
+    
+    // Get emoji for category
+    const categoryEmojis: Record<string, string> = {
+      food: '🍜', shopping: '🛍️', activity: '🎯',
+    };
+    
+    // Open bottom sheet with items
+    setBottomSheetItems(subCategory.items);
+    setBottomSheetLabel(subCategory.label);
+    setBottomSheetEmoji(categoryEmojis[selectedCategory] || '📍');
+    setBottomSheetVisible(true);
+    
+    // Animate to 50% snap point
+    setTimeout(() => bottomSheetRef.current?.snapToIndex(1), 100);
+  };
+
+  // Collapse orbital bubbles
+  const handleCollapseOrbit = () => {
+    setExpandedCategory(null);
+  };
+
+  // Handle place selection from bottom sheet - cinematic fly-to!
+  const handlePlaceSelect = useCallback((place: SavedItem) => {
+    setSelectedPlaceId(place.id);
+    
+    // Cinematic fly-to with 60° pitch
+    if (place.location_lat && place.location_lng && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [place.location_lng, place.location_lat],
+        zoomLevel: 16,
+        pitch: 60,
+        heading: -20, // Use heading instead of bearing for Mapbox
+        animationDuration: 2000,
+      });
+    }
+  }, []);
+
+  // Handle scroll sync - pan camera to visible place
+  const handlePlaceScroll = useCallback((place: SavedItem) => {
+    if (place.location_lat && place.location_lng && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [place.location_lng, place.location_lat],
+        zoomLevel: 14,
+        pitch: 45,
+        animationDuration: 500,
+      });
+    }
+  }, []);
+
+  // Close bottom sheet
+  const handleBottomSheetClose = () => {
+    setBottomSheetVisible(false);
+    setSelectedPlaceId(undefined);
+    
+    // Reset camera to country view
+    animateToRegion(countryCoords.latitude, countryCoords.longitude, countryCoords.latDelta, countryCoords.lngDelta);
+  };
+
+  // Legacy handler for backward compatibility (still used by microBubbles)
   const handleMicroBubblePress = (bubble: BubbleData) => {
-      const simplifiedItems = (bubble.items || []).map(item => ({
-      id: item.id, name: item.name, category: item.category, description: item.description,
-      location_name: item.location_name, location_lat: item.location_lat, location_lng: item.location_lng,
-      rating: item.rating, user_ratings_total: item.user_ratings_total, cuisine_type: item.cuisine_type,
-      place_type: item.place_type, area_name: item.area_name, google_place_id: item.google_place_id,
-      photos_json: item.photos_json ? (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) : null,
-      }));
-      
-      navigation.navigate('CategoryList', {
-      tripId, countryName, categoryLabel: bubble.label || 'Places',
-      categoryType: selectedCategory || 'place', items: simplifiedItems, areaFilter: activeAreaFilter,
+    handleSubCategoryPress({
+      id: bubble.id,
+      label: bubble.label,
+      count: bubble.count,
+      items: bubble.items || [],
     });
   };
 
   const handleBack = () => {
-    if (viewMode === 'micro') {
-      setViewMode('macro');
-      setSelectedCategory('');
-    } else {
-      navigation.goBack();
+    // Close any open UI elements first
+    if (bottomSheetVisible) {
+      handleBottomSheetClose();
+      return;
     }
+    if (expandedCategory) {
+      setExpandedCategory(null);
+      return;
+    }
+    navigation.goBack();
   };
 
   // Chat handlers
@@ -983,8 +1093,6 @@ export default function CountryBubbleScreen() {
     }
   };
 
-  const currentBubbles = viewMode === 'macro' ? macroBubbles : microBubbles;
-
   // ============================================================
   // RENDER
   // ============================================================
@@ -1032,30 +1140,22 @@ export default function CountryBubbleScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        {viewMode === 'micro' ? (
-          <MotiView from={{ opacity: 0, translateX: -20 }} animate={{ opacity: 1, translateX: 0 }}>
-            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-              <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </MotiView>
-        ) : (
-          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
-              <View style={styles.countryFlagContainer}>
-                <Text style={styles.countryFlag}>{countryFlag}</Text>
-              </View>
-              <View>
-                <Text style={styles.countryTitle}>{countryName}</Text>
-                <Text style={styles.placeCount}>
-                  {filterMode !== 'all' ? `${items.length} places ${activeAreaFilter ? `in ${activeAreaFilter}` : `(${currentRadiusKm}km)`}` : `${items.length} places saved`}
+        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
+            <View style={styles.countryFlagContainer}>
+              <Text style={styles.countryFlag}>{countryFlag}</Text>
+            </View>
+            <View>
+              <Text style={styles.countryTitle}>{countryName}</Text>
+              <Text style={styles.placeCount}>
+                {filterMode !== 'all' ? `${items.length} places ${activeAreaFilter ? `in ${activeAreaFilter}` : `(${currentRadiusKm}km)`}` : `${items.length} places saved`}
               </Text>
-              </View>
-            </TouchableOpacity>
-          </MotiView>
-        )}
+            </View>
+          </TouchableOpacity>
+        </MotiView>
 
         {/* Filter Chip - shows for explicit filters OR map-based filtering */}
-        {(filterMode !== 'all' || isMapFilterActive) && viewMode === 'macro' && (
+        {(filterMode !== 'all' || isMapFilterActive) && (
           <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.filterChipContainer}>
             <TouchableOpacity style={styles.filterChip} onPress={resetToCountryView} activeOpacity={0.8}>
               <Ionicons 
@@ -1071,11 +1171,11 @@ export default function CountryBubbleScreen() {
           </MotiView>
         )}
 
-        {viewMode === 'micro' && selectedCategory && (
+        {/* Category indicator when orbital is expanded */}
+        {expandedCategory && (
           <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }} style={styles.viewModeLabel}>
             <Text style={styles.viewModeLabelText}>
-              {selectedCategory.toUpperCase()} • {microBubbles.length} types
-              {activeAreaFilter ? ` in ${activeAreaFilter}` : ''}
+              {expandedCategory.toUpperCase()} • Tap a sub-category
             </Text>
           </MotiView>
         )}
@@ -1102,27 +1202,54 @@ export default function CountryBubbleScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bubbles */}
+      {/* Macro Bubbles - Always visible (RPG nodes) */}
       <View style={styles.bubblesContainer} pointerEvents="box-none">
-        {!isLoading && currentBubbles.map((bubble, index) => (
+        {!isLoading && macroBubbles.map((bubble, index) => (
           <MotiView
             key={bubble.id}
             from={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
+            animate={{ 
+              opacity: expandedCategory && expandedCategory !== bubble.category ? 0.3 : 1, 
+              scale: expandedCategory === bubble.category ? 1.1 : 1 
+            }}
             transition={{ type: 'spring', delay: index * 100, damping: 12 }}
           >
             <GlowingBubble
               label={bubble.label}
               count={bubble.count}
               color={bubble.color}
-              size={viewMode === 'macro' ? 'large' : 'small'}
+              size="large"
               position={bubble.position}
               delay={index}
-              onPress={() => viewMode === 'macro' ? handleMacroBubblePress(bubble) : handleMicroBubblePress(bubble)}
+              onPress={() => handleMacroBubblePress(bubble)}
             />
           </MotiView>
         ))}
       </View>
+
+      {/* Orbital Sub-Categories - Explode from tapped macro bubble */}
+      <OrbitalBubbles
+        parentPosition={expandedCategoryPosition}
+        parentLabel={expandedCategory?.toUpperCase() || ''}
+        subCategories={orbitalSubCategories}
+        isExpanded={!!expandedCategory}
+        onSubCategoryPress={handleSubCategoryPress}
+        onCollapse={handleCollapseOrbit}
+        orbitRadius={110}
+      />
+
+      {/* Game Bottom Sheet - Places list */}
+      <GameBottomSheet
+        ref={bottomSheetRef}
+        items={bottomSheetItems}
+        categoryLabel={bottomSheetLabel}
+        categoryEmoji={bottomSheetEmoji}
+        isVisible={bottomSheetVisible}
+        onClose={handleBottomSheetClose}
+        onPlaceSelect={handlePlaceSelect}
+        onPlaceScroll={handlePlaceScroll}
+        selectedPlaceId={selectedPlaceId}
+      />
 
       {/* Empty State - Only show when NO places saved at all */}
       {!isLoading && allItems.length === 0 && (
