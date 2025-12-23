@@ -29,10 +29,67 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
+import Mapbox, { MapView, Camera } from '@rnmapbox/maps';
+import Constants from 'expo-constants';
 import { SavedItem } from '../../types';
 import { useLocationStore } from '../../stores/locationStore';
 import { useCheckInStore } from '../../stores/checkInStore';
-import { FloatingCloud, MapBackground } from '../../components/bubbles';
+import { FloatingCloud } from '../../components/bubbles';
+
+// Initialize Mapbox
+const MAPBOX_TOKEN = Constants.expoConfig?.extra?.mapboxAccessToken || 
+                     process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+Mapbox.setAccessToken(MAPBOX_TOKEN);
+
+// Mapbox style
+const MAPBOX_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
+
+// Country center coordinates for map
+const COUNTRY_COORDS: Record<string, { lat: number; lng: number; zoom: number }> = {
+  japan: { lat: 36.2048, lng: 138.2529, zoom: 5 },
+  thailand: { lat: 15.8700, lng: 100.9925, zoom: 5 },
+  korea: { lat: 35.9078, lng: 127.7669, zoom: 6 },
+  vietnam: { lat: 14.0583, lng: 108.2772, zoom: 5 },
+  singapore: { lat: 1.3521, lng: 103.8198, zoom: 10 },
+  indonesia: { lat: -0.7893, lng: 113.9213, zoom: 4 },
+  malaysia: { lat: 4.2105, lng: 101.9758, zoom: 5 },
+  india: { lat: 20.5937, lng: 78.9629, zoom: 4 },
+  china: { lat: 35.8617, lng: 104.1954, zoom: 4 },
+  usa: { lat: 37.0902, lng: -95.7129, zoom: 3 },
+  france: { lat: 46.2276, lng: 2.2137, zoom: 5 },
+  italy: { lat: 41.8719, lng: 12.5674, zoom: 5 },
+  spain: { lat: 40.4637, lng: -3.7492, zoom: 5 },
+  uk: { lat: 55.3781, lng: -3.4360, zoom: 5 },
+  australia: { lat: -25.2744, lng: 133.7751, zoom: 3 },
+  default: { lat: 20, lng: 0, zoom: 2 },
+};
+
+// Area/City coordinates for focused map
+const AREA_COORDS: Record<string, { lat: number; lng: number; zoom: number }> = {
+  // Japan
+  tokyo: { lat: 35.6762, lng: 139.6503, zoom: 11 },
+  shibuya: { lat: 35.6580, lng: 139.7016, zoom: 14 },
+  shinjuku: { lat: 35.6938, lng: 139.7034, zoom: 14 },
+  osaka: { lat: 34.6937, lng: 135.5023, zoom: 11 },
+  kyoto: { lat: 35.0116, lng: 135.7681, zoom: 12 },
+  // Thailand
+  bangkok: { lat: 13.7563, lng: 100.5018, zoom: 11 },
+  chiangmai: { lat: 18.7883, lng: 98.9853, zoom: 12 },
+  phuket: { lat: 7.8804, lng: 98.3923, zoom: 10 },
+  // Korea
+  seoul: { lat: 37.5665, lng: 126.9780, zoom: 11 },
+  gangnam: { lat: 37.4979, lng: 127.0276, zoom: 14 },
+  busan: { lat: 35.1796, lng: 129.0756, zoom: 11 },
+  // Singapore
+  orchard: { lat: 1.3048, lng: 103.8318, zoom: 14 },
+  marinabay: { lat: 1.2834, lng: 103.8607, zoom: 14 },
+  // Vietnam
+  hanoi: { lat: 21.0285, lng: 105.8542, zoom: 12 },
+  hochiminh: { lat: 10.8231, lng: 106.6297, zoom: 11 },
+  // Indonesia
+  bali: { lat: -8.4095, lng: 115.1889, zoom: 9 },
+  ubud: { lat: -8.5069, lng: 115.2625, zoom: 13 },
+};
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -81,6 +138,7 @@ interface RouteParams {
   categoryLabel: string;
   categoryType: string;
   items: SavedItem[];
+  areaFilter?: string | null;
 }
 
 // Quick Check-in Popup Component
@@ -375,6 +433,21 @@ export default function CategoryListScreen() {
   const countryName = params.countryName || 'Unknown';
   const categoryLabel = params.categoryLabel || 'Places';
   const categoryType = params.categoryType || 'place';
+  const areaFilter = params.areaFilter;
+
+  // Get map coordinates based on area filter or country
+  const mapCoords = useMemo(() => {
+    // If there's an area filter, try to get area coordinates
+    if (areaFilter) {
+      const areaKey = areaFilter.toLowerCase().replace(/\s+/g, '');
+      if (AREA_COORDS[areaKey]) {
+        return AREA_COORDS[areaKey];
+      }
+    }
+    // Fall back to country coordinates
+    const countryKey = countryName.toLowerCase();
+    return COUNTRY_COORDS[countryKey] || COUNTRY_COORDS.default;
+  }, [areaFilter, countryName]);
   
   // Stores
   const { location } = useLocationStore();
@@ -480,18 +553,35 @@ export default function CategoryListScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Gradient Background */}
-      <LinearGradient
-        colors={['#FAFAFA', '#F5F3FF', '#EFF6FF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      {/* Mapbox Background (non-interactive, just aesthetic) */}
+      <MapView
         style={StyleSheet.absoluteFill}
-      />
+        styleURL={MAPBOX_STYLE}
+        logoEnabled={false}
+        attributionEnabled={false}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        pitchEnabled={false}
+        rotateEnabled={false}
+      >
+        <Camera
+          centerCoordinate={[mapCoords.lng, mapCoords.lat]}
+          zoomLevel={mapCoords.zoom}
+          animationDuration={0}
+        />
+      </MapView>
 
-      {/* Map Background */}
-      <MapBackground viewType="city" />
+      {/* Dark gradient overlay for readability */}
+      <LinearGradient
+        colors={['rgba(10, 10, 26, 0.7)', 'rgba(10, 10, 26, 0.4)', 'rgba(10, 10, 26, 0.6)']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
 
       {/* Floating Clouds */}
       <FloatingCloud color="purple" size={180} position={{ x: 85, y: 12 }} delay={0} />
@@ -504,7 +594,7 @@ export default function CategoryListScreen() {
           animate={{ opacity: 1, translateX: 0 }}
         >
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <Ionicons name="chevron-back" size={22} color="#1F2937" />
+            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </MotiView>
 
@@ -623,7 +713,7 @@ function calculateDistance(
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#0a0a1a',
   },
   header: {
     flexDirection: 'row',
@@ -637,16 +727,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
+    borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   headerCenter: {
     flex: 1,
@@ -661,12 +751,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#FFFFFF',
     letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#6B7280',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 2,
   },
   headerSpacer: {
@@ -678,19 +768,19 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   
-  // Card styles
+  // Card styles - glassmorphic dark theme
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
     borderRadius: 20,
     padding: 16,
     marginBottom: 14,
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 4,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.08)',
+    borderColor: 'rgba(139, 92, 246, 0.2)',
   },
   checkedBadge: {
     position: 'absolute',
@@ -718,7 +808,7 @@ const styles = StyleSheet.create({
     height: 88,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
   },
   photo: {
     width: '100%',
@@ -729,7 +819,7 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
   },
   placeholderEmoji: {
     fontSize: 32,
@@ -742,7 +832,7 @@ const styles = StyleSheet.create({
   placeName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
     lineHeight: 22,
     marginBottom: 6,
     paddingRight: 50,
@@ -757,7 +847,7 @@ const styles = StyleSheet.create({
   ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -765,25 +855,26 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#92400E',
+    color: '#FCD34D',
     marginLeft: 4,
   },
   reviewCount: {
     fontSize: 11,
-    color: '#B45309',
+    color: '#FCD34D',
     marginLeft: 2,
+    opacity: 0.8,
   },
   distanceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   distanceText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginLeft: 4,
     fontWeight: '500',
   },
@@ -812,7 +903,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
     gap: 10,
   },
   directionsButton: {
@@ -881,12 +972,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#374151',
+    color: '#FFFFFF',
     marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: 'rgba(255, 255, 255, 0.6)',
   },
 
   // AI Agent button
