@@ -27,13 +27,15 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 
-// ZENLY COLOR PALETTE
+// OLED-OPTIMIZED COLOR PALETTE (Android friendly)
 const ZENLY = {
+  deepBackground: '#020617',    // True black/blue for OLED
+  primaryGlow: '#8B5CF6',       // Electric purple
+  zenlyGreen: '#22C55E',        // Success/Nature
+  surfaceCard: '#1E293B',       // Glassmorphism base
   neonPink: '#ff0080',
   electricBlue: '#00d4ff',
   neonGreen: '#00ff88',
-  cosmicBlack: '#0a0a1f',
-  deepPurple: '#1a0a2e',
 };
 import { useTripStore } from '../../stores/tripStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -252,7 +254,8 @@ export default function WorldMapScreen() {
     <View style={styles.container}>
       <StatusBar 
         barStyle={viewMode === 'globe' ? 'light-content' : 'dark-content'} 
-        backgroundColor={viewMode === 'globe' ? '#0a0a1a' : colors.bg} 
+        backgroundColor="transparent"
+        translucent={viewMode === 'globe'}
       />
       
       {/* Globe View */}
@@ -337,7 +340,7 @@ export default function WorldMapScreen() {
             >
               <LinearGradient
                 colors={viewMode === 'globe' 
-                  ? ['rgba(255, 0, 128, 0.2)', 'rgba(0, 212, 255, 0.2)']
+                  ? [ZENLY.surfaceCard + 'E0', ZENLY.surfaceCard + 'C0']
                   : [colors.surface, colors.surface]
                 }
                 start={{ x: 0, y: 0 }}
@@ -577,10 +580,10 @@ const styles = StyleSheet.create({
   },
   toggleButtonZenly: {
     borderWidth: 2,
-    borderColor: 'rgba(0, 212, 255, 0.5)',
-    shadowColor: ZENLY.electricBlue,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    borderColor: ZENLY.primaryGlow + '60',
+    shadowColor: ZENLY.primaryGlow,
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
   },
   toggleText: {
     fontSize: 14,
@@ -745,11 +748,11 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   statsBarDark: {
-    backgroundColor: 'rgba(26, 10, 46, 0.8)',
+    backgroundColor: ZENLY.surfaceCard + 'E0',
     borderWidth: 2,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
-    shadowColor: ZENLY.electricBlue,
-    shadowOpacity: 0.2,
+    borderColor: ZENLY.primaryGlow + '40',
+    shadowColor: ZENLY.primaryGlow,
+    shadowOpacity: 0.3,
     shadowRadius: 20,
   },
   statItem: {
@@ -762,7 +765,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   statNumberDark: {
-    color: ZENLY.electricBlue,
+    color: ZENLY.primaryGlow,
   },
   statLabel: {
     fontSize: 12,
@@ -778,7 +781,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   statDividerDark: {
-    backgroundColor: 'rgba(0, 212, 255, 0.3)',
+    backgroundColor: ZENLY.primaryGlow + '40',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
