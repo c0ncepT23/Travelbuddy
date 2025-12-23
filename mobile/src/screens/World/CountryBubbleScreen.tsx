@@ -357,24 +357,33 @@ function filterItemsByRadius(items: SavedItem[], lat: number, lng: number, radiu
 
 /**
  * Filter items within visible map bounds
- * bounds format: [[swLng, swLat], [neLng, neLat]]
+ * Mapbox bounds format: [[neLng, neLat], [swLng, swLat]]
  */
 function filterItemsByMapBounds(items: SavedItem[], bounds: number[][]): SavedItem[] {
   if (!bounds || bounds.length !== 2) return items;
   
-  const [[swLng, swLat], [neLng, neLat]] = bounds;
+  // Mapbox returns [[neLng, neLat], [swLng, swLat]]
+  const [ne, sw] = bounds;
+  const neLng = ne[0], neLat = ne[1];
+  const swLng = sw[0], swLat = sw[1];
+  
+  // Calculate actual min/max to handle any format
+  const minLat = Math.min(neLat, swLat);
+  const maxLat = Math.max(neLat, swLat);
+  const minLng = Math.min(neLng, swLng);
+  const maxLng = Math.max(neLng, swLng);
   
   return items.filter(item => {
     if (!item.location_lat || !item.location_lng) return false;
     const lat = Number(item.location_lat);
     const lng = Number(item.location_lng);
     
-    return lat >= swLat && lat <= neLat && lng >= swLng && lng <= neLng;
+    return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
   });
 }
 
-// Minimum zoom level to activate map-based filtering
-const MIN_ZOOM_FOR_FILTERING = 7;
+// Minimum zoom level to activate map-based filtering (5 = city level)
+const MIN_ZOOM_FOR_FILTERING = 5;
 
 /**
  * Filter items by location name/area match + proximity
@@ -655,8 +664,18 @@ export default function CountryBubbleScreen() {
     const zoom = feature.properties?.zoomLevel || 0;
     setCurrentZoom(zoom);
     
-    // Only filter if zoomed in enough and not in a specific filter mode
-    if (zoom < MIN_ZOOM_FOR_FILTERING || filterMode === 'nearMe' || filterMode === 'area') {
+    // Skip if in a specific filter mode (AI or nearMe controls these)
+    if (filterMode === 'nearMe' || filterMode === 'area') {
+      return;
+    }
+    
+    // If zoomed out, show all places
+    if (zoom < MIN_ZOOM_FOR_FILTERING) {
+      if (isMapFilterActive) {
+        setFilteredItems(allItems);
+        setIsMapFilterActive(false);
+        setActiveAreaFilter(null);
+      }
       return;
     }
     
@@ -667,20 +686,20 @@ export default function CountryBubbleScreen() {
       if (bounds && Array.isArray(bounds) && bounds.length === 2) {
         const visibleItems = filterItemsByMapBounds(allItems, bounds);
         
-        // Only update if there's a meaningful difference
-        if (visibleItems.length !== allItems.length && visibleItems.length > 0) {
+        // Update filter state based on visible items
+        if (visibleItems.length > 0) {
           setFilteredItems(visibleItems);
           setIsMapFilterActive(true);
           setActiveAreaFilter(`${visibleItems.length} in view`);
-        } else if (visibleItems.length === allItems.length) {
-          // Zoomed out enough to see all
-          setFilteredItems(allItems);
-          setIsMapFilterActive(false);
-          setActiveAreaFilter(null);
+        } else {
+          // No places in view - keep showing but indicate empty
+          setFilteredItems([]);
+          setIsMapFilterActive(true);
+          setActiveAreaFilter('0 in view');
         }
       }
     }, 300);
-  }, [allItems, filterMode]);
+  }, [allItems, filterMode, isMapFilterActive]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -771,36 +790,36 @@ export default function CountryBubbleScreen() {
   }, [items]);
 
   const microBubbles = useMemo((): BubbleData[] => {
-    if (!items || items.length === 0 || !selectedCategory) return [];
+      if (!items || items.length === 0 || !selectedCategory) return [];
 
-    const categoryItems = items.filter(item => {
-      const cat = item.category || 'place';
+      const categoryItems = items.filter(item => {
+        const cat = item.category || 'place';
       if (selectedCategory === 'activity') return cat === 'activity' || cat === 'place';
-      return cat === selectedCategory;
-    });
+        return cat === selectedCategory;
+      });
 
-    if (categoryItems.length === 0) return [];
+      if (categoryItems.length === 0) return [];
 
-    const subGroups: Record<string, SavedItem[]> = {};
-    categoryItems.forEach(item => {
-      const subType = String(item.cuisine_type || item.place_type || 'other');
-      if (!subGroups[subType]) subGroups[subType] = [];
-      subGroups[subType].push(item);
-    });
+      const subGroups: Record<string, SavedItem[]> = {};
+      categoryItems.forEach(item => {
+        const subType = String(item.cuisine_type || item.place_type || 'other');
+        if (!subGroups[subType]) subGroups[subType] = [];
+        subGroups[subType].push(item);
+      });
 
     const positions = [{ x: 25, y: 28 }, { x: 72, y: 32 }, { x: 35, y: 52 }, { x: 68, y: 58 }, { x: 50, y: 75 }, { x: 28, y: 70 }];
 
-    return Object.entries(subGroups)
-      .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, 6)
-      .map(([subType, subItems], index) => ({
-        id: `micro-${subType || 'unknown'}`,
-        label: String(subType || 'OTHER').toUpperCase(),
-        count: subItems?.length || 0,
-        color: SUBCATEGORY_COLORS[index % SUBCATEGORY_COLORS.length],
-        position: positions[index] || { x: 50, y: 50 },
-        items: subItems || [],
-      }));
+      return Object.entries(subGroups)
+        .sort((a, b) => b[1].length - a[1].length)
+        .slice(0, 6)
+        .map(([subType, subItems], index) => ({
+          id: `micro-${subType || 'unknown'}`,
+          label: String(subType || 'OTHER').toUpperCase(),
+          count: subItems?.length || 0,
+          color: SUBCATEGORY_COLORS[index % SUBCATEGORY_COLORS.length],
+          position: positions[index] || { x: 50, y: 50 },
+          items: subItems || [],
+        }));
   }, [items, selectedCategory]);
 
   // ============================================================
@@ -808,22 +827,22 @@ export default function CountryBubbleScreen() {
   // ============================================================
 
   const handleMacroBubblePress = (bubble: BubbleData) => {
-    if (bubble.category) {
-      setSelectedCategory(bubble.category);
-      setViewMode('micro');
+      if (bubble.category) {
+        setSelectedCategory(bubble.category);
+        setViewMode('micro');
     }
   };
 
   const handleMicroBubblePress = (bubble: BubbleData) => {
-    const simplifiedItems = (bubble.items || []).map(item => ({
+      const simplifiedItems = (bubble.items || []).map(item => ({
       id: item.id, name: item.name, category: item.category, description: item.description,
       location_name: item.location_name, location_lat: item.location_lat, location_lng: item.location_lng,
       rating: item.rating, user_ratings_total: item.user_ratings_total, cuisine_type: item.cuisine_type,
       place_type: item.place_type, area_name: item.area_name, google_place_id: item.google_place_id,
       photos_json: item.photos_json ? (typeof item.photos_json === 'string' ? item.photos_json : JSON.stringify(item.photos_json?.slice?.(0, 1) || [])) : null,
-    }));
-    
-    navigation.navigate('CategoryList', {
+      }));
+      
+      navigation.navigate('CategoryList', {
       tripId, countryName, categoryLabel: bubble.label || 'Places',
       categoryType: selectedCategory || 'place', items: simplifiedItems, areaFilter: activeAreaFilter,
     });
@@ -1012,7 +1031,7 @@ export default function CountryBubbleScreen() {
                 <Text style={styles.countryTitle}>{countryName}</Text>
                 <Text style={styles.placeCount}>
                   {filterMode !== 'all' ? `${items.length} places ${activeAreaFilter ? `in ${activeAreaFilter}` : `(${currentRadiusKm}km)`}` : `${items.length} places saved`}
-                </Text>
+              </Text>
               </View>
             </TouchableOpacity>
           </MotiView>
@@ -1096,9 +1115,9 @@ export default function CountryBubbleScreen() {
             <Text style={styles.emptyTitle}>
               {filterMode !== 'all' ? `No places ${activeAreaFilter ? `in ${activeAreaFilter}` : 'nearby'}` : 'No places yet'}
             </Text>
-            <Text style={styles.emptySubtitle}>
+          <Text style={styles.emptySubtitle}>
               {filterMode !== 'all' ? `Try "Show all places" or explore other areas` : `Share videos about ${countryName} to add places`}
-            </Text>
+          </Text>
             {filterMode !== 'all' && (
               <TouchableOpacity style={styles.resetButton} onPress={resetToCountryView}>
                 <Text style={styles.resetButtonText}>Show All Places</Text>
@@ -1125,8 +1144,8 @@ export default function CountryBubbleScreen() {
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color="#8B5CF6" />
-            <Text style={styles.loadingText}>Loading places...</Text>
+          <ActivityIndicator size="large" color="#8B5CF6" />
+          <Text style={styles.loadingText}>Loading places...</Text>
           </View>
         </View>
       )}
