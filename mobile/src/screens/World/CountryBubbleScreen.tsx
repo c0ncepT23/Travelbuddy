@@ -356,6 +356,27 @@ function filterItemsByRadius(items: SavedItem[], lat: number, lng: number, radiu
 }
 
 /**
+ * Filter items within visible map bounds
+ * bounds format: [[swLng, swLat], [neLng, neLat]]
+ */
+function filterItemsByMapBounds(items: SavedItem[], bounds: number[][]): SavedItem[] {
+  if (!bounds || bounds.length !== 2) return items;
+  
+  const [[swLng, swLat], [neLng, neLat]] = bounds;
+  
+  return items.filter(item => {
+    if (!item.location_lat || !item.location_lng) return false;
+    const lat = Number(item.location_lat);
+    const lng = Number(item.location_lng);
+    
+    return lat >= swLat && lat <= neLat && lng >= swLng && lng <= neLng;
+  });
+}
+
+// Minimum zoom level to activate map-based filtering
+const MIN_ZOOM_FOR_FILTERING = 7;
+
+/**
  * Filter items by location name/area match + proximity
  */
 function filterItemsByLocation(items: SavedItem[], location: string, coords: CityCoords): SavedItem[] {
@@ -461,6 +482,11 @@ export default function CountryBubbleScreen() {
   const [currentRadiusKm, setCurrentRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
   const [userInCountry, setUserInCountry] = useState<boolean>(false);
   const [hasAutoFocused, setHasAutoFocused] = useState<boolean>(false);
+  
+  // Map bounds filtering state
+  const [currentZoom, setCurrentZoom] = useState<number>(0);
+  const [isMapFilterActive, setIsMapFilterActive] = useState<boolean>(false);
+  const mapFilterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Compact Chat state
   const [isCompactChatOpen, setIsCompactChatOpen] = useState(false);
@@ -614,9 +640,56 @@ export default function CountryBubbleScreen() {
     setFilteredItems(allItems);
     setViewMode('macro');
     setSelectedCategory('');
+    setIsMapFilterActive(false);
     
     animateToRegion(countryCoords.latitude, countryCoords.longitude, countryCoords.latDelta, countryCoords.lngDelta);
   }, [allItems, countryCoords, animateToRegion]);
+
+  // Handle map region change (debounced)
+  const handleRegionDidChange = useCallback((feature: any) => {
+    // Clear any pending timeout
+    if (mapFilterTimeoutRef.current) {
+      clearTimeout(mapFilterTimeoutRef.current);
+    }
+    
+    const zoom = feature.properties?.zoomLevel || 0;
+    setCurrentZoom(zoom);
+    
+    // Only filter if zoomed in enough and not in a specific filter mode
+    if (zoom < MIN_ZOOM_FOR_FILTERING || filterMode === 'nearMe' || filterMode === 'area') {
+      return;
+    }
+    
+    // Debounce: wait 300ms after user stops moving
+    mapFilterTimeoutRef.current = setTimeout(() => {
+      const bounds = feature.properties?.visibleBounds;
+      
+      if (bounds && Array.isArray(bounds) && bounds.length === 2) {
+        const visibleItems = filterItemsByMapBounds(allItems, bounds);
+        
+        // Only update if there's a meaningful difference
+        if (visibleItems.length !== allItems.length && visibleItems.length > 0) {
+          setFilteredItems(visibleItems);
+          setIsMapFilterActive(true);
+          setActiveAreaFilter(`${visibleItems.length} in view`);
+        } else if (visibleItems.length === allItems.length) {
+          // Zoomed out enough to see all
+          setFilteredItems(allItems);
+          setIsMapFilterActive(false);
+          setActiveAreaFilter(null);
+        }
+      }
+    }, 300);
+  }, [allItems, filterMode]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (mapFilterTimeoutRef.current) {
+        clearTimeout(mapFilterTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleNearMePress = useCallback(() => {
     if (!location) {
@@ -892,6 +965,7 @@ export default function CountryBubbleScreen() {
         attributionEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
+        onRegionDidChange={handleRegionDidChange}
       >
         <Camera
           ref={cameraRef}
@@ -944,15 +1018,19 @@ export default function CountryBubbleScreen() {
           </MotiView>
         )}
 
-        {/* Filter Chip */}
-        {filterMode !== 'all' && viewMode === 'macro' && (
+        {/* Filter Chip - shows for explicit filters OR map-based filtering */}
+        {(filterMode !== 'all' || isMapFilterActive) && viewMode === 'macro' && (
           <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.filterChipContainer}>
             <TouchableOpacity style={styles.filterChip} onPress={resetToCountryView} activeOpacity={0.8}>
-              <Ionicons name="location" size={14} color="#8B5CF6" />
+              <Ionicons 
+                name={isMapFilterActive ? "map" : "location"} 
+                size={14} 
+                color="#c4b5fd" 
+              />
               <Text style={styles.filterChipText}>
                 {activeAreaFilter || `${currentRadiusKm}km`}
               </Text>
-              <Ionicons name="close-circle" size={16} color="#8B5CF6" />
+              <Ionicons name="close-circle" size={16} color="#c4b5fd" />
             </TouchableOpacity>
           </MotiView>
         )}
