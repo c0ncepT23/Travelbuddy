@@ -15,14 +15,13 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Dimensions, Text, Platform } from 'react-native';
+import { View, StyleSheet, Dimensions, Text, Platform, TouchableOpacity } from 'react-native';
 import Mapbox, { 
   MapView, 
   Camera, 
   ShapeSource,
-  FillLayer,
-  LineLayer,
-  BackgroundLayer,
+  CircleLayer,
+  SymbolLayer,
 } from '@rnmapbox/maps';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -211,70 +210,63 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
     return () => clearInterval(pulseInterval);
   }, []);
 
-  // Get saved country ISO codes for filtering
-  const savedCountryCodes = useMemo(() => {
-    return countries
-      .map(c => COUNTRY_ISO_CODES[c.destination.toLowerCase()])
-      .filter(Boolean);
+  // Create GeoJSON for country markers
+  const markersGeoJSON = useMemo(() => {
+    const features = countries
+      .filter(c => COUNTRY_CENTERS[c.destination.toLowerCase()])
+      .map((c, index) => ({
+        type: 'Feature' as const,
+        id: index,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: COUNTRY_CENTERS[c.destination.toLowerCase()],
+        },
+        properties: {
+          destination: c.destination,
+          tripId: c.tripId,
+          index: index,
+        },
+      }));
+    
+    return {
+      type: 'FeatureCollection' as const,
+      features,
+    };
   }, [countries]);
 
-  // Handle map region press to detect country
-  const handleMapPress = useCallback(async (event: any) => {
-    if (!mapRef.current) return;
+  // Handle marker press
+  const handleMarkerPress = useCallback((destination: string, tripId: string) => {
+    setSelectedCountry(destination);
     
-    try {
-      const { geometry } = event;
-      const coords = geometry.coordinates;
-      
-      // Query rendered features at the point
-      const features = await mapRef.current.queryRenderedFeaturesAtPoint(
-        [event.properties.screenPointX, event.properties.screenPointY],
-        undefined,
-        ['country-fill-saved']
-      );
-      
-      if (features && features.features && features.features.length > 0) {
-        const feature = features.features[0];
-        const countryCode = feature.properties?.iso_3166_1;
-        
-        // Find the country and trip
-        const country = countries.find(c => 
-          COUNTRY_ISO_CODES[c.destination.toLowerCase()] === countryCode
-        );
-        
-        if (country) {
-          setSelectedCountry(country.destination);
-          
-          // Zoom to country
-          const centerCoords = COUNTRY_CENTERS[country.destination.toLowerCase()];
-          if (centerCoords && cameraRef.current) {
-            cameraRef.current.setCamera({
-              centerCoordinate: centerCoords,
-              zoomLevel: 5,
-              animationDuration: 500,
-            });
-          }
-          
-          // Navigate after animation
-          setTimeout(() => {
-            onCountryPress(country.destination.toLowerCase(), country.tripId);
-            setSelectedCountry(null);
-          }, 600);
-        }
-      }
-    } catch (error) {
-      console.log('Map press error:', error);
+    // Zoom to country
+    const coords = COUNTRY_CENTERS[destination.toLowerCase()];
+    if (coords && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: coords,
+        zoomLevel: 5,
+        animationDuration: 500,
+      });
     }
-  }, [countries, onCountryPress]);
+    
+    // Navigate after animation
+    setTimeout(() => {
+      onCountryPress(destination.toLowerCase(), tripId);
+      setSelectedCountry(null);
+    }, 600);
+  }, [onCountryPress]);
 
-  // Filter expression for saved countries
-  const savedCountryFilter = useMemo(() => {
-    if (savedCountryCodes.length === 0) return ['==', 'iso_3166_1', ''];
-    return ['in', 'iso_3166_1', ...savedCountryCodes];
-  }, [savedCountryCodes]);
+  // Handle shape source press
+  const handleShapePress = useCallback((event: any) => {
+    if (event.features && event.features.length > 0) {
+      const feature = event.features[0];
+      const { destination, tripId } = feature.properties;
+      handleMarkerPress(destination, tripId);
+    }
+  }, [handleMarkerPress]);
 
-  // Custom vibrant map style with colorful water
-  const mapStyle = 'mapbox://styles/mapbox/dark-v11';
+  // Use navigation-night style for more colorful appearance
+  // Options: dark-v11, navigation-night-v1, satellite-streets-v12
+  const mapStyle = 'mapbox://styles/mapbox/navigation-night-v1';
 
   if (!MAPBOX_TOKEN) {
     return (
@@ -313,7 +305,6 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
         compassEnabled={false}
         scaleBarEnabled={false}
         onDidFinishLoadingMap={() => setMapReady(true)}
-        onPress={handleMapPress}
       >
         <Camera
           ref={cameraRef}
@@ -325,60 +316,65 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           maxZoomLevel={15}
         />
         
-        {/* Saved countries highlight layer - pulsing glow fill */}
-        {mapReady && savedCountryCodes.length > 0 && (
+        {/* Glowing circle markers for saved countries */}
+        {mapReady && countries.length > 0 && (
           <ShapeSource
-            id="countries-source"
-            url="mapbox://mapbox.country-boundaries-v1"
+            id="markers-source"
+            shape={markersGeoJSON as any}
+            onPress={handleShapePress}
           >
-            {/* Outer glow layer */}
-            <FillLayer
-              id="country-glow-outer"
-              sourceLayerID="country_boundaries"
-              filter={savedCountryFilter as any}
+            {/* Outer glow - largest, most transparent */}
+            <CircleLayer
+              id="marker-glow-outer"
               style={{
-                fillColor: COLORS.primaryGlow,
-                fillOpacity: pulseOpacity * 0.3,
-              }}
-              belowLayerID="country-fill-saved"
-            />
-            
-            {/* Main fill layer for saved countries */}
-            <FillLayer
-              id="country-fill-saved"
-              sourceLayerID="country_boundaries"
-              filter={savedCountryFilter as any}
-              style={{
-                fillColor: selectedCountry ? COLORS.selectedFill : COLORS.savedFill,
-                fillOpacity: pulseOpacity,
+                circleRadius: 35,
+                circleColor: COLORS.primaryGlow,
+                circleOpacity: pulseOpacity * 0.15,
+                circleBlur: 1,
               }}
             />
             
-            {/* Neon border stroke */}
-            <LineLayer
-              id="country-border-saved"
-              sourceLayerID="country_boundaries"
-              filter={savedCountryFilter as any}
+            {/* Middle glow */}
+            <CircleLayer
+              id="marker-glow-middle"
               style={{
-                lineColor: COLORS.savedBorder,
-                lineWidth: 2,
-                lineOpacity: 0.9,
+                circleRadius: 25,
+                circleColor: COLORS.primaryGlow,
+                circleOpacity: pulseOpacity * 0.3,
+                circleBlur: 0.5,
               }}
-              aboveLayerID="country-fill-saved"
             />
             
-            {/* Inner bright border for extra pop */}
-            <LineLayer
-              id="country-border-inner"
-              sourceLayerID="country_boundaries"
-              filter={savedCountryFilter as any}
+            {/* Inner glow */}
+            <CircleLayer
+              id="marker-glow-inner"
               style={{
-                lineColor: COLORS.savedGlow,
-                lineWidth: 1,
-                lineOpacity: 0.5,
-                lineBlur: 2,
+                circleRadius: 18,
+                circleColor: COLORS.savedFill,
+                circleOpacity: pulseOpacity * 0.6,
               }}
-              aboveLayerID="country-border-saved"
+            />
+            
+            {/* Core circle - solid */}
+            <CircleLayer
+              id="marker-core"
+              style={{
+                circleRadius: 12,
+                circleColor: COLORS.primaryGlow,
+                circleOpacity: 1,
+                circleStrokeWidth: 2,
+                circleStrokeColor: COLORS.savedGlow,
+              }}
+            />
+            
+            {/* Center dot */}
+            <CircleLayer
+              id="marker-center"
+              style={{
+                circleRadius: 4,
+                circleColor: COLORS.white,
+                circleOpacity: 1,
+              }}
             />
           </ShapeSource>
         )}
@@ -449,7 +445,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
               colors={[COLORS.primaryGlow + '40', COLORS.primaryGlow + '20']}
               style={styles.hintCard}
             >
-              <Text style={styles.hintText}>👆 Tap a country to explore</Text>
+              <Text style={styles.hintText}>👆 Tap a glowing marker to explore</Text>
             </LinearGradient>
           </MotiView>
         </MotiView>
