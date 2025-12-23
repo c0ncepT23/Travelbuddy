@@ -11,7 +11,7 @@
  * Uses react-native-reanimated for smooth animations
  */
 
-import React, { useCallback, useMemo, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, forwardRef, useImperativeHandle, useEffect, memo } from 'react';
 import {
   View,
   Text,
@@ -69,26 +69,34 @@ interface PlaceCardProps {
 }
 
 const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected }) => {
-  const getPhotoUrl = useCallback(() => {
+  // Safely get photo URL
+  const photoUrl = useMemo(() => {
     try {
-      if (!item.photos_json) return null;
+      if (!item?.photos_json) return null;
       const photos = typeof item.photos_json === 'string' 
         ? JSON.parse(item.photos_json) 
         : item.photos_json;
-      return photos?.[0]?.url || photos?.[0] || null;
+      if (Array.isArray(photos) && photos.length > 0) {
+        return photos[0]?.url || (typeof photos[0] === 'string' ? photos[0] : null);
+      }
+      return null;
     } catch {
       return null;
     }
-  }, [item.photos_json]);
+  }, [item?.photos_json]);
 
-  const photoUrl = getPhotoUrl();
+  // Safely format rating
+  const ratingDisplay = useMemo(() => {
+    if (!item?.rating) return null;
+    const rating = typeof item.rating === 'number' ? item.rating : parseFloat(item.rating);
+    if (isNaN(rating)) return null;
+    return rating.toFixed(1);
+  }, [item?.rating]);
+
+  if (!item) return null;
   
   return (
-    <MotiView
-      from={{ opacity: 0, translateY: 20, scale: 0.95 }}
-      animate={{ opacity: 1, translateY: 0, scale: 1 }}
-      transition={{ type: 'timing', duration: 300, delay: index * 50 }}
-    >
+    <View style={{ marginBottom: 16 }}>
       <TouchableOpacity
         style={[styles.placeCard, isSelected && styles.placeCardSelected]}
         onPress={() => onPress(item)}
@@ -110,17 +118,17 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected 
             colors={['transparent', 'rgba(0,0,0,0.7)']}
             style={styles.imageGradient}
           />
-          {item.rating && (
+          {ratingDisplay && (
             <View style={styles.ratingBadge}>
               <Ionicons name="star" size={12} color="#FFD700" />
-              <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingText}>{ratingDisplay}</Text>
             </View>
           )}
         </View>
 
         {/* Content */}
         <View style={styles.cardContent}>
-          <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.placeName} numberOfLines={1}>{item.name || 'Unknown'}</Text>
           <View style={styles.placeInfo}>
             <Ionicons name="location-outline" size={14} color={COLORS.secondaryGlow} />
             <Text style={styles.placeLocation} numberOfLines={1}>
@@ -147,14 +155,10 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected 
         </View>
 
         {isSelected && (
-          <MotiView
-            from={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={styles.selectionGlow}
-          />
+          <View style={styles.selectionGlow} />
         )}
       </TouchableOpacity>
-    </MotiView>
+    </View>
   );
 };
 
@@ -437,10 +441,10 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   headerEmoji: {
     fontSize: 28,
+    marginRight: 12,
   },
   headerTitle: {
     fontSize: 20,
@@ -508,7 +512,6 @@ const styles = StyleSheet.create({
     right: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(0,0,0,0.7)',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -518,6 +521,7 @@ const styles = StyleSheet.create({
     color: '#FFD700',
     fontSize: 12,
     fontWeight: '600',
+    marginLeft: 4,
   },
   cardContent: {
     padding: 14,
@@ -531,17 +535,16 @@ const styles = StyleSheet.create({
   placeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   placeLocation: {
     fontSize: 13,
     color: COLORS.textSecondary,
     flex: 1,
+    marginLeft: 4,
   },
   tagContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
     marginTop: 10,
   },
   tag: {
