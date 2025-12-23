@@ -473,6 +473,7 @@ export default function CountryBubbleScreen() {
 
   const countryCoords = COUNTRY_COORDS[countryName.toLowerCase()] || COUNTRY_COORDS.default;
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
+  const countryBounds = COUNTRY_BOUNDS[countryName.toLowerCase()];
   const items = filteredItems;
 
   // Start location tracking
@@ -898,8 +899,12 @@ export default function CountryBubbleScreen() {
             centerCoordinate: [countryCoords.longitude, countryCoords.latitude],
             zoomLevel: Math.log2(360 / Math.max(countryCoords.latDelta, 0.01)),
           }}
-          minZoomLevel={1}
+          minZoomLevel={countryBounds ? 3 : 1}
           maxZoomLevel={18}
+          maxBounds={countryBounds ? {
+            ne: [countryBounds.maxLng + 2, countryBounds.maxLat + 2], // Add padding
+            sw: [countryBounds.minLng - 2, countryBounds.minLat - 2],
+          } : undefined}
         />
       </MapView>
 
