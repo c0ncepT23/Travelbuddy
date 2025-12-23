@@ -23,6 +23,7 @@ import {
 import MapView, { Marker, Geojson, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import GlobeView from '../../components/GlobeView';
+import ZenlyFlatMap from '../../components/ZenlyFlatMap';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -253,9 +254,9 @@ export default function WorldMapScreen() {
   return (
     <View style={styles.container}>
       <StatusBar 
-        barStyle={viewMode === 'globe' ? 'light-content' : 'dark-content'} 
+        barStyle="light-content"
         backgroundColor="transparent"
-        translucent={viewMode === 'globe'}
+        translucent={true}
       />
       
       {/* Globe View */}
@@ -267,62 +268,24 @@ export default function WorldMapScreen() {
         />
       )}
       
-      {/* Flat Map View */}
+      {/* Flat Map View - ZENLY STYLE */}
       {viewMode === 'flat' && (
-        <MapView
-          ref={mapRef}
+        <ZenlyFlatMap
+          onCountryPress={handleGlobeCountryPress}
+          countries={globeCountries}
           style={styles.map}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          initialRegion={initialRegion}
-          showsUserLocation={true}
-          showsMyLocationButton={false}
-          mapType="standard"
-          rotateEnabled={false}
-          pitchEnabled={false}
-        >
-          {/* Country markers */}
-          {countryMarkers.map((marker, index) => (
-            <Marker
-              key={`${marker.tripId}-${index}`}
-              coordinate={marker.coordinate}
-              onPress={() => handleCountryPress(marker)}
-            >
-              <MotiView
-                from={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ 
-                  type: 'spring', 
-                  delay: index * 100,
-                  damping: 15,
-                }}
-              >
-                <View style={styles.markerContainer}>
-                  <View style={styles.markerDot}>
-                    <Text style={styles.markerFlag}>
-                      {getCountryFlag(marker.destination)}
-                    </Text>
-                  </View>
-                  <View style={styles.markerLabel}>
-                    <Text style={styles.markerText} numberOfLines={1}>
-                      {marker.destination}
-                    </Text>
-                  </View>
-                </View>
-              </MotiView>
-            </Marker>
-          ))}
-        </MapView>
+        />
       )}
 
-      {/* Header overlay */}
-      <View style={[styles.header, viewMode === 'globe' && styles.headerDark]}>
+      {/* Header overlay - Always ZENLY dark style */}
+      <View style={[styles.header, styles.headerDark]}>
         <MotiView
           from={{ opacity: 0, translateY: -20 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 400 }}
         >
-          <Text style={[styles.logo, viewMode === 'globe' && styles.logoDark]}>yori</Text>
-          <Text style={[styles.tagline, viewMode === 'globe' && styles.taglineDark]}>
+          <Text style={[styles.logo, styles.logoDark]}>yori</Text>
+          <Text style={[styles.tagline, styles.taglineDark]}>
             your saved places, everywhere
           </Text>
         </MotiView>
@@ -339,23 +302,17 @@ export default function WorldMapScreen() {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={viewMode === 'globe' 
-                  ? [ZENLY.surfaceCard + 'E0', ZENLY.surfaceCard + 'C0']
-                  : [colors.surface, colors.surface]
-                }
+                colors={[ZENLY.surfaceCard + 'E0', ZENLY.surfaceCard + 'C0']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={[
-                  styles.toggleButton, 
-                  viewMode === 'globe' && styles.toggleButtonZenly
-                ]}
+                style={[styles.toggleButton, styles.toggleButtonZenly]}
               >
                 <Ionicons 
                   name={viewMode === 'globe' ? 'map-outline' : 'globe-outline'} 
                   size={20} 
-                  color={viewMode === 'globe' ? '#fff' : colors.text} 
+                  color="#fff"
                 />
-                <Text style={[styles.toggleText, viewMode === 'globe' && styles.toggleTextZenly]}>
+                <Text style={[styles.toggleText, styles.toggleTextZenly]}>
                   {viewMode === 'globe' ? 'Flat Map' : 'Globe View'}
                 </Text>
               </LinearGradient>
@@ -364,11 +321,11 @@ export default function WorldMapScreen() {
           
           {/* Profile button */}
           <TouchableOpacity 
-            style={[styles.profileButton, viewMode === 'globe' && styles.profileButtonDark]}
+            style={[styles.profileButton, styles.profileButtonDark]}
             onPress={handleProfilePress}
           >
             {user?.avatar_url ? (
-              <View style={[styles.avatarContainer, viewMode === 'globe' && styles.avatarContainerZenly]}>
+              <View style={[styles.avatarContainer, styles.avatarContainerZenly]}>
                 <Text style={styles.avatarText}>
                   {user.name?.charAt(0).toUpperCase() || '?'}
                 </Text>
@@ -377,24 +334,16 @@ export default function WorldMapScreen() {
               <Ionicons 
                 name="person-circle-outline" 
                 size={32} 
-                color={viewMode === 'globe' ? '#ffffff' : colors.text} 
+                color="#ffffff"
               />
             )}
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* My location button - only show in flat map */}
-      {viewMode === 'flat' && (
-        <TouchableOpacity 
-          style={styles.myLocationButton}
-          onPress={handleMyLocationPress}
-        >
-          <Ionicons name="locate" size={22} color={colors.text} />
-        </TouchableOpacity>
-      )}
+      {/* My location button removed - ZenlyFlatMap has its own navigation */}
 
-      {/* Empty state */}
+      {/* Empty state - ZENLY style */}
       {!isLoading && countryMarkers.length === 0 && (
         <MotiView
           from={{ opacity: 0, translateY: 30 }}
@@ -402,45 +351,48 @@ export default function WorldMapScreen() {
           transition={{ type: 'spring', delay: 300 }}
           style={styles.emptyState}
         >
-          <View style={styles.emptyCard}>
+          <LinearGradient
+            colors={[ZENLY.surfaceCard + 'F0', ZENLY.surfaceCard + 'D0']}
+            style={styles.emptyCard}
+          >
             <Text style={styles.emptyEmoji}>🌍</Text>
-            <Text style={styles.emptyTitle}>No places yet</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={styles.emptyTitleDark}>No places yet</Text>
+            <Text style={styles.emptySubtitleDark}>
               Share a YouTube or Instagram travel video{'\n'}
               and we'll extract the places for you
             </Text>
-            <View style={styles.shareHint}>
-              <Ionicons name="share-outline" size={20} color={colors.primary} />
-              <Text style={styles.shareHintText}>
+            <View style={styles.shareHintDark}>
+              <Ionicons name="share-outline" size={20} color={ZENLY.electricBlue} />
+              <Text style={styles.shareHintTextDark}>
                 Share to Yori from any app
               </Text>
             </View>
-          </View>
+          </LinearGradient>
         </MotiView>
       )}
 
-      {/* Stats bar at bottom */}
+      {/* Stats bar at bottom - Always ZENLY dark style */}
       {countryMarkers.length > 0 && (
         <MotiView
           from={{ opacity: 0, translateY: 50 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'spring', delay: 200 }}
-          style={[styles.statsBar, viewMode === 'globe' && styles.statsBarDark]}
+          style={[styles.statsBar, styles.statsBarDark]}
         >
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, viewMode === 'globe' && styles.statNumberDark]}>
+            <Text style={[styles.statNumber, styles.statNumberDark]}>
               {countryMarkers.length}
             </Text>
-            <Text style={[styles.statLabel, viewMode === 'globe' && styles.statLabelDark]}>
+            <Text style={[styles.statLabel, styles.statLabelDark]}>
               {countryMarkers.length === 1 ? 'Country' : 'Countries'}
             </Text>
           </View>
-          <View style={[styles.statDivider, viewMode === 'globe' && styles.statDividerDark]} />
+          <View style={[styles.statDivider, styles.statDividerDark]} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, viewMode === 'globe' && styles.statNumberDark]}>
+            <Text style={[styles.statNumber, styles.statNumberDark]}>
               {trips.length}
             </Text>
-            <Text style={[styles.statLabel, viewMode === 'globe' && styles.statLabelDark]}>
+            <Text style={[styles.statLabel, styles.statLabelDark]}>
               Collections
             </Text>
           </View>
@@ -522,7 +474,7 @@ function getCountryFlag(country: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: ZENLY.deepBackground,
   },
   map: {
     flex: 1,
@@ -689,15 +641,16 @@ const styles = StyleSheet.create({
     right: 20,
   },
   emptyCard: {
-    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 28,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: ZENLY.primaryGlow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: ZENLY.primaryGlow + '40',
   },
   emptyEmoji: {
     fontSize: 48,
@@ -728,6 +681,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
+    marginLeft: 8,
+  },
+  emptyTitleDark: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  emptySubtitleDark: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  shareHintDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: ZENLY.electricBlue + '20',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: ZENLY.electricBlue + '40',
+  },
+  shareHintTextDark: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: ZENLY.electricBlue,
     marginLeft: 8,
   },
   statsBar: {
