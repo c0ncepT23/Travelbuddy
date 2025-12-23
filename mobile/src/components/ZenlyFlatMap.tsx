@@ -1,24 +1,23 @@
 /**
- * ZenlyFlatMap - ZENLY STYLE Flat Map View
+ * ZenlyFlatMap - Clean Flat Map View
  * 
  * Native React Native implementation using:
  * - react-native-svg for country paths
  * - d3-geo for map projection
- * - moti for animations
- * - Gesture handler for pan/zoom
+ * - Reanimated for smooth gestures
  * 
  * Features:
  * - All ~195 countries rendered
- * - Dark countries (not saved) vs Neon glow (saved)
- * - Hot pink selection with white border
- * - Pulsing emoji markers
+ * - Lighter colors for visibility
+ * - Neon glow for saved countries (NO emojis)
+ * - Hot pink selection highlight
  * - Pinch-to-zoom, drag-to-pan
  */
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { View, StyleSheet, Dimensions, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, StyleSheet, Dimensions, Text, ActivityIndicator } from 'react-native';
 import Svg, { Path, G } from 'react-native-svg';
-import { geoMercator, geoPath, GeoProjection } from 'd3-geo';
+import { geoMercator, geoPath } from 'd3-geo';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -29,67 +28,27 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
-  withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ZENLY COLOR PALETTE
+// LIGHTER COLOR PALETTE - Better visibility
 const COLORS = {
-  deepBackground: '#020617',
-  darkCountry: '#1a1a2e',
-  darkerBorder: '#2a2a3e',
-  electricBlue: '#00d4ff',
-  neonGreen: '#00ff88',
-  hotPink: '#ff0080',
+  background: '#0f172a',         // Dark blue background
+  ocean: '#1e293b',              // Ocean/empty areas
+  unsavedCountry: '#334155',     // Gray for unsaved countries - LIGHTER
+  unsavedBorder: '#475569',      // Border for unsaved - visible
+  savedCountry: '#3b82f6',       // Bright blue for saved countries
+  savedBorder: '#60a5fa',        // Lighter blue border
+  selectedCountry: '#ec4899',    // Hot pink for selected
+  selectedBorder: '#f472b6',     // Pink border
   white: '#ffffff',
-  primaryGlow: '#8B5CF6',
+  neonGlow: '#8B5CF6',           // Purple glow
 };
 
 // GeoJSON URL for world countries
 const GEOJSON_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
-
-// Country data with emojis
-interface CountryMarkerData {
-  name: string;
-  key: string;
-  coordinates: [number, number]; // [lng, lat]
-  emoji: string;
-  color: string;
-}
-
-const COUNTRY_MARKERS: Record<string, CountryMarkerData> = {
-  'japan': { name: 'Japan', key: 'japan', coordinates: [138.2529, 36.2048], emoji: '🍜', color: COLORS.electricBlue },
-  'korea': { name: 'South Korea', key: 'korea', coordinates: [127.7669, 35.9078], emoji: '🇰🇷', color: COLORS.hotPink },
-  'south korea': { name: 'South Korea', key: 'south korea', coordinates: [127.7669, 35.9078], emoji: '🇰🇷', color: COLORS.hotPink },
-  'thailand': { name: 'Thailand', key: 'thailand', coordinates: [100.9925, 15.87], emoji: '🏝️', color: COLORS.neonGreen },
-  'vietnam': { name: 'Vietnam', key: 'vietnam', coordinates: [108.2772, 14.0583], emoji: '🍜', color: '#ffd700' },
-  'singapore': { name: 'Singapore', key: 'singapore', coordinates: [103.8198, 1.3521], emoji: '🦁', color: COLORS.hotPink },
-  'indonesia': { name: 'Indonesia', key: 'indonesia', coordinates: [113.9213, -0.7893], emoji: '🏝️', color: COLORS.neonGreen },
-  'bali': { name: 'Bali', key: 'bali', coordinates: [115.0920, -8.3405], emoji: '🌴', color: COLORS.neonGreen },
-  'malaysia': { name: 'Malaysia', key: 'malaysia', coordinates: [101.9758, 4.2105], emoji: '🇲🇾', color: COLORS.electricBlue },
-  'philippines': { name: 'Philippines', key: 'philippines', coordinates: [121.7740, 12.8797], emoji: '🏝️', color: '#ffd700' },
-  'india': { name: 'India', key: 'india', coordinates: [78.9629, 20.5937], emoji: '🇮🇳', color: '#ffd700' },
-  'china': { name: 'China', key: 'china', coordinates: [104.1954, 35.8617], emoji: '🇨🇳', color: COLORS.hotPink },
-  'taiwan': { name: 'Taiwan', key: 'taiwan', coordinates: [120.9605, 23.6978], emoji: '🧋', color: COLORS.neonGreen },
-  'australia': { name: 'Australia', key: 'australia', coordinates: [133.7751, -25.2744], emoji: '🦘', color: '#ffd700' },
-  'usa': { name: 'USA', key: 'usa', coordinates: [-95.7129, 37.0902], emoji: '🗽', color: COLORS.electricBlue },
-  'united states': { name: 'USA', key: 'united states', coordinates: [-95.7129, 37.0902], emoji: '🗽', color: COLORS.electricBlue },
-  'canada': { name: 'Canada', key: 'canada', coordinates: [-106.3468, 56.1304], emoji: '🍁', color: COLORS.hotPink },
-  'mexico': { name: 'Mexico', key: 'mexico', coordinates: [-102.5528, 23.6345], emoji: '🌮', color: COLORS.neonGreen },
-  'uk': { name: 'UK', key: 'uk', coordinates: [-3.4360, 55.3781], emoji: '🇬🇧', color: COLORS.electricBlue },
-  'united kingdom': { name: 'UK', key: 'united kingdom', coordinates: [-3.4360, 55.3781], emoji: '🇬🇧', color: COLORS.electricBlue },
-  'france': { name: 'France', key: 'france', coordinates: [2.2137, 46.2276], emoji: '🥐', color: COLORS.hotPink },
-  'italy': { name: 'Italy', key: 'italy', coordinates: [12.5674, 41.8719], emoji: '🍕', color: COLORS.neonGreen },
-  'spain': { name: 'Spain', key: 'spain', coordinates: [-3.7492, 40.4637], emoji: '💃', color: '#ffd700' },
-  'germany': { name: 'Germany', key: 'germany', coordinates: [10.4515, 51.1657], emoji: '🍺', color: '#ffd700' },
-  'netherlands': { name: 'Netherlands', key: 'netherlands', coordinates: [5.2913, 52.1326], emoji: '🌷', color: COLORS.hotPink },
-  'greece': { name: 'Greece', key: 'greece', coordinates: [21.8243, 39.0742], emoji: '🏛️', color: COLORS.electricBlue },
-  'brazil': { name: 'Brazil', key: 'brazil', coordinates: [-51.9253, -14.2350], emoji: '⚽', color: COLORS.neonGreen },
-  'argentina': { name: 'Argentina', key: 'argentina', coordinates: [-63.6167, -38.4161], emoji: '🥩', color: COLORS.electricBlue },
-};
 
 // Country name mappings from GeoJSON names to our keys
 const COUNTRY_NAME_MAP: Record<string, string> = {
@@ -129,19 +88,27 @@ const COUNTRY_NAME_MAP: Record<string, string> = {
   'Switzerland': 'switzerland',
   'Austria': 'austria',
   'New Zealand': 'new zealand',
+  'Russia': 'russia',
+  'Norway': 'norway',
+  'Sweden': 'sweden',
+  'Finland': 'finland',
+  'Denmark': 'denmark',
+  'Ireland': 'ireland',
+  'Belgium': 'belgium',
+  'Poland': 'poland',
+  'Czech Republic': 'czech republic',
+  'Czechia': 'czechia',
+  'Hungary': 'hungary',
+  'Croatia': 'croatia',
+  'Iceland': 'iceland',
+  'United Arab Emirates': 'uae',
+  'Peru': 'peru',
 };
 
 interface ZenlyFlatMapProps {
   onCountryPress: (countryName: string, tripId: string) => void;
   countries: { destination: string; tripId: string }[];
   style?: any;
-}
-
-// Parse TopoJSON to GeoJSON features
-function parseTopoJSON(topoJson: any): any[] {
-  const { feature } = require('topojson-client');
-  const countries = feature(topoJson, topoJson.objects.countries);
-  return countries.features;
 }
 
 export default function ZenlyFlatMap({ onCountryPress, countries, style }: ZenlyFlatMapProps) {
@@ -191,12 +158,12 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
     return () => clearTimeout(timer);
   }, []);
 
-  // Create projection
+  // Create projection - centered better
   const projection = useMemo(() => {
     return geoMercator()
-      .scale(SCREEN_WIDTH / 6)
-      .translate([SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 50])
-      .center([0, 20]);
+      .scale(SCREEN_WIDTH / 5.5)
+      .translate([SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 80])
+      .center([0, 25]);
   }, []);
 
   // Create path generator
@@ -235,7 +202,7 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
     setTimeout(() => {
       onCountryPress(key, tripId);
       setSelectedCountry(null);
-    }, 800);
+    }, 600);
   }, [getTripId, onCountryPress]);
 
   // Pinch gesture for zoom
@@ -272,13 +239,7 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
     };
   });
 
-  // Get marker screen position
-  const getMarkerPosition = useCallback((coordinates: [number, number]) => {
-    const pos = projection(coordinates);
-    return pos ? { x: pos[0], y: pos[1] } : null;
-  }, [projection]);
-
-  // Render country path
+  // Render country path - NO EMOJIS, just country colors
   const renderCountry = useCallback((feature: any, index: number) => {
     const countryName = feature.properties?.name || '';
     const pathD = pathGenerator(feature);
@@ -288,14 +249,25 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
     const isSaved = isCountrySaved(countryName);
     const isSelected = selectedCountry === countryName;
     
-    const fillColor = isSelected 
-      ? COLORS.hotPink 
-      : isSaved 
-        ? COLORS.electricBlue 
-        : COLORS.darkCountry;
+    // Color logic - saved countries are bright, others are dim
+    let fillColor = COLORS.unsavedCountry;
+    let strokeColor = COLORS.unsavedBorder;
+    let strokeWidth = 0.5;
+    let opacity = 0.7;
     
-    const strokeColor = isSaved ? COLORS.white : COLORS.darkerBorder;
-    const strokeWidth = isSelected ? 2 : isSaved ? 1 : 0.3;
+    if (isSaved) {
+      fillColor = COLORS.savedCountry;
+      strokeColor = COLORS.savedBorder;
+      strokeWidth = 1.5;
+      opacity = 1;
+    }
+    
+    if (isSelected) {
+      fillColor = COLORS.selectedCountry;
+      strokeColor = COLORS.selectedBorder;
+      strokeWidth = 2;
+      opacity = 1;
+    }
     
     return (
       <Path
@@ -304,91 +276,17 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
         fill={fillColor}
         stroke={strokeColor}
         strokeWidth={strokeWidth}
-        opacity={isSelected ? 1 : isSaved ? 0.9 : 0.6}
-        onPress={() => isSaved && handleCountryTap(countryName)}
+        opacity={opacity}
+        onPress={() => isSaved && runOnJS(handleCountryTap)(countryName)}
       />
     );
   }, [pathGenerator, isCountrySaved, selectedCountry, handleCountryTap]);
-
-  // Render emoji markers
-  const renderMarkers = useMemo(() => {
-    return countries.map((country, index) => {
-      const key = country.destination.toLowerCase();
-      const markerData = COUNTRY_MARKERS[key];
-      
-      if (!markerData) return null;
-      
-      const pos = getMarkerPosition(markerData.coordinates);
-      if (!pos) return null;
-      
-      const isSelected = selectedCountry === markerData.name;
-      
-      return (
-        <MotiView
-          key={`marker-${key}-${index}`}
-          from={{ scale: 0, opacity: 0 }}
-          animate={{ 
-            scale: isSelected ? 1.5 : 1, 
-            opacity: 1 
-          }}
-          transition={{ 
-            type: 'spring', 
-            damping: 12,
-            delay: index * 100,
-          }}
-          style={[
-            styles.markerContainer,
-            { 
-              left: pos.x - 25,
-              top: pos.y - 40,
-            }
-          ]}
-        >
-          <TouchableOpacity 
-            onPress={() => handleCountryTap(markerData.name)}
-            activeOpacity={0.8}
-          >
-            {/* Pulsing circle */}
-            <MotiView
-              from={{ scale: 1, opacity: 0.6 }}
-              animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0.2, 0.6] }}
-              transition={{ 
-                type: 'timing', 
-                duration: 2000,
-                loop: true,
-              }}
-              style={[styles.pulsingCircle, { backgroundColor: markerData.color + '60' }]}
-            />
-            
-            {/* Expanding ring on selection */}
-            {isSelected && (
-              <MotiView
-                from={{ scale: 1, opacity: 1 }}
-                animate={{ scale: 2, opacity: 0 }}
-                transition={{ 
-                  type: 'timing', 
-                  duration: 800,
-                  loop: true,
-                }}
-                style={[styles.expandingRing, { borderColor: markerData.color }]}
-              />
-            )}
-            
-            {/* Emoji */}
-            <View style={[styles.emojiContainer, { shadowColor: markerData.color }]}>
-              <Text style={styles.emojiText}>{markerData.emoji}</Text>
-            </View>
-          </TouchableOpacity>
-        </MotiView>
-      );
-    });
-  }, [countries, getMarkerPosition, selectedCountry, handleCountryTap]);
 
   if (isLoading) {
     return (
       <View style={[styles.container, style]}>
         <LinearGradient
-          colors={[COLORS.deepBackground, '#0a1628', COLORS.deepBackground]}
+          colors={[COLORS.background, '#1e293b', COLORS.background]}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.loadingContainer}>
@@ -397,7 +295,7 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
             animate={{ rotate: '360deg' }}
             transition={{ type: 'timing', duration: 1500, loop: true }}
           >
-            <ActivityIndicator size="large" color={COLORS.electricBlue} />
+            <ActivityIndicator size="large" color={COLORS.savedCountry} />
           </MotiView>
           <Text style={styles.loadingText}>Loading Map...</Text>
         </View>
@@ -407,9 +305,9 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
 
   return (
     <View style={[styles.container, style]}>
-      {/* Dark gradient background */}
+      {/* Gradient background */}
       <LinearGradient
-        colors={[COLORS.deepBackground, '#0a1628', COLORS.deepBackground]}
+        colors={[COLORS.background, '#1e3a5f', COLORS.background]}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -433,11 +331,6 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
         </GestureDetector>
       </GestureHandlerRootView>
       
-      {/* Emoji Markers Overlay */}
-      <Animated.View style={[styles.markersOverlay, animatedStyle]} pointerEvents="box-none">
-        {renderMarkers}
-      </Animated.View>
-      
       {/* Selected Country Label */}
       {selectedCountry && (
         <MotiView
@@ -447,19 +340,19 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
           style={styles.selectedLabel}
         >
           <LinearGradient
-            colors={[COLORS.hotPink + 'F0', COLORS.neonGreen + 'F0']}
+            colors={[COLORS.selectedCountry + 'F0', COLORS.savedCountry + 'F0']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.selectedLabelGradient}
           >
             <Text style={styles.selectedLabelText}>{selectedCountry}</Text>
-            <Text style={styles.selectedLabelSubtext}>Loading... ✨</Text>
+            <Text style={styles.selectedLabelSubtext}>Opening... ✨</Text>
           </LinearGradient>
         </MotiView>
       )}
       
       {/* Country count badge */}
-      {countries.length > 0 && (
+      {countries.length > 0 && !selectedCountry && (
         <MotiView
           from={{ opacity: 0, translateY: -20 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -467,7 +360,7 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
           style={styles.countBadge}
         >
           <LinearGradient
-            colors={[COLORS.primaryGlow + '30', COLORS.electricBlue + '30']}
+            colors={[COLORS.neonGlow + '30', COLORS.savedCountry + '30']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.countBadgeGradient}
@@ -480,7 +373,7 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
       )}
       
       {/* Tap instruction hint */}
-      {showHint && !selectedCountry && (
+      {showHint && !selectedCountry && countries.length > 0 && (
         <MotiView
           from={{ opacity: 0, translateY: 30 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -493,10 +386,10 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
             transition={{ type: 'timing', duration: 2000, loop: true }}
           >
             <LinearGradient
-              colors={[COLORS.electricBlue + '30', COLORS.electricBlue + '20']}
+              colors={[COLORS.savedCountry + '30', COLORS.savedCountry + '20']}
               style={styles.hintCard}
             >
-              <Text style={styles.hintText}>👆 Tap a country to explore</Text>
+              <Text style={styles.hintText}>👆 Tap a blue country to explore</Text>
             </LinearGradient>
           </MotiView>
         </MotiView>
@@ -508,7 +401,7 @@ export default function ZenlyFlatMap({ onCountryPress, countries, style }: Zenly
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.deepBackground,
+    backgroundColor: COLORS.background,
   },
   gestureContainer: {
     flex: 1,
@@ -530,51 +423,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 16,
   },
-  markersOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 10,
-  },
-  markerContainer: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pulsingCircle: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    left: 5,
-    top: 5,
-  },
-  expandingRing: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 3,
-    backgroundColor: 'transparent',
-  },
-  emojiContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1E293B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  emojiText: {
-    fontSize: 22,
-  },
   selectedLabel: {
     position: 'absolute',
-    top: 100,
+    top: 120,
     alignSelf: 'center',
     zIndex: 20,
   },
@@ -599,7 +450,7 @@ const styles = StyleSheet.create({
   },
   countBadge: {
     position: 'absolute',
-    top: 100,
+    top: 120,
     alignSelf: 'center',
     zIndex: 15,
   },
@@ -608,7 +459,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.primaryGlow + '50',
+    borderColor: COLORS.neonGlow + '50',
   },
   countText: {
     color: COLORS.white,
@@ -617,7 +468,7 @@ const styles = StyleSheet.create({
   },
   hintOverlay: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 120,
     left: 20,
     right: 20,
     alignItems: 'center',
@@ -628,7 +479,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: COLORS.electricBlue + '50',
+    borderColor: COLORS.savedCountry + '50',
   },
   hintText: {
     color: COLORS.white,
@@ -636,4 +487,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
