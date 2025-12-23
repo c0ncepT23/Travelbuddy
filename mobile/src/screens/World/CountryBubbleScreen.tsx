@@ -742,8 +742,11 @@ export default function CountryBubbleScreen() {
   // ============================================================
 
   const macroBubbles = useMemo((): BubbleData[] => {
-    if (items.length === 0) return [];
+    // Always show main categories even with 0 counts (when filtering)
+    // Only return empty if NO places saved at all
+    if (allItems.length === 0) return [];
 
+    // Get counts from filtered items (current view)
     const categoryGroups: Record<string, SavedItem[]> = {};
     items.forEach(item => {
       const cat = item.category || 'place';
@@ -751,43 +754,57 @@ export default function CountryBubbleScreen() {
       categoryGroups[cat].push(item);
     });
 
+    // Also track what categories exist in ALL items (for structure)
+    const allCategoryGroups: Record<string, SavedItem[]> = {};
+    allItems.forEach(item => {
+      const cat = item.category || 'place';
+      if (!allCategoryGroups[cat]) allCategoryGroups[cat] = [];
+      allCategoryGroups[cat].push(item);
+    });
+
     const positions = [{ x: 30, y: 35 }, { x: 70, y: 48 }, { x: 50, y: 68 }];
     const mainCategories = ['food', 'activity', 'shopping'];
     const bubbles: BubbleData[] = [];
 
     mainCategories.forEach((cat, index) => {
-      const catItems = [...(categoryGroups[cat] || [])];
-      if (cat === 'activity') catItems.push(...(categoryGroups['place'] || []));
+      // Check if category has ANY items in allItems
+      const allCatItems = [...(allCategoryGroups[cat] || [])];
+      if (cat === 'activity') allCatItems.push(...(allCategoryGroups['place'] || []));
       
-      if (catItems.length > 0) {
+      // Only show bubble if category exists in trip (but count from filtered)
+      if (allCatItems.length > 0) {
+        const filteredCatItems = [...(categoryGroups[cat] || [])];
+        if (cat === 'activity') filteredCatItems.push(...(categoryGroups['place'] || []));
+        
         bubbles.push({
           id: `macro-${cat}`,
           label: cat.toUpperCase(),
-          count: catItems.length,
+          count: filteredCatItems.length, // Count from filtered items
           color: CATEGORY_COLORS[cat] || 'green',
           position: positions[index] || { x: 50, y: 50 },
-          items: catItems,
+          items: filteredCatItems,
           category: cat,
         });
       }
     });
 
-    Object.entries(categoryGroups).forEach(([cat, catItems]) => {
-      if (!mainCategories.includes(cat) && cat !== 'place' && catItems.length > 0) {
+    Object.entries(allCategoryGroups).forEach(([cat, allCatItems]) => {
+      if (!mainCategories.includes(cat) && cat !== 'place' && allCatItems.length > 0) {
+        const filteredCatItems = categoryGroups[cat] || [];
         bubbles.push({
           id: `macro-${cat}`,
           label: cat.toUpperCase(),
-          count: catItems.length,
+          count: filteredCatItems.length,
           color: CATEGORY_COLORS[cat] || 'purple',
           position: { x: 35 + Math.random() * 30, y: 55 + Math.random() * 20 },
-          items: catItems,
+          items: filteredCatItems,
           category: cat,
         });
       }
     });
 
     return bubbles;
-  }, [items]);
+  }, [items, allItems]);
 
   const microBubbles = useMemo((): BubbleData[] => {
       if (!items || items.length === 0 || !selectedCategory) return [];
@@ -992,7 +1009,7 @@ export default function CountryBubbleScreen() {
             centerCoordinate: [countryCoords.longitude, countryCoords.latitude],
             zoomLevel: Math.log2(360 / Math.max(countryCoords.latDelta, 0.01)),
           }}
-          minZoomLevel={countryBounds ? 3 : 1}
+          minZoomLevel={1}
           maxZoomLevel={18}
           maxBounds={countryBounds ? {
             ne: [countryBounds.maxLng + 2, countryBounds.maxLat + 2], // Add padding
@@ -1107,22 +1124,15 @@ export default function CountryBubbleScreen() {
         ))}
       </View>
 
-      {/* Empty State */}
-      {!isLoading && items.length === 0 && (
+      {/* Empty State - Only show when NO places saved at all */}
+      {!isLoading && allItems.length === 0 && (
         <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.emptyState}>
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>{filterMode !== 'all' ? '📍' : '🗺️'}</Text>
-            <Text style={styles.emptyTitle}>
-              {filterMode !== 'all' ? `No places ${activeAreaFilter ? `in ${activeAreaFilter}` : 'nearby'}` : 'No places yet'}
+            <Text style={styles.emptyEmoji}>🗺️</Text>
+            <Text style={styles.emptyTitle}>No places yet</Text>
+            <Text style={styles.emptySubtitle}>
+              {`Share videos about ${countryName} to add places`}
             </Text>
-          <Text style={styles.emptySubtitle}>
-              {filterMode !== 'all' ? `Try "Show all places" or explore other areas` : `Share videos about ${countryName} to add places`}
-          </Text>
-            {filterMode !== 'all' && (
-              <TouchableOpacity style={styles.resetButton} onPress={resetToCountryView}>
-                <Text style={styles.resetButtonText}>Show All Places</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </MotiView>
       )}
