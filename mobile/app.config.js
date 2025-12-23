@@ -3,6 +3,7 @@ require('dotenv').config();
 
 // Read sensitive values from environment variables
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 export default {
   expo: {
@@ -41,6 +42,12 @@ export default {
         {
           icon: "./assets/icon.png",
           color: "#6366F1"
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          RNMapboxMapsDownloadToken: MAPBOX_ACCESS_TOKEN
         }
       ]
     ],
@@ -124,7 +131,8 @@ export default {
       eas: {
         projectId: "03f5aa21-93d3-46d6-b572-f41aa2eee57a"
       },
-      googleMapsApiKey: GOOGLE_MAPS_API_KEY
+      googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+      mapboxAccessToken: MAPBOX_ACCESS_TOKEN
     }
   }
 };

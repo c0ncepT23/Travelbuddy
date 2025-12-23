@@ -19,7 +19,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import ZenlyFlatMap from '../../components/ZenlyFlatMap';
+import MapboxFlatMap from '../../components/MapboxFlatMap';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -197,8 +197,8 @@ export default function WorldMapScreen() {
         translucent={true}
       />
       
-      {/* Flat Map View */}
-      <ZenlyFlatMap
+      {/* Mapbox Vector Map */}
+      <MapboxFlatMap
         onCountryPress={handleCountryPress}
         countries={flatMapCountries}
         style={styles.map}
