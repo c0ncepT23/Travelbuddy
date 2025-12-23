@@ -3,14 +3,14 @@
  * 
  * Using @rnmapbox/maps for:
  * - Crisp vector tiles at any zoom
- * - Custom dark theme styling
+ * - Custom vibrant theme styling
  * - Country highlighting with glow effects
  * - Smooth 60fps native rendering
  * 
  * Features:
- * - Dark theme world map
- * - Highlighted saved countries with neon glow
- * - Pulsing markers for saved places
+ * - Vibrant colorful world map
+ * - Pulsing glow on saved countries
+ * - Neon border strokes
  * - Pinch/zoom/pan gestures built-in
  */
 
@@ -19,12 +19,10 @@ import { View, StyleSheet, Dimensions, Text, Platform } from 'react-native';
 import Mapbox, { 
   MapView, 
   Camera, 
-  PointAnnotation,
   ShapeSource,
   FillLayer,
   LineLayer,
-  CircleLayer,
-  SymbolLayer,
+  BackgroundLayer,
 } from '@rnmapbox/maps';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,14 +38,35 @@ const MAPBOX_TOKEN = Constants.expoConfig?.extra?.mapboxAccessToken ||
 // Set access token
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
-// COLOR PALETTE
+// VIBRANT COLOR PALETTE - Matching app style
 const COLORS = {
-  background: '#0f172a',
-  savedGlow: '#3b82f6',       // Bright blue
-  selectedGlow: '#ec4899',    // Hot pink
-  markerBg: '#1e293b',
+  // Base colors
+  background: '#0a0a1a',        // Deep space blue
+  oceanDark: '#0d1b2a',         // Dark ocean
+  oceanLight: '#1b263b',        // Lighter ocean
+  
+  // Land colors
+  landBase: '#1e293b',          // Muted land
+  landHighlight: '#334155',     // Lighter land on hover
+  
+  // Accent colors (matching app purple/pink theme)
+  primaryGlow: '#8B5CF6',       // Purple (main app color)
+  secondaryGlow: '#06b6d4',     // Cyan accent
+  accentPink: '#ec4899',        // Hot pink
+  accentGreen: '#22c55e',       // Neon green
+  
+  // Saved country colors
+  savedFill: '#8B5CF6',         // Purple fill for saved
+  savedBorder: '#a78bfa',       // Lighter purple border
+  savedGlow: '#c4b5fd',         // Glow color
+  
+  // Selected state
+  selectedFill: '#ec4899',      // Pink when selected
+  selectedBorder: '#f472b6',    // Lighter pink border
+  
+  // Text
   white: '#ffffff',
-  neonGlow: '#8B5CF6',
+  textMuted: 'rgba(255,255,255,0.7)',
 };
 
 // Country center coordinates
@@ -107,64 +126,61 @@ const COUNTRY_CENTERS: Record<string, [number, number]> = {
   'russia': [105.3188, 61.5240],
 };
 
-// Get country emoji
-const getCountryEmoji = (country: string): string => {
-  const emojis: Record<string, string> = {
-    'japan': '🇯🇵',
-    'south korea': '🇰🇷',
-    'korea': '🇰🇷',
-    'thailand': '🇹🇭',
-    'vietnam': '🇻🇳',
-    'singapore': '🇸🇬',
-    'indonesia': '🇮🇩',
-    'bali': '🇮🇩',
-    'malaysia': '🇲🇾',
-    'philippines': '🇵🇭',
-    'india': '🇮🇳',
-    'china': '🇨🇳',
-    'taiwan': '🇹🇼',
-    'hong kong': '🇭🇰',
-    'australia': '🇦🇺',
-    'new zealand': '🇳🇿',
-    'usa': '🇺🇸',
-    'united states': '🇺🇸',
-    'canada': '🇨🇦',
-    'mexico': '🇲🇽',
-    'uk': '🇬🇧',
-    'united kingdom': '🇬🇧',
-    'france': '🇫🇷',
-    'italy': '🇮🇹',
-    'spain': '🇪🇸',
-    'germany': '🇩🇪',
-    'netherlands': '🇳🇱',
-    'greece': '🇬🇷',
-    'turkey': '🇹🇷',
-    'uae': '🇦🇪',
-    'dubai': '🇦🇪',
-    'brazil': '🇧🇷',
-    'argentina': '🇦🇷',
-    'peru': '🇵🇪',
-    'egypt': '🇪🇬',
-    'south africa': '🇿🇦',
-    'morocco': '🇲🇦',
-    'portugal': '🇵🇹',
-    'switzerland': '🇨🇭',
-    'austria': '🇦🇹',
-    'croatia': '🇭🇷',
-    'iceland': '🇮🇸',
-    'norway': '🇳🇴',
-    'sweden': '🇸🇪',
-    'finland': '🇫🇮',
-    'denmark': '🇩🇰',
-    'ireland': '🇮🇪',
-    'belgium': '🇧🇪',
-    'poland': '🇵🇱',
-    'czech republic': '🇨🇿',
-    'czechia': '🇨🇿',
-    'hungary': '🇭🇺',
-    'russia': '🇷🇺',
-  };
-  return emojis[country.toLowerCase()] || '📍';
+// Country name to ISO code mapping for Mapbox filtering
+const COUNTRY_ISO_CODES: Record<string, string> = {
+  'japan': 'JP',
+  'south korea': 'KR',
+  'korea': 'KR',
+  'thailand': 'TH',
+  'vietnam': 'VN',
+  'singapore': 'SG',
+  'indonesia': 'ID',
+  'bali': 'ID',
+  'malaysia': 'MY',
+  'philippines': 'PH',
+  'india': 'IN',
+  'china': 'CN',
+  'taiwan': 'TW',
+  'hong kong': 'HK',
+  'australia': 'AU',
+  'new zealand': 'NZ',
+  'usa': 'US',
+  'united states': 'US',
+  'canada': 'CA',
+  'mexico': 'MX',
+  'uk': 'GB',
+  'united kingdom': 'GB',
+  'france': 'FR',
+  'italy': 'IT',
+  'spain': 'ES',
+  'germany': 'DE',
+  'netherlands': 'NL',
+  'greece': 'GR',
+  'turkey': 'TR',
+  'uae': 'AE',
+  'dubai': 'AE',
+  'brazil': 'BR',
+  'argentina': 'AR',
+  'peru': 'PE',
+  'egypt': 'EG',
+  'south africa': 'ZA',
+  'morocco': 'MA',
+  'portugal': 'PT',
+  'switzerland': 'CH',
+  'austria': 'AT',
+  'croatia': 'HR',
+  'iceland': 'IS',
+  'norway': 'NO',
+  'sweden': 'SE',
+  'finland': 'FI',
+  'denmark': 'DK',
+  'ireland': 'IE',
+  'belgium': 'BE',
+  'poland': 'PL',
+  'czech republic': 'CZ',
+  'czechia': 'CZ',
+  'hungary': 'HU',
+  'russia': 'RU',
 };
 
 interface MapboxFlatMapProps {
@@ -179,6 +195,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(true);
   const [mapReady, setMapReady] = useState(false);
+  const [pulseOpacity, setPulseOpacity] = useState(0.6);
 
   // Hide hint after 5 seconds
   useEffect(() => {
@@ -186,51 +203,77 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
     return () => clearTimeout(timer);
   }, []);
 
-  // Handle marker press
-  const handleMarkerPress = useCallback((destination: string, tripId: string) => {
-    setSelectedCountry(destination);
-    
-    // Zoom to country
-    const coords = COUNTRY_CENTERS[destination.toLowerCase()];
-    if (coords && cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: coords,
-        zoomLevel: 5,
-        animationDuration: 500,
-      });
-    }
-    
-    // Navigate after animation
-    setTimeout(() => {
-      onCountryPress(destination.toLowerCase(), tripId);
-      setSelectedCountry(null);
-    }, 600);
-  }, [onCountryPress]);
+  // Pulsing animation for saved countries
+  useEffect(() => {
+    const pulseInterval = setInterval(() => {
+      setPulseOpacity(prev => prev === 0.6 ? 0.8 : 0.6);
+    }, 1500);
+    return () => clearInterval(pulseInterval);
+  }, []);
 
-  // Create GeoJSON for markers
-  const markersGeoJSON = useMemo(() => {
-    const features = countries
-      .filter(c => COUNTRY_CENTERS[c.destination.toLowerCase()])
-      .map(c => ({
-        type: 'Feature' as const,
-        geometry: {
-          type: 'Point' as const,
-          coordinates: COUNTRY_CENTERS[c.destination.toLowerCase()],
-        },
-        properties: {
-          destination: c.destination,
-          tripId: c.tripId,
-          emoji: getCountryEmoji(c.destination),
-        },
-      }));
-    
-    return {
-      type: 'FeatureCollection' as const,
-      features,
-    };
+  // Get saved country ISO codes for filtering
+  const savedCountryCodes = useMemo(() => {
+    return countries
+      .map(c => COUNTRY_ISO_CODES[c.destination.toLowerCase()])
+      .filter(Boolean);
   }, [countries]);
 
-  // Custom dark map style URL
+  // Handle map region press to detect country
+  const handleMapPress = useCallback(async (event: any) => {
+    if (!mapRef.current) return;
+    
+    try {
+      const { geometry } = event;
+      const coords = geometry.coordinates;
+      
+      // Query rendered features at the point
+      const features = await mapRef.current.queryRenderedFeaturesAtPoint(
+        [event.properties.screenPointX, event.properties.screenPointY],
+        undefined,
+        ['country-fill-saved']
+      );
+      
+      if (features && features.features && features.features.length > 0) {
+        const feature = features.features[0];
+        const countryCode = feature.properties?.iso_3166_1;
+        
+        // Find the country and trip
+        const country = countries.find(c => 
+          COUNTRY_ISO_CODES[c.destination.toLowerCase()] === countryCode
+        );
+        
+        if (country) {
+          setSelectedCountry(country.destination);
+          
+          // Zoom to country
+          const centerCoords = COUNTRY_CENTERS[country.destination.toLowerCase()];
+          if (centerCoords && cameraRef.current) {
+            cameraRef.current.setCamera({
+              centerCoordinate: centerCoords,
+              zoomLevel: 5,
+              animationDuration: 500,
+            });
+          }
+          
+          // Navigate after animation
+          setTimeout(() => {
+            onCountryPress(country.destination.toLowerCase(), country.tripId);
+            setSelectedCountry(null);
+          }, 600);
+        }
+      }
+    } catch (error) {
+      console.log('Map press error:', error);
+    }
+  }, [countries, onCountryPress]);
+
+  // Filter expression for saved countries
+  const savedCountryFilter = useMemo(() => {
+    if (savedCountryCodes.length === 0) return ['==', 'iso_3166_1', ''];
+    return ['in', 'iso_3166_1', ...savedCountryCodes];
+  }, [savedCountryCodes]);
+
+  // Custom vibrant map style with colorful water
   const mapStyle = 'mapbox://styles/mapbox/dark-v11';
 
   if (!MAPBOX_TOKEN) {
@@ -254,6 +297,13 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
 
   return (
     <View style={[styles.container, style]}>
+      {/* Gradient overlay at top for depth */}
+      <LinearGradient
+        colors={['rgba(139, 92, 246, 0.15)', 'transparent']}
+        style={styles.topGradient}
+        pointerEvents="none"
+      />
+      
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -263,6 +313,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
         compassEnabled={false}
         scaleBarEnabled={false}
         onDidFinishLoadingMap={() => setMapReady(true)}
+        onPress={handleMapPress}
       >
         <Camera
           ref={cameraRef}
@@ -274,37 +325,71 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           maxZoomLevel={15}
         />
         
-        {/* Country markers */}
-        {mapReady && countries.map((country, index) => {
-          const coords = COUNTRY_CENTERS[country.destination.toLowerCase()];
-          if (!coords) return null;
-          
-          const isSelected = selectedCountry === country.destination;
-          
-          return (
-            <PointAnnotation
-              key={`marker-${country.tripId}-${index}`}
-              id={`marker-${country.tripId}`}
-              coordinate={coords}
-              onSelected={() => handleMarkerPress(country.destination, country.tripId)}
-            >
-              <View style={[
-                styles.markerOuter,
-                isSelected && styles.markerOuterSelected
-              ]}>
-                <View style={[
-                  styles.markerInner,
-                  isSelected && styles.markerInnerSelected
-                ]}>
-                  <Text style={styles.markerEmoji}>
-                    {getCountryEmoji(country.destination)}
-                  </Text>
-                </View>
-              </View>
-            </PointAnnotation>
-          );
-        })}
+        {/* Saved countries highlight layer - pulsing glow fill */}
+        {mapReady && savedCountryCodes.length > 0 && (
+          <ShapeSource
+            id="countries-source"
+            url="mapbox://mapbox.country-boundaries-v1"
+          >
+            {/* Outer glow layer */}
+            <FillLayer
+              id="country-glow-outer"
+              sourceLayerID="country_boundaries"
+              filter={savedCountryFilter as any}
+              style={{
+                fillColor: COLORS.primaryGlow,
+                fillOpacity: pulseOpacity * 0.3,
+              }}
+              belowLayerID="country-fill-saved"
+            />
+            
+            {/* Main fill layer for saved countries */}
+            <FillLayer
+              id="country-fill-saved"
+              sourceLayerID="country_boundaries"
+              filter={savedCountryFilter as any}
+              style={{
+                fillColor: selectedCountry ? COLORS.selectedFill : COLORS.savedFill,
+                fillOpacity: pulseOpacity,
+              }}
+            />
+            
+            {/* Neon border stroke */}
+            <LineLayer
+              id="country-border-saved"
+              sourceLayerID="country_boundaries"
+              filter={savedCountryFilter as any}
+              style={{
+                lineColor: COLORS.savedBorder,
+                lineWidth: 2,
+                lineOpacity: 0.9,
+              }}
+              aboveLayerID="country-fill-saved"
+            />
+            
+            {/* Inner bright border for extra pop */}
+            <LineLayer
+              id="country-border-inner"
+              sourceLayerID="country_boundaries"
+              filter={savedCountryFilter as any}
+              style={{
+                lineColor: COLORS.savedGlow,
+                lineWidth: 1,
+                lineOpacity: 0.5,
+                lineBlur: 2,
+              }}
+              aboveLayerID="country-border-saved"
+            />
+          </ShapeSource>
+        )}
       </MapView>
+      
+      {/* Bottom gradient for depth */}
+      <LinearGradient
+        colors={['transparent', 'rgba(10, 10, 26, 0.8)']}
+        style={styles.bottomGradient}
+        pointerEvents="none"
+      />
       
       {/* Selected Country Label */}
       {selectedCountry && (
@@ -315,7 +400,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           style={styles.selectedLabel}
         >
           <LinearGradient
-            colors={[COLORS.selectedGlow + 'F0', COLORS.savedGlow + 'F0']}
+            colors={[COLORS.selectedFill + 'F0', COLORS.primaryGlow + 'F0']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.selectedLabelGradient}
@@ -335,13 +420,13 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           style={styles.countBadge}
         >
           <LinearGradient
-            colors={[COLORS.neonGlow + '30', COLORS.savedGlow + '30']}
+            colors={[COLORS.primaryGlow + '30', COLORS.secondaryGlow + '30']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.countBadgeGradient}
           >
             <Text style={styles.countText}>
-              ✨ {countries.length} {countries.length === 1 ? 'country' : 'countries'} saved
+              ✨ {countries.length} {countries.length === 1 ? 'destination' : 'destinations'} saved
             </Text>
           </LinearGradient>
         </MotiView>
@@ -361,10 +446,10 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
             transition={{ type: 'timing', duration: 2000, loop: true }}
           >
             <LinearGradient
-              colors={[COLORS.savedGlow + '30', COLORS.savedGlow + '20']}
+              colors={[COLORS.primaryGlow + '40', COLORS.primaryGlow + '20']}
               style={styles.hintCard}
             >
-              <Text style={styles.hintText}>👆 Tap a flag to explore</Text>
+              <Text style={styles.hintText}>👆 Tap a country to explore</Text>
             </LinearGradient>
           </MotiView>
         </MotiView>
@@ -380,6 +465,22 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 150,
+    zIndex: 5,
+  },
+  bottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 200,
+    zIndex: 5,
   },
   errorContainer: {
     flex: 1,
@@ -399,44 +500,9 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 22,
-  },
-  markerOuter: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.savedGlow + '40',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.savedGlow,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  markerOuterSelected: {
-    backgroundColor: COLORS.selectedGlow + '60',
-    shadowColor: COLORS.selectedGlow,
-    transform: [{ scale: 1.2 }],
-  },
-  markerInner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.markerBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.savedGlow,
-  },
-  markerInnerSelected: {
-    borderColor: COLORS.selectedGlow,
-    backgroundColor: COLORS.selectedGlow + '30',
-  },
-  markerEmoji: {
-    fontSize: 22,
   },
   selectedLabel: {
     position: 'absolute',
@@ -475,7 +541,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.neonGlow + '50',
+    borderColor: COLORS.primaryGlow + '50',
   },
   countText: {
     color: COLORS.white,
@@ -495,7 +561,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: COLORS.savedGlow + '50',
+    borderColor: COLORS.primaryGlow + '50',
   },
   hintText: {
     color: COLORS.white,
