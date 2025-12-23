@@ -21,10 +21,20 @@ import {
   Animated,
 } from 'react-native';
 import MapView, { Marker, Geojson, PROVIDER_GOOGLE } from 'react-native-maps';
+import { LinearGradient } from 'expo-linear-gradient';
 import GlobeView from '../../components/GlobeView';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
+
+// ZENLY COLOR PALETTE
+const ZENLY = {
+  neonPink: '#ff0080',
+  electricBlue: '#00d4ff',
+  neonGreen: '#00ff88',
+  cosmicBlack: '#0a0a1f',
+  deepPurple: '#1a0a2e',
+};
 import { useTripStore } from '../../stores/tripStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useLocationStore } from '../../stores/locationStore';
@@ -315,20 +325,39 @@ export default function WorldMapScreen() {
         </MotiView>
         
         <View style={styles.headerRight}>
-          {/* View Mode Toggle */}
-          <TouchableOpacity 
-            style={[styles.toggleButton, viewMode === 'globe' && styles.toggleButtonDark]}
-            onPress={toggleViewMode}
+          {/* View Mode Toggle - ZENLY STYLE */}
+          <MotiView
+            from={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', delay: 200 }}
           >
-            <Ionicons 
-              name={viewMode === 'globe' ? 'map-outline' : 'globe-outline'} 
-              size={20} 
-              color={viewMode === 'globe' ? '#ffffff' : colors.text} 
-            />
-            <Text style={[styles.toggleText, viewMode === 'globe' && styles.toggleTextDark]}>
-              {viewMode === 'globe' ? 'Flat' : 'Globe'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={toggleViewMode}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={viewMode === 'globe' 
+                  ? ['rgba(255, 0, 128, 0.2)', 'rgba(0, 212, 255, 0.2)']
+                  : [colors.surface, colors.surface]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[
+                  styles.toggleButton, 
+                  viewMode === 'globe' && styles.toggleButtonZenly
+                ]}
+              >
+                <Ionicons 
+                  name={viewMode === 'globe' ? 'map-outline' : 'globe-outline'} 
+                  size={20} 
+                  color={viewMode === 'globe' ? '#fff' : colors.text} 
+                />
+                <Text style={[styles.toggleText, viewMode === 'globe' && styles.toggleTextZenly]}>
+                  {viewMode === 'globe' ? 'Flat Map' : 'Globe View'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </MotiView>
           
           {/* Profile button */}
           <TouchableOpacity 
@@ -336,7 +365,7 @@ export default function WorldMapScreen() {
             onPress={handleProfilePress}
           >
             {user?.avatar_url ? (
-              <View style={styles.avatarContainer}>
+              <View style={[styles.avatarContainer, viewMode === 'globe' && styles.avatarContainerZenly]}>
                 <Text style={styles.avatarText}>
                   {user.name?.charAt(0).toUpperCase() || '?'}
                 </Text>
@@ -536,28 +565,29 @@ const styles = StyleSheet.create({
   toggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
-    gap: 6,
+    gap: 8,
   },
-  toggleButtonDark: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+  toggleButtonZenly: {
+    borderWidth: 2,
+    borderColor: 'rgba(0, 212, 255, 0.5)',
+    shadowColor: ZENLY.electricBlue,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
   },
   toggleText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: colors.text,
   },
-  toggleTextDark: {
+  toggleTextZenly: {
     color: '#ffffff',
   },
   profileButton: {
@@ -585,6 +615,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.highlight,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarContainerZenly: {
+    backgroundColor: ZENLY.neonPink,
   },
   avatarText: {
     fontSize: 16,
@@ -712,9 +745,12 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   statsBarDark: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(26, 10, 46, 0.8)',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 212, 255, 0.3)',
+    shadowColor: ZENLY.electricBlue,
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
   },
   statItem: {
     alignItems: 'center',
@@ -726,7 +762,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   statNumberDark: {
-    color: '#ffffff',
+    color: ZENLY.electricBlue,
   },
   statLabel: {
     fontSize: 12,
@@ -742,7 +778,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   statDividerDark: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(0, 212, 255, 0.3)',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
