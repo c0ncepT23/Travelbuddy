@@ -25,8 +25,14 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import Mapbox, { MapView, Camera } from '@rnmapbox/maps';
+import Constants from 'expo-constants';
 import api from '../../config/api';
+
+// Initialize Mapbox
+const MAPBOX_TOKEN = Constants.expoConfig?.extra?.mapboxAccessToken || 
+                     process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+Mapbox.setAccessToken(MAPBOX_TOKEN);
 import { SavedItem, ItemCategory, SubClusters } from '../../types';
 import { FloatingCloud, GlowingBubble } from '../../components/bubbles';
 import { FloatingAIOrb } from '../../components/FloatingAIOrb';
@@ -276,21 +282,8 @@ const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'or
   'green', 'blue', 'pink', 'orange', 'purple', 'yellow'
 ];
 
-const MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
-  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road.arterial', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
-  { featureType: 'road.highway', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road.local', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9d6ff' }] },
-];
+// Mapbox style - navigation night for dark Zenly aesthetic
+const MAPBOX_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
 type ViewMode = 'macro' | 'micro';
 type FilterMode = 'all' | 'nearMe' | 'area';
@@ -447,7 +440,7 @@ function detectLocationQuery(message: string, countryName: string): { isLocation
 export default function CountryBubbleScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, 'params'>>();
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<Camera>(null);
   
   const params = route.params || {};
   const tripId = params.tripId || '';
@@ -563,12 +556,15 @@ export default function CountryBubbleScreen() {
   // ============================================================
 
   const animateToRegion = useCallback((lat: number, lng: number, latDelta: number, lngDelta: number) => {
-    mapRef.current?.animateToRegion({
-      latitude: lat,
-      longitude: lng,
-      latitudeDelta: latDelta,
-      longitudeDelta: lngDelta,
-    }, 800);
+    // Convert latDelta to zoom level (approximate)
+    // zoom = log2(360 / latDelta)
+    const zoomLevel = Math.log2(360 / Math.max(latDelta, 0.01));
+    
+    cameraRef.current?.setCamera({
+      centerCoordinate: [lng, lat],
+      zoomLevel: Math.min(Math.max(zoomLevel, 1), 18),
+      animationDuration: 800,
+    });
   }, []);
 
   const applyNearMeFilter = useCallback((lat: number, lng: number, radiusKm: number = DEFAULT_RADIUS_KM) => {
@@ -885,32 +881,31 @@ export default function CountryBubbleScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      {/* Map Background */}
+      {/* Map Background - Mapbox */}
       <MapView
-        ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        initialRegion={{
-          latitude: countryCoords.latitude,
-          longitude: countryCoords.longitude,
-          latitudeDelta: countryCoords.latDelta,
-          longitudeDelta: countryCoords.lngDelta,
-        }}
-        customMapStyle={MAP_STYLE}
-        showsUserLocation={userInCountry}
-        showsMyLocationButton={false}
-        showsCompass={false}
-        scrollEnabled={true}
-        zoomEnabled={true}
-        pitchEnabled={false}
-        rotateEnabled={false}
-      />
+        styleURL={MAPBOX_STYLE}
+        logoEnabled={false}
+        attributionEnabled={false}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+      >
+        <Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: [countryCoords.longitude, countryCoords.latitude],
+            zoomLevel: Math.log2(360 / Math.max(countryCoords.latDelta, 0.01)),
+          }}
+          minZoomLevel={1}
+          maxZoomLevel={18}
+        />
+      </MapView>
 
-      {/* Gradient Overlay */}
+      {/* Gradient Overlay - Dark theme */}
       <LinearGradient
-        colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.5)']}
+        colors={['rgba(10, 10, 26, 0.6)', 'rgba(10, 10, 26, 0.2)', 'rgba(10, 10, 26, 0.5)']}
         locations={[0, 0.5, 1]}
         style={styles.gradientOverlay}
         pointerEvents="none"
@@ -925,7 +920,7 @@ export default function CountryBubbleScreen() {
         {viewMode === 'micro' ? (
           <MotiView from={{ opacity: 0, translateX: -20 }} animate={{ opacity: 1, translateX: 0 }}>
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-              <Ionicons name="arrow-back" size={20} color="#374151" />
+              <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </MotiView>
         ) : (
@@ -1061,7 +1056,7 @@ export default function CountryBubbleScreen() {
 // ============================================================
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#0a0a1a' },
   map: { ...StyleSheet.absoluteFillObject },
   gradientOverlay: { ...StyleSheet.absoluteFillObject },
   
@@ -1073,43 +1068,45 @@ const styles = StyleSheet.create({
   },
   backButton: {
     width: 48, height: 48, borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 5,
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 5,
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   countryHeader: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
     paddingVertical: 12, paddingHorizontal: 16, borderRadius: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 5,
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 5,
     alignSelf: 'flex-start',
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   countryFlagContainer: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
   countryFlag: { fontSize: 24 },
-  countryTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937' },
-  placeCount: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  countryTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
+  placeCount: { fontSize: 13, color: 'rgba(255, 255, 255, 0.7)', marginTop: 2 },
   
   filterChipContainer: { marginTop: 12 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    backgroundColor: 'rgba(139, 92, 246, 0.25)',
     paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20,
     alignSelf: 'flex-start', gap: 8,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.5)',
   },
-  filterChipText: { fontSize: 14, fontWeight: '600', color: '#8B5CF6' },
+  filterChipText: { fontSize: 14, fontWeight: '600', color: '#c4b5fd' },
   
   viewModeLabel: {
-    marginTop: 12, backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    marginTop: 12, backgroundColor: 'rgba(139, 92, 246, 0.2)',
     paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'flex-start',
   },
-  viewModeLabelText: { fontSize: 12, fontWeight: '600', color: '#8B5CF6' },
+  viewModeLabelText: { fontSize: 12, fontWeight: '600', color: '#c4b5fd' },
   
   navButtonsContainer: {
     position: 'absolute',
@@ -1121,17 +1118,17 @@ const styles = StyleSheet.create({
   },
   navButton: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
     paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.2)',
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 3,
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.4)',
   },
   navButtonActive: {
     backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
+    borderColor: '#a78bfa',
   },
-  navButtonText: { fontSize: 13, fontWeight: '600', color: '#8B5CF6' },
+  navButtonText: { fontSize: 13, fontWeight: '600', color: '#c4b5fd' },
   navButtonTextActive: { color: '#FFFFFF' },
   
   bubblesContainer: { flex: 1, zIndex: 5 },
@@ -1141,14 +1138,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', padding: 40, zIndex: 10,
   },
   emptyCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
     borderRadius: 24, padding: 32, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
   },
   emptyEmoji: { fontSize: 64, marginBottom: 16 },
-  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
+  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#FFFFFF', marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', textAlign: 'center' },
   resetButton: {
     marginTop: 16, backgroundColor: '#8B5CF6',
     paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12,
@@ -1157,13 +1155,14 @@ const styles = StyleSheet.create({
   
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(10, 10, 26, 0.9)',
     justifyContent: 'center', alignItems: 'center', zIndex: 50,
   },
   loadingCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 32, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+    backgroundColor: 'rgba(30, 41, 59, 0.95)', borderRadius: 20, padding: 32, alignItems: 'center',
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
+    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
   },
-  loadingText: { fontSize: 14, color: '#6B7280', marginTop: 16 },
+  loadingText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', marginTop: 16 },
 });
