@@ -231,29 +231,36 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
     }
   }, [isVisible]);
 
-  // Track if we're at collapsed state (to allow close on further drag down)
-  const [isAtCollapsed, setIsAtCollapsed] = useState(false);
-
-  // Update collapsed state when snap point changes
+  // Stable close handler ref to avoid stale closure in gesture
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
-    const checkCollapsed = currentSnapPoint.value === SNAP_POINTS.COLLAPSED;
-    setIsAtCollapsed(checkCollapsed);
-  }, [currentSnapPoint.value]);
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Safe close function for gesture callbacks
+  const safeClose = useCallback(() => {
+    if (onCloseRef.current) {
+      onCloseRef.current();
+    }
+  }, []);
 
   // Pan gesture for dragging - ONLY works on the header handle area
   const panGesture = Gesture.Pan()
     .onStart(() => {
+      'worklet';
       context.value = { y: translateY.value };
     })
     .onUpdate((event) => {
+      'worklet';
       const newY = context.value.y + event.translationY;
-      // Clamp between expanded and slightly below collapsed (for close gesture)
+      // Clamp between expanded and collapsed (no close on drag)
       translateY.value = Math.max(
         SCREEN_HEIGHT - SNAP_POINTS.EXPANDED,
-        Math.min(SCREEN_HEIGHT + 50, newY)
+        Math.min(SCREEN_HEIGHT - SNAP_POINTS.COLLAPSED + 20, newY)
       );
     })
     .onEnd((event) => {
+      'worklet';
       const currentHeight = SCREEN_HEIGHT - translateY.value;
       const velocity = event.velocityY;
 
@@ -261,15 +268,11 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
       let targetSnap = SNAP_POINTS.HALF;
 
       if (velocity > 500) {
-        // Fast swipe down
+        // Fast swipe down - go to collapsed (don't close)
         if (currentHeight > SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
-        } else if (currentHeight > SNAP_POINTS.COLLAPSED * 0.5) {
-          targetSnap = SNAP_POINTS.COLLAPSED;
         } else {
-          // Swiped past collapsed - close the sheet
-          runOnJS(onClose)();
-          return;
+          targetSnap = SNAP_POINTS.COLLAPSED;
         }
       } else if (velocity < -500) {
         // Fast swipe up
@@ -284,11 +287,7 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
         const distToHalf = Math.abs(currentHeight - SNAP_POINTS.HALF);
         const distToExpanded = Math.abs(currentHeight - SNAP_POINTS.EXPANDED);
 
-        if (currentHeight < SNAP_POINTS.COLLAPSED * 0.5) {
-          // Below half of collapsed - close
-          runOnJS(onClose)();
-          return;
-        } else if (distToCollapsed < distToHalf && distToCollapsed < distToExpanded) {
+        if (distToCollapsed < distToHalf && distToCollapsed < distToExpanded) {
           targetSnap = SNAP_POINTS.COLLAPSED;
         } else if (distToExpanded < distToHalf) {
           targetSnap = SNAP_POINTS.EXPANDED;
@@ -297,7 +296,12 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
         }
       }
 
-      snapTo(targetSnap);
+      // Animate to snap point
+      translateY.value = withSpring(SCREEN_HEIGHT - targetSnap, {
+        damping: 20,
+        stiffness: 150,
+      });
+      currentSnapPoint.value = targetSnap;
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
