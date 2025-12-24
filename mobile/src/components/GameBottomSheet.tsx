@@ -423,7 +423,10 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                   {onOrbit && (
                     <TouchableOpacity 
                       style={[styles.hudOrbitButton, isOrbiting && styles.hudOrbitButtonActive]}
-                      onPress={onOrbit}
+                      onPress={() => {
+                        console.log('🔄 ORBIT BUTTON PRESSED in HUD!');
+                        onOrbit();
+                      }}
                       disabled={isOrbiting}
                     >
                       <Ionicons 
@@ -438,7 +441,10 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                   {onDirections && (
                     <TouchableOpacity 
                       style={styles.hudGoButton}
-                      onPress={() => onDirections(selectedPlace)}
+                      onPress={() => {
+                        console.log('🧭 GO BUTTON PRESSED in HUD!');
+                        onDirections(selectedPlace);
+                      }}
                     >
                       <LinearGradient
                         colors={['#FF9900', '#FF6600']}

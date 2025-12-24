@@ -1010,7 +1010,11 @@ export default function CountryBubbleScreen() {
 
   // Open Google Maps for directions
   const openGoogleMaps = useCallback((place: SavedItem) => {
-    if (!place.location_lat || !place.location_lng) return;
+    console.log('🧭 GO BUTTON PRESSED! Opening Google Maps for:', place.name);
+    if (!place.location_lat || !place.location_lng) {
+      console.log('❌ No coordinates for place');
+      return;
+    }
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
@@ -1365,29 +1369,7 @@ export default function CountryBubbleScreen() {
           </ShapeSource>
         )}
         
-        {/* FLOATING "GO" BUTTON - Quest Marker above building */}
-        {heroCoordinates && selectedPlace && (
-          <MarkerView
-            coordinate={heroCoordinates}
-            anchor={{ x: 0.5, y: 1.2 }}
-          >
-            <TouchableOpacity
-              style={styles.floatingGoButton}
-              onPress={() => openGoogleMaps(selectedPlace)}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#FF9900', '#FF6600']}
-                style={styles.floatingGoGradient}
-              >
-                <Ionicons name="navigate" size={22} color="white" />
-                <Text style={styles.floatingGoText}>GO</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </MarkerView>
-        )}
-        
-        {/* ORBIT button moved to HUD in GameBottomSheet */}
+        {/* GO and ORBIT buttons are in the HUD (GameBottomSheet) - more reliable than MarkerView */}
       </MapView>
 
       {/* Gradient Overlay - Dark theme */}
