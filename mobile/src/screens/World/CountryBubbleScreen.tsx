@@ -20,12 +20,13 @@ import {
   Platform,
   StatusBar,
   Keyboard,
+  Linking,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, FillExtrusionLayer } from '@rnmapbox/maps';
+import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, MarkerView } from '@rnmapbox/maps';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import api from '../../config/api';
@@ -950,6 +951,74 @@ export default function CountryBubbleScreen() {
   
   // State for beacon/hero building highlight
   const [heroCoordinates, setHeroCoordinates] = useState<[number, number] | null>(null);
+  
+  // State for selected place (full object for HUD display)
+  const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
+  
+  // Track current bearing for 360° orbit
+  const currentBearingRef = useRef(0);
+  const [isOrbiting, setIsOrbiting] = useState(false);
+
+  // 360° CINEMATIC ORBIT - "Inspect" the building like in games
+  const triggerOrbit = useCallback((coordinates: [number, number]) => {
+    if (isOrbiting || !cameraRef.current) return;
+    
+    setIsOrbiting(true);
+    
+    // Heavy haptic for dramatic effect
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    const startBearing = currentBearingRef.current;
+    const targetBearing = startBearing + 360;
+    
+    // Majestic 360° spin around the building
+    cameraRef.current.setCamera({
+      centerCoordinate: coordinates,
+      zoomLevel: 17.5,      // Closer for inspection
+      pitch: 65,            // Dramatic tilt
+      heading: targetBearing,
+      animationDuration: 4000, // 4 seconds for full rotation
+      animationMode: 'linearTo',
+    });
+    
+    // Update bearing ref and reset orbiting state after animation
+    setTimeout(() => {
+      currentBearingRef.current = targetBearing % 360;
+      setIsOrbiting(false);
+      // Light haptic to signal orbit complete
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, 4000);
+  }, [isOrbiting]);
+
+  // Handle building tap on map - triggers orbit
+  const handleBuildingTap = useCallback(() => {
+    if (heroCoordinates && !isOrbiting) {
+      triggerOrbit(heroCoordinates);
+    }
+  }, [heroCoordinates, isOrbiting, triggerOrbit]);
+
+  // Open Google Maps for directions
+  const openGoogleMaps = useCallback((place: SavedItem) => {
+    if (!place.location_lat || !place.location_lng) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    const url = Platform.select({
+      ios: `maps://app?daddr=${place.location_lat},${place.location_lng}`,
+      android: `google.navigation:q=${place.location_lat},${place.location_lng}`,
+    });
+    
+    // Fallback to Google Maps web
+    const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.location_lat},${place.location_lng}`;
+    
+    Linking.canOpenURL(url || '').then((supported) => {
+      if (supported) {
+        Linking.openURL(url || webUrl);
+      } else {
+        Linking.openURL(webUrl);
+      }
+    });
+  }, []);
 
   // Calculate best viewing angle based on place position relative to map center
   const calculateBestBearing = useCallback((lng: number, lat: number): number => {
@@ -966,6 +1035,7 @@ export default function CountryBubbleScreen() {
     
     setSelectedPlaceId(place.id);
     selectedPlaceIdRef.current = place.id;
+    setSelectedPlace(place); // Store full place for HUD
     
     // Mark as animating
     isAnimatingRef.current = true;
@@ -1011,6 +1081,8 @@ export default function CountryBubbleScreen() {
           heading: bestBearing, // Calculated angle for best framing
           animationDuration: 1000,
         });
+        // Track final bearing for orbit animation
+        currentBearingRef.current = bestBearing;
       }, 900);
       
       // Clear animation flag after full animation
@@ -1046,6 +1118,7 @@ export default function CountryBubbleScreen() {
     setBottomSheetVisible(false);
     setSelectedPlaceId(undefined);
     selectedPlaceIdRef.current = undefined;
+    setSelectedPlace(null);
     
     // Clear the hero beacon
     setHeroCoordinates(null);
@@ -1277,6 +1350,60 @@ export default function CountryBubbleScreen() {
             />
           </ShapeSource>
         )}
+        
+        {/* FLOATING "GO" BUTTON - Quest Marker above building */}
+        {heroCoordinates && selectedPlace && (
+          <MarkerView
+            coordinate={heroCoordinates}
+            anchor={{ x: 0.5, y: 1.2 }}
+          >
+            <TouchableOpacity
+              style={styles.floatingGoButton}
+              onPress={() => openGoogleMaps(selectedPlace)}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#FF9900', '#FF6600']}
+                style={styles.floatingGoGradient}
+              >
+                <Ionicons name="navigate" size={22} color="white" />
+                <Text style={styles.floatingGoText}>GO</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </MarkerView>
+        )}
+        
+        {/* TAPPABLE BUILDING AREA - Tap to trigger 360° orbit */}
+        {heroCoordinates && selectedPlace && !isOrbiting && (
+          <MarkerView
+            coordinate={heroCoordinates}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <TouchableOpacity
+              style={styles.buildingTapArea}
+              onPress={handleBuildingTap}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.orbitHint, isOrbiting && styles.orbitHintActive]}>
+                <Ionicons name="sync" size={16} color="white" />
+                <Text style={styles.orbitHintText}>TAP TO ORBIT</Text>
+              </View>
+            </TouchableOpacity>
+          </MarkerView>
+        )}
+        
+        {/* ORBITING INDICATOR - Show when 360° rotation in progress */}
+        {isOrbiting && heroCoordinates && (
+          <MarkerView
+            coordinate={heroCoordinates}
+            anchor={{ x: 0.5, y: 1.5 }}
+          >
+            <View style={styles.orbitingIndicator}>
+              <Ionicons name="sync" size={20} color="#FFCC00" />
+              <Text style={styles.orbitingText}>ORBITING...</Text>
+            </View>
+          </MarkerView>
+        )}
       </MapView>
 
       {/* Gradient Overlay - Dark theme */}
@@ -1391,7 +1518,7 @@ export default function CountryBubbleScreen() {
         orbitRadius={110}
       />
 
-      {/* Game Bottom Sheet - Places list */}
+      {/* Game Bottom Sheet - Places list with HUD mode */}
       <GameBottomSheet
         ref={bottomSheetRef}
         items={bottomSheetItems}
@@ -1402,6 +1529,8 @@ export default function CountryBubbleScreen() {
         onPlaceSelect={handlePlaceSelect}
         onPlaceScroll={handlePlaceScroll}
         selectedPlaceId={selectedPlaceId}
+        selectedPlace={selectedPlace}
+        onDirections={openGoogleMaps}
       />
 
       {/* Empty State - Only show when NO places saved at all */}
@@ -1556,5 +1685,78 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
     borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
   },
+  
+  // Floating GO button (Quest Marker)
+  floatingGoButton: {
+    shadowColor: '#FF6600',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  floatingGoGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  floatingGoText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '800',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  
+  // Building tap area for 360° orbit
+  buildingTapArea: {
+    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  orbitHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 204, 0, 0.5)',
+  },
+  orbitHintActive: {
+    backgroundColor: 'rgba(255, 153, 0, 0.8)',
+  },
+  orbitHintText: {
+    color: '#FFCC00',
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 4,
+    letterSpacing: 0.5,
+  },
+  
+  // Orbiting indicator
+  orbitingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FFCC00',
+  },
+  orbitingText: {
+    color: '#FFCC00',
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 6,
+    letterSpacing: 1,
+  },
+  
   loadingText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', marginTop: 16 },
 });

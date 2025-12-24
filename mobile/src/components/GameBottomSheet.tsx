@@ -180,6 +180,9 @@ interface GameBottomSheetProps {
   onPlaceSelect: (item: SavedItem) => void;
   onPlaceScroll?: (item: SavedItem) => void;
   selectedPlaceId?: string;
+  selectedPlace?: SavedItem | null;
+  onDirections?: (item: SavedItem) => void;
+  onCheckIn?: (item: SavedItem) => void;
 }
 
 export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetProps>(({
@@ -191,10 +194,16 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   onPlaceSelect,
   onPlaceScroll,
   selectedPlaceId,
+  selectedPlace,
+  onDirections,
+  onCheckIn,
 }, ref) => {
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const currentSnapPoint = useSharedValue(SNAP_POINTS.HALF);
   const context = useSharedValue({ y: 0 });
+  
+  // Track if we're in HUD mode (COMPACT snap point)
+  const [isHudMode, setIsHudMode] = useState(false);
 
   // Snap to a specific point - can be called from JS or worklet
   const snapTo = useCallback((point: number) => {
@@ -203,6 +212,8 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
       stiffness: 150,
     });
     currentSnapPoint.value = point;
+    // Update HUD mode based on snap point
+    setIsHudMode(point === SNAP_POINTS.COMPACT);
   }, []);
 
   // Expose methods to parent
@@ -374,41 +385,110 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
             />
           </View>
 
-          {/* Header with gesture handler - ONLY this area is draggable */}
+          {/* HUD MODE - Compact action bar when a place is selected */}
+        {isHudMode && selectedPlace ? (
           <GestureDetector gesture={panGesture}>
-            <Animated.View style={styles.sheetHeader}>
+            <Animated.View style={styles.hudContainer}>
               <View style={styles.handleIndicator} />
-              <View style={styles.headerContent}>
-                <View style={styles.headerLeft}>
-                  <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
-                  <View>
-                    <Text style={styles.headerTitle}>{categoryLabel}</Text>
-                    <Text style={styles.headerSubtitle}>{items.length} places</Text>
+              <View style={styles.hudContent}>
+                {/* Place Info */}
+                <View style={styles.hudInfo}>
+                  <Text style={styles.hudPlaceName} numberOfLines={1}>
+                    {selectedPlace.name || 'Selected Place'}
+                  </Text>
+                  <View style={styles.hudMeta}>
+                    {selectedPlace.rating && (
+                      <View style={styles.hudRating}>
+                        <Ionicons name="star" size={12} color="#FFD700" />
+                        <Text style={styles.hudRatingText}>
+                          {typeof selectedPlace.rating === 'number' 
+                            ? selectedPlace.rating.toFixed(1) 
+                            : selectedPlace.rating}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.hudCategory}>
+                      {selectedPlace.cuisine_type || selectedPlace.place_type || categoryLabel}
+                    </Text>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                  <Ionicons name="close" size={20} color={COLORS.textSecondary} />
-                </TouchableOpacity>
+                
+                {/* Action Buttons */}
+                <View style={styles.hudActions}>
+                  {/* Check-In Button */}
+                  {onCheckIn && (
+                    <TouchableOpacity 
+                      style={styles.hudActionButton}
+                      onPress={() => onCheckIn(selectedPlace)}
+                    >
+                      <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />
+                    </TouchableOpacity>
+                  )}
+                  
+                  {/* Directions Button */}
+                  {onDirections && (
+                    <TouchableOpacity 
+                      style={styles.hudGoButton}
+                      onPress={() => onDirections(selectedPlace)}
+                    >
+                      <LinearGradient
+                        colors={['#FF9900', '#FF6600']}
+                        style={styles.hudGoGradient}
+                      >
+                        <Ionicons name="navigate" size={18} color="white" />
+                        <Text style={styles.hudGoText}>GO</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-              {/* Expand/Collapse hint */}
-              <View style={styles.dragHint}>
-                <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.dragHintText}>Drag to expand</Text>
+              
+              {/* Expand hint */}
+              <View style={styles.hudExpandHint}>
+                <Ionicons name="chevron-up" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.hudExpandText}>Swipe up for details</Text>
               </View>
             </Animated.View>
           </GestureDetector>
+        ) : (
+          <>
+            {/* Header with gesture handler - ONLY this area is draggable */}
+            <GestureDetector gesture={panGesture}>
+              <Animated.View style={styles.sheetHeader}>
+                <View style={styles.handleIndicator} />
+                <View style={styles.headerContent}>
+                  <View style={styles.headerLeft}>
+                    <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
+                    <View>
+                      <Text style={styles.headerTitle}>{categoryLabel}</Text>
+                      <Text style={styles.headerSubtitle}>{items.length} places</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                    <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                {/* Expand/Collapse hint */}
+                <View style={styles.dragHint}>
+                  <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.dragHintText}>Drag to expand</Text>
+                </View>
+              </Animated.View>
+            </GestureDetector>
 
-          {/* List - scrolls independently */}
-          <FlatList
-            data={items}
-            keyExtractor={(item: SavedItem) => item.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={renderEmpty}
-            nestedScrollEnabled={true}
-            removeClippedSubviews={false}
-          />
+            {/* List - scrolls independently */}
+            <FlatList
+              data={items}
+              keyExtractor={(item: SavedItem) => item.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={renderEmpty}
+              nestedScrollEnabled={true}
+              removeClippedSubviews={false}
+            />
+          </>
+        )}
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
@@ -631,6 +711,94 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: COLORS.textSecondary,
     marginTop: 12,
+  },
+  
+  // HUD Mode Styles (15% Compact View)
+  hudContainer: {
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  hudContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  hudInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  hudPlaceName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  hudMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  hudRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  hudRatingText: {
+    fontSize: 12,
+    color: '#FFD700',
+    fontWeight: '600',
+    marginLeft: 3,
+  },
+  hudCategory: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+  },
+  hudActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hudActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  hudGoButton: {
+    shadowColor: '#FF6600',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  hudGoGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  hudGoText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  hudExpandHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    opacity: 0.5,
+  },
+  hudExpandText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
   },
 });
 
