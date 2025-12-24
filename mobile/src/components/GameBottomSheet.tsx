@@ -366,8 +366,9 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   // HUD MODE: No Modal, just absolute positioned View - allows map interaction!
   if (isHudMode && selectedPlace) {
     return (
-      <GestureHandlerRootView style={styles.hudOnlyContainer} pointerEvents="box-none">
-        <Animated.View style={[styles.sheet, animatedStyle]}>
+      <View style={styles.hudWrapper} pointerEvents="box-none">
+        <GestureHandlerRootView style={styles.hudGestureContainer}>
+          <Animated.View style={[styles.hudSheet, animatedStyle]}>
           {/* Glassmorphism background */}
           <View style={styles.glassContainer}>
             {Platform.OS === 'ios' ? (
@@ -446,8 +447,9 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
               </View>
             </Animated.View>
           </GestureDetector>
-        </Animated.View>
-      </GestureHandlerRootView>
+          </Animated.View>
+        </GestureHandlerRootView>
+      </View>
     );
   }
 
@@ -523,14 +525,27 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
   },
-  // HUD-only container - positioned absolute, allows map touches to pass through
-  hudOnlyContainer: {
+  // HUD wrapper - only covers BOTTOM of screen, NOT full screen!
+  hudWrapper: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    top: 0,
-    zIndex: 1000, // Ensure HUD is above map
+    height: SCREEN_HEIGHT * 0.20, // Only 20% height - just enough for HUD
+    zIndex: 1000,
+  },
+  hudGestureContainer: {
+    flex: 1,
+  },
+  hudSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: SCREEN_HEIGHT * 0.20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
