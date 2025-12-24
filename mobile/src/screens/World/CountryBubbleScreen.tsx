@@ -958,11 +958,19 @@ export default function CountryBubbleScreen() {
   // Track current bearing for 360° orbit
   const currentBearingRef = useRef(0);
   const [isOrbiting, setIsOrbiting] = useState(false);
+  const isOrbitingRef = useRef(false); // Ref to avoid stale closures
+  const heroCoordinatesRef = useRef<[number, number] | null>(null);
 
   // 360° CINEMATIC ORBIT - "Inspect" the building like in games
-  const triggerOrbit = useCallback((coordinates: [number, number]) => {
-    if (isOrbiting || !cameraRef.current) return;
+  const triggerOrbit = useCallback(() => {
+    const coords = heroCoordinatesRef.current;
+    if (isOrbitingRef.current || !cameraRef.current || !coords) {
+      console.log('Orbit blocked:', { isOrbiting: isOrbitingRef.current, hasCamera: !!cameraRef.current, coords });
+      return;
+    }
     
+    console.log('🌀 TRIGGERING 360° ORBIT at:', coords);
+    isOrbitingRef.current = true;
     setIsOrbiting(true);
     
     // Heavy haptic for dramatic effect
@@ -971,9 +979,11 @@ export default function CountryBubbleScreen() {
     const startBearing = currentBearingRef.current;
     const targetBearing = startBearing + 360;
     
+    console.log('🎥 Camera orbit:', { startBearing, targetBearing, coords });
+    
     // Majestic 360° spin around the building
     cameraRef.current.setCamera({
-      centerCoordinate: coordinates,
+      centerCoordinate: coords,
       zoomLevel: 17.5,      // Closer for inspection
       pitch: 65,            // Dramatic tilt
       heading: targetBearing,
@@ -984,18 +994,19 @@ export default function CountryBubbleScreen() {
     // Update bearing ref and reset orbiting state after animation
     setTimeout(() => {
       currentBearingRef.current = targetBearing % 360;
+      isOrbitingRef.current = false;
       setIsOrbiting(false);
       // Light haptic to signal orbit complete
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      console.log('✅ Orbit complete');
     }, 4000);
-  }, [isOrbiting]);
+  }, []);
 
   // Handle building tap on map - triggers orbit
   const handleBuildingTap = useCallback(() => {
-    if (heroCoordinates && !isOrbiting) {
-      triggerOrbit(heroCoordinates);
-    }
-  }, [heroCoordinates, isOrbiting, triggerOrbit]);
+    console.log('🏢 Building tapped! Triggering orbit...');
+    triggerOrbit();
+  }, [triggerOrbit]);
 
   // Open Google Maps for directions
   const openGoogleMaps = useCallback((place: SavedItem) => {
@@ -1045,7 +1056,9 @@ export default function CountryBubbleScreen() {
       const lat = place.location_lat;
       
       // 2. SET HERO BEACON - Pillar of light at this location
-      setHeroCoordinates([lng, lat]);
+      const coords: [number, number] = [lng, lat];
+      setHeroCoordinates(coords);
+      heroCoordinatesRef.current = coords; // Update ref for orbit
       
       // 3. Calculate best viewing angle
       const bestBearing = calculateBestBearing(lng, lat);
@@ -1122,6 +1135,7 @@ export default function CountryBubbleScreen() {
     
     // Clear the hero beacon
     setHeroCoordinates(null);
+    heroCoordinatesRef.current = null;
     
     // Return to orbital expansion state (don't reset camera or clear expandedCategory)
     // User can tap backdrop of orbital to fully collapse back to macro bubbles
@@ -1482,41 +1496,45 @@ export default function CountryBubbleScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Macro Bubbles - Always visible (RPG nodes) */}
-      <View style={styles.bubblesContainer} pointerEvents="box-none">
-        {!isLoading && macroBubbles.map((bubble, index) => (
-          <MotiView
-            key={bubble.id}
-            from={{ opacity: 0, scale: 0.8 }}
-            animate={{ 
-              opacity: expandedCategory && expandedCategory !== bubble.category ? 0.3 : 1, 
-              scale: expandedCategory === bubble.category ? 1.1 : 1 
-            }}
-            transition={{ type: 'spring', delay: index * 100, damping: 12 }}
-          >
-            <GlowingBubble
-              label={bubble.label}
-              count={bubble.count}
-              color={bubble.color}
-              size="large"
-              position={bubble.position}
-              delay={index}
-              onPress={() => handleMacroBubblePress(bubble)}
-            />
-          </MotiView>
-        ))}
-      </View>
+      {/* Macro Bubbles - HIDDEN when bottom sheet is open */}
+      {!bottomSheetVisible && (
+        <View style={styles.bubblesContainer} pointerEvents="box-none">
+          {!isLoading && macroBubbles.map((bubble, index) => (
+            <MotiView
+              key={bubble.id}
+              from={{ opacity: 0, scale: 0.8 }}
+              animate={{ 
+                opacity: expandedCategory && expandedCategory !== bubble.category ? 0.3 : 1, 
+                scale: expandedCategory === bubble.category ? 1.1 : 1 
+              }}
+              transition={{ type: 'spring', delay: index * 100, damping: 12 }}
+            >
+              <GlowingBubble
+                label={bubble.label}
+                count={bubble.count}
+                color={bubble.color}
+                size="large"
+                position={bubble.position}
+                delay={index}
+                onPress={() => handleMacroBubblePress(bubble)}
+              />
+            </MotiView>
+          ))}
+        </View>
+      )}
 
-      {/* Orbital Sub-Categories - Explode from tapped macro bubble */}
-      <OrbitalBubbles
-        parentPosition={expandedCategoryPosition}
-        parentLabel={expandedCategory?.toUpperCase() || ''}
-        subCategories={orbitalSubCategories}
-        isExpanded={!!expandedCategory}
-        onSubCategoryPress={handleSubCategoryPress}
-        onCollapse={handleCollapseOrbit}
-        orbitRadius={110}
-      />
+      {/* Orbital Sub-Categories - HIDDEN when bottom sheet is open */}
+      {!bottomSheetVisible && (
+        <OrbitalBubbles
+          parentPosition={expandedCategoryPosition}
+          parentLabel={expandedCategory?.toUpperCase() || ''}
+          subCategories={orbitalSubCategories}
+          isExpanded={!!expandedCategory}
+          onSubCategoryPress={handleSubCategoryPress}
+          onCollapse={handleCollapseOrbit}
+          orbitRadius={110}
+        />
+      )}
 
       {/* Game Bottom Sheet - Places list with HUD mode */}
       <GameBottomSheet
