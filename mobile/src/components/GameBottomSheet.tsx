@@ -365,15 +365,16 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
 
   return (
     <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
-      <GestureHandlerRootView style={styles.modalContainer}>
-        {/* Backdrop - ONLY active when NOT in HUD mode, allows map interaction when compact */}
-        {!isHudMode ? (
+      {/* In HUD mode: box-none lets touches pass through to map, but children (sheet) still receive touches */}
+      <GestureHandlerRootView 
+        style={styles.modalContainer} 
+        pointerEvents={isHudMode ? "box-none" : "auto"}
+      >
+        {/* Backdrop - ONLY active when NOT in HUD mode */}
+        {!isHudMode && (
           <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
             <View style={StyleSheet.absoluteFill} />
           </Pressable>
-        ) : (
-          // In HUD mode - NO backdrop, let taps pass through to map!
-          <View style={styles.transparentBackdrop} pointerEvents="none" />
         )}
 
         {/* Sheet */}
