@@ -684,6 +684,12 @@ export default function CountryBubbleScreen() {
     const zoom = feature.properties?.zoomLevel || 0;
     setCurrentZoom(zoom);
     
+    // Check if user has panned away from hero building (for re-center button)
+    if (heroCoordinatesRef.current && feature.geometry?.coordinates) {
+      const centerCoords = feature.geometry.coordinates as [number, number];
+      checkIfPannedAway(centerCoords);
+    }
+    
     // IMPORTANT: Skip map filtering when in RPG interaction flow
     // (orbital bubbles, bottom sheet, place selection)
     if (isInRPGFlowRef.current) {
@@ -960,6 +966,9 @@ export default function CountryBubbleScreen() {
   const [isOrbiting, setIsOrbiting] = useState(false);
   const isOrbitingRef = useRef(false); // Ref to avoid stale closures
   const heroCoordinatesRef = useRef<[number, number] | null>(null);
+  
+  // Track if user has panned away from hero building (show re-center button)
+  const [showRecenter, setShowRecenter] = useState(false);
 
   // 360° CINEMATIC ORBIT - "Inspect" the building like in games
   const triggerOrbit = useCallback(() => {
@@ -1079,6 +1088,42 @@ export default function CountryBubbleScreen() {
     }
   }, [getDistanceMeters, triggerOrbit]);
 
+  // Re-center camera on hero building
+  const handleRecenter = useCallback(() => {
+    if (!heroCoordinatesRef.current || !cameraRef.current) return;
+    
+    console.log('🎯 RE-CENTERING on hero building');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    const coords = heroCoordinatesRef.current;
+    const bearing = currentBearingRef.current;
+    
+    // Fly back to the building with cinematic effect
+    cameraRef.current.setCamera({
+      centerCoordinate: coords,
+      zoomLevel: 16.5,
+      pitch: 70,
+      heading: bearing,
+      animationDuration: 800,
+    });
+    
+    setShowRecenter(false);
+  }, []);
+
+  // Check if camera has moved away from hero (called on region change)
+  const checkIfPannedAway = useCallback((centerCoords: [number, number]) => {
+    if (!heroCoordinatesRef.current || !bottomSheetVisible) return;
+    
+    const distance = getDistanceMeters(centerCoords, heroCoordinatesRef.current);
+    
+    // Show re-center button if more than 300m away
+    if (distance > 300) {
+      setShowRecenter(true);
+    } else {
+      setShowRecenter(false);
+    }
+  }, [bottomSheetVisible, getDistanceMeters]);
+
   // Handle place selection from bottom sheet - CINEMATIC "LOCK-ON" fly-to!
   const handlePlaceSelect = useCallback((place: SavedItem) => {
     // 1. HAPTIC FEEDBACK - Physical "lock-on" feel
@@ -1172,6 +1217,7 @@ export default function CountryBubbleScreen() {
     setSelectedPlaceId(undefined);
     selectedPlaceIdRef.current = undefined;
     setSelectedPlace(null);
+    setShowRecenter(false); // Hide re-center button
     
     // Clear the hero beacon
     setHeroCoordinates(null);
@@ -1542,6 +1588,31 @@ export default function CountryBubbleScreen() {
         isOrbiting={isOrbiting}
       />
 
+      {/* RE-CENTER BUTTON - Shows when user pans away from hero building */}
+      {showRecenter && bottomSheetVisible && (
+        <MotiView
+          from={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ type: 'spring', damping: 15 }}
+          style={styles.recenterContainer}
+        >
+          <TouchableOpacity
+            style={styles.recenterButton}
+            onPress={handleRecenter}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#8B5CF6', '#6366F1']}
+              style={styles.recenterGradient}
+            >
+              <Ionicons name="locate" size={20} color="white" />
+              <Text style={styles.recenterText}>Re-center</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </MotiView>
+      )}
+
       {/* Empty State - Only show when NO places saved at all */}
       {!isLoading && allItems.length === 0 && (
         <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.emptyState}>
@@ -1693,6 +1764,36 @@ const styles = StyleSheet.create({
     shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
     borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  
+  // Re-center button (appears when user pans away)
+  recenterContainer: {
+    position: 'absolute',
+    top: 120,
+    alignSelf: 'center',
+    zIndex: 100,
+  },
+  recenterButton: {
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  recenterGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  recenterText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
   },
   
   // Floating GO button (Quest Marker)
