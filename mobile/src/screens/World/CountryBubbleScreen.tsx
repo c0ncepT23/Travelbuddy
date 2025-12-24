@@ -25,7 +25,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import Mapbox, { MapView, Camera } from '@rnmapbox/maps';
+import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, FillExtrusionLayer } from '@rnmapbox/maps';
+import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import api from '../../config/api';
 
@@ -946,46 +947,78 @@ export default function CountryBubbleScreen() {
 
   // Ref to track if we're in fly-to animation (prevent scroll sync from interfering)
   const isAnimatingRef = useRef(false);
+  
+  // State for beacon/hero building highlight
+  const [heroCoordinates, setHeroCoordinates] = useState<[number, number] | null>(null);
 
-  // Handle place selection from bottom sheet - CINEMATIC fly-to!
+  // Calculate best viewing angle based on place position relative to map center
+  const calculateBestBearing = useCallback((lng: number, lat: number): number => {
+    // Calculate bearing that frames the building nicely
+    // Rotate slightly based on longitude to add variety
+    const baseBearing = ((lng * 10) % 60) - 30; // Range: -30 to 30
+    return baseBearing;
+  }, []);
+
+  // Handle place selection from bottom sheet - CINEMATIC "LOCK-ON" fly-to!
   const handlePlaceSelect = useCallback((place: SavedItem) => {
+    // 1. HAPTIC FEEDBACK - Physical "lock-on" feel
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     setSelectedPlaceId(place.id);
     selectedPlaceIdRef.current = place.id;
     
-    // Mark as animating to prevent scroll sync from interfering
+    // Mark as animating
     isAnimatingRef.current = true;
     
-    // CINEMATIC fly-to: zoom 18 for 3D buildings, 65° pitch for drama
     if (place.location_lat && place.location_lng && cameraRef.current) {
-      // Capture coordinates for use in setTimeout
       const lng = place.location_lng;
       const lat = place.location_lat;
       
-      // First, quickly zoom out a bit for dramatic effect
+      // 2. SET HERO BEACON - Pillar of light at this location
+      setHeroCoordinates([lng, lat]);
+      
+      // 3. Calculate best viewing angle
+      const bestBearing = calculateBestBearing(lng, lat);
+      
+      // 4. PHASE 1: Quick pull-back for dramatic effect (200ms)
       cameraRef.current.setCamera({
         centerCoordinate: [lng, lat],
-        zoomLevel: 12,
-        pitch: 0,
-        animationDuration: 300,
+        zoomLevel: 13,
+        pitch: 20,
+        heading: 0,
+        animationDuration: 200,
       });
       
-      // Then dive in dramatically
+      // 5. PHASE 2: The GLIDE - Smooth curved flight path (800ms)
       setTimeout(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         cameraRef.current?.setCamera({
           centerCoordinate: [lng, lat],
-          zoomLevel: 18, // Higher zoom for 3D buildings
-          pitch: 65,     // More dramatic tilt
-          heading: 30,   // Slight rotation for cinematic feel
-          animationDuration: 2500,
+          zoomLevel: 15.5,
+          pitch: 50,
+          heading: bestBearing / 2,
+          animationDuration: 600,
         });
-      }, 350);
+      }, 250);
       
-      // Clear animation flag after animation completes
+      // 6. PHASE 3: The LOCK-ON - Final position with RPG tilt (1200ms)
+      setTimeout(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        cameraRef.current?.setCamera({
+          centerCoordinate: [lng, lat],
+          zoomLevel: 16.5,      // Close enough for street details
+          pitch: 70,            // RPG tilt - looking UP at building
+          heading: bestBearing, // Calculated angle for best framing
+          animationDuration: 1000,
+        });
+      }, 900);
+      
+      // Clear animation flag after full animation
       setTimeout(() => {
         isAnimatingRef.current = false;
-      }, 3000);
+      }, 2200);
     }
-  }, []);
+  }, [calculateBestBearing]);
 
   // Handle scroll sync - pan camera to visible place (disabled during fly-to animation)
   const handlePlaceScroll = useCallback((place: SavedItem) => {
@@ -1007,9 +1040,15 @@ export default function CountryBubbleScreen() {
 
   // Close bottom sheet - return to orbital expansion (not fully close)
   const handleBottomSheetClose = () => {
+    // Haptic feedback on close
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     setBottomSheetVisible(false);
     setSelectedPlaceId(undefined);
     selectedPlaceIdRef.current = undefined;
+    
+    // Clear the hero beacon
+    setHeroCoordinates(null);
     
     // Return to orbital expansion state (don't reset camera or clear expandedCategory)
     // User can tap backdrop of orbital to fully collapse back to macro bubbles
@@ -1022,12 +1061,20 @@ export default function CountryBubbleScreen() {
       isInRPGFlowRef.current = false;
     }
     
-    // Reset camera to a reasonable zoom but keep the area
+    // Smooth zoom out with haptic
     cameraRef.current?.setCamera({
-      zoomLevel: 10,
-      pitch: 0,
-      animationDuration: 800,
+      zoomLevel: 12,
+      pitch: 30,
+      animationDuration: 600,
     });
+    
+    setTimeout(() => {
+      cameraRef.current?.setCamera({
+        zoomLevel: 10,
+        pitch: 0,
+        animationDuration: 400,
+      });
+    }, 650);
   };
 
   // Legacy handler for backward compatibility (still used by microBubbles)
@@ -1187,12 +1234,49 @@ export default function CountryBubbleScreen() {
             zoomLevel: Math.log2(360 / Math.max(countryCoords.latDelta, 0.01)),
           }}
           minZoomLevel={1}
-          maxZoomLevel={18}
+          maxZoomLevel={20}
           maxBounds={countryBounds ? {
-            ne: [countryBounds.maxLng + 2, countryBounds.maxLat + 2], // Add padding
+            ne: [countryBounds.maxLng + 2, countryBounds.maxLat + 2],
             sw: [countryBounds.minLng - 2, countryBounds.minLat - 2],
           } : undefined}
         />
+        
+        {/* HERO BEACON - Pillar of Light at selected location */}
+        {heroCoordinates && (
+          <ShapeSource
+            id="hero-beacon-source"
+            shape={{
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: heroCoordinates,
+              },
+              properties: {},
+            }}
+          >
+            {/* Outer glow ring */}
+            <CircleLayer
+              id="hero-beacon-glow"
+              style={{
+                circleRadius: 40,
+                circleColor: '#FF9900',
+                circleOpacity: 0.3,
+                circleBlur: 1,
+              }}
+            />
+            {/* Inner bright core */}
+            <CircleLayer
+              id="hero-beacon-core"
+              style={{
+                circleRadius: 12,
+                circleColor: '#FFCC00',
+                circleOpacity: 0.9,
+                circleStrokeWidth: 3,
+                circleStrokeColor: '#FF9900',
+              }}
+            />
+          </ShapeSource>
+        )}
       </MapView>
 
       {/* Gradient Overlay - Dark theme */}

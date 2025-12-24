@@ -43,9 +43,10 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Snap points as percentages of screen height
 const SNAP_POINTS = {
-  COLLAPSED: SCREEN_HEIGHT * 0.12,  // 12%
-  HALF: SCREEN_HEIGHT * 0.5,        // 50%
-  EXPANDED: SCREEN_HEIGHT * 0.85,   // 85%
+  COMPACT: SCREEN_HEIGHT * 0.15,    // 15% - Mini card view after place selection
+  COLLAPSED: SCREEN_HEIGHT * 0.25,  // 25% - Default collapsed
+  HALF: SCREEN_HEIGHT * 0.5,        // 50% - Browse mode
+  EXPANDED: SCREEN_HEIGHT * 0.85,   // 85% - Full screen
 };
 
 // Zenly-style colors
@@ -208,8 +209,9 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   useImperativeHandle(ref, () => ({
     expand: () => snapTo(SNAP_POINTS.EXPANDED),
     collapse: () => snapTo(SNAP_POINTS.COLLAPSED),
+    compact: () => snapTo(SNAP_POINTS.COMPACT),
     snapToIndex: (index: number) => {
-      const points = [SNAP_POINTS.COLLAPSED, SNAP_POINTS.HALF, SNAP_POINTS.EXPANDED];
+      const points = [SNAP_POINTS.COMPACT, SNAP_POINTS.COLLAPSED, SNAP_POINTS.HALF, SNAP_POINTS.EXPANDED];
       snapTo(points[index] || SNAP_POINTS.HALF);
     },
     close: () => {
@@ -253,10 +255,10 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
     .onUpdate((event) => {
       'worklet';
       const newY = context.value.y + event.translationY;
-      // Clamp between expanded and collapsed (no close on drag)
+      // Clamp between expanded and compact
       translateY.value = Math.max(
         SCREEN_HEIGHT - SNAP_POINTS.EXPANDED,
-        Math.min(SCREEN_HEIGHT - SNAP_POINTS.COLLAPSED + 20, newY)
+        Math.min(SCREEN_HEIGHT - SNAP_POINTS.COMPACT + 10, newY)
       );
     })
     .onEnd((event) => {
@@ -268,21 +270,25 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
       let targetSnap = SNAP_POINTS.HALF;
 
       if (velocity > 500) {
-        // Fast swipe down - go to collapsed (don't close)
+        // Fast swipe down - step down through snap points
         if (currentHeight > SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
-        } else {
+        } else if (currentHeight > SNAP_POINTS.COLLAPSED) {
           targetSnap = SNAP_POINTS.COLLAPSED;
+        } else {
+          targetSnap = SNAP_POINTS.COMPACT;
         }
       } else if (velocity < -500) {
-        // Fast swipe up
-        if (currentHeight < SNAP_POINTS.HALF) {
+        // Fast swipe up - step up through snap points
+        if (currentHeight < SNAP_POINTS.COLLAPSED) {
+          targetSnap = SNAP_POINTS.COLLAPSED;
+        } else if (currentHeight < SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
         } else {
           targetSnap = SNAP_POINTS.EXPANDED;
         }
       } else {
-        // Slow drag - snap to nearest
+        // Slow drag - snap to nearest of main 3 points
         const distToCollapsed = Math.abs(currentHeight - SNAP_POINTS.COLLAPSED);
         const distToHalf = Math.abs(currentHeight - SNAP_POINTS.HALF);
         const distToExpanded = Math.abs(currentHeight - SNAP_POINTS.EXPANDED);
@@ -309,7 +315,8 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   }));
 
   const handlePlacePress = useCallback((item: SavedItem) => {
-    snapTo(SNAP_POINTS.COLLAPSED);
+    // Snap to COMPACT (15%) so user can see the cinematic fly-to animation
+    snapTo(SNAP_POINTS.COMPACT);
     onPlaceSelect(item);
   }, [onPlaceSelect, snapTo]);
 
