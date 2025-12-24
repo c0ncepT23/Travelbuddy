@@ -342,71 +342,76 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
 
   return (
     <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
-      {/* Backdrop - tap to collapse (not close) */}
-      <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
-        <View style={StyleSheet.absoluteFill} />
-      </Pressable>
+      <GestureHandlerRootView style={styles.modalContainer}>
+        {/* Backdrop - tap to collapse (not close) */}
+        <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
+          <View style={StyleSheet.absoluteFill} />
+        </Pressable>
 
-      {/* Sheet */}
-      <Animated.View style={[styles.sheet, animatedStyle]}>
-        {/* Glassmorphism background */}
-        <View style={styles.glassContainer}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
-          )}
-          
-          <LinearGradient
-            colors={[COLORS.primaryGlow + '40', 'transparent', COLORS.secondaryGlow + '20']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.glowBorder}
-          />
-        </View>
+        {/* Sheet */}
+        <Animated.View style={[styles.sheet, animatedStyle]}>
+          {/* Glassmorphism background */}
+          <View style={styles.glassContainer}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
+            )}
+            
+            <LinearGradient
+              colors={[COLORS.primaryGlow + '40', 'transparent', COLORS.secondaryGlow + '20']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.glowBorder}
+            />
+          </View>
 
-        {/* Header with gesture handler - ONLY this area is draggable */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={styles.sheetHeader}>
-            <View style={styles.handleIndicator} />
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
-                <View>
-                  <Text style={styles.headerTitle}>{categoryLabel}</Text>
-                  <Text style={styles.headerSubtitle}>{items.length} places</Text>
+          {/* Header with gesture handler - ONLY this area is draggable */}
+          <GestureDetector gesture={panGesture}>
+            <Animated.View style={styles.sheetHeader}>
+              <View style={styles.handleIndicator} />
+              <View style={styles.headerContent}>
+                <View style={styles.headerLeft}>
+                  <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
+                  <View>
+                    <Text style={styles.headerTitle}>{categoryLabel}</Text>
+                    <Text style={styles.headerSubtitle}>{items.length} places</Text>
+                  </View>
                 </View>
+                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                  <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            {/* Expand/Collapse hint */}
-            <View style={styles.dragHint}>
-              <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.dragHintText}>Drag to expand</Text>
-            </View>
-          </Animated.View>
-        </GestureDetector>
+              {/* Expand/Collapse hint */}
+              <View style={styles.dragHint}>
+                <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
+                <Text style={styles.dragHintText}>Drag to expand</Text>
+              </View>
+            </Animated.View>
+          </GestureDetector>
 
-        {/* List - scrolls independently */}
-        <FlatList
-          data={items}
-          keyExtractor={(item: SavedItem) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={handleViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-          ListEmptyComponent={renderEmpty}
-          nestedScrollEnabled={true}
-        />
-      </Animated.View>
+          {/* List - scrolls independently */}
+          <FlatList
+            data={items}
+            keyExtractor={(item: SavedItem) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            onViewableItemsChanged={handleViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            ListEmptyComponent={renderEmpty}
+            nestedScrollEnabled={true}
+          />
+        </Animated.View>
+      </GestureHandlerRootView>
     </Modal>
   );
 });
 
 const styles = StyleSheet.create({
+  modalContainer: {
+    flex: 1,
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',

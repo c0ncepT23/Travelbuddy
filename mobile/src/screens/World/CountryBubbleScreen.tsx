@@ -513,6 +513,24 @@ export default function CountryBubbleScreen() {
   const [bottomSheetEmoji, setBottomSheetEmoji] = useState('📍');
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | undefined>(undefined);
   const bottomSheetRef = useRef<GameBottomSheetRef>(null);
+  
+  // Refs for checking state in callbacks (avoids stale closure issue)
+  const expandedCategoryRef = useRef<string | null>(null);
+  const bottomSheetVisibleRef = useRef<boolean>(false);
+  const selectedPlaceIdRef = useRef<string | undefined>(undefined);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    expandedCategoryRef.current = expandedCategory;
+  }, [expandedCategory]);
+  
+  useEffect(() => {
+    bottomSheetVisibleRef.current = bottomSheetVisible;
+  }, [bottomSheetVisible]);
+  
+  useEffect(() => {
+    selectedPlaceIdRef.current = selectedPlaceId;
+  }, [selectedPlaceId]);
 
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
@@ -679,7 +697,8 @@ export default function CountryBubbleScreen() {
     
     // IMPORTANT: Skip map filtering when in orbital/bottom sheet interaction flow
     // We don't want to update bubble counts or filter while user is browsing places
-    if (expandedCategory || bottomSheetVisible) {
+    // Using REFS to avoid stale closure issue
+    if (expandedCategoryRef.current || bottomSheetVisibleRef.current) {
       return;
     }
     
@@ -718,7 +737,7 @@ export default function CountryBubbleScreen() {
         }
       }
     }, 300);
-  }, [allItems, filterMode, isMapFilterActive, expandedCategory, bottomSheetVisible]);
+  }, [allItems, filterMode, isMapFilterActive]); // Using refs for expandedCategory/bottomSheetVisible to avoid stale closures
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -931,9 +950,15 @@ export default function CountryBubbleScreen() {
     setExpandedCategory(null);
   };
 
+  // Ref to track if we're in fly-to animation (prevent scroll sync from interfering)
+  const isAnimatingRef = useRef(false);
+
   // Handle place selection from bottom sheet - cinematic fly-to!
   const handlePlaceSelect = useCallback((place: SavedItem) => {
     setSelectedPlaceId(place.id);
+    
+    // Mark as animating to prevent scroll sync from interfering
+    isAnimatingRef.current = true;
     
     // Cinematic fly-to with 60° pitch
     if (place.location_lat && place.location_lng && cameraRef.current) {
@@ -944,11 +969,22 @@ export default function CountryBubbleScreen() {
         heading: -20, // Use heading instead of bearing for Mapbox
         animationDuration: 2000,
       });
+      
+      // Clear animation flag after animation completes
+      setTimeout(() => {
+        isAnimatingRef.current = false;
+      }, 2500);
     }
   }, []);
 
-  // Handle scroll sync - pan camera to visible place
+  // Handle scroll sync - pan camera to visible place (disabled during fly-to animation)
   const handlePlaceScroll = useCallback((place: SavedItem) => {
+    // Don't interfere with fly-to animation or if a place is already selected
+    // Using refs to avoid stale closure
+    if (isAnimatingRef.current || selectedPlaceIdRef.current) {
+      return;
+    }
+    
     if (place.location_lat && place.location_lng && cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [place.location_lng, place.location_lat],
@@ -957,7 +993,7 @@ export default function CountryBubbleScreen() {
         animationDuration: 500,
       });
     }
-  }, []);
+  }, []); // No deps needed - using refs
 
   // Close bottom sheet - return to orbital expansion (not fully close)
   const handleBottomSheetClose = () => {
