@@ -366,10 +366,15 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   return (
     <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
       <GestureHandlerRootView style={styles.modalContainer}>
-        {/* Backdrop - tap to collapse (not close) */}
-        <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
-          <View style={StyleSheet.absoluteFill} />
-        </Pressable>
+        {/* Backdrop - ONLY active when NOT in HUD mode, allows map interaction when compact */}
+        {!isHudMode ? (
+          <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
+            <View style={StyleSheet.absoluteFill} />
+          </Pressable>
+        ) : (
+          // In HUD mode - NO backdrop, let taps pass through to map!
+          <View style={styles.transparentBackdrop} pointerEvents="none" />
+        )}
 
         {/* Sheet */}
         <Animated.View style={[styles.sheet, animatedStyle]}>
@@ -517,6 +522,10 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  transparentBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
   sheet: {
     position: 'absolute',
