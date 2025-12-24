@@ -363,21 +363,10 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
 
   if (!isVisible) return null;
 
-  return (
-    <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
-      {/* In HUD mode: box-none lets touches pass through to map, but children (sheet) still receive touches */}
-      <GestureHandlerRootView 
-        style={styles.modalContainer} 
-        pointerEvents={isHudMode ? "box-none" : "auto"}
-      >
-        {/* Backdrop - ONLY active when NOT in HUD mode */}
-        {!isHudMode && (
-          <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
-            <View style={StyleSheet.absoluteFill} />
-          </Pressable>
-        )}
-
-        {/* Sheet */}
+  // HUD MODE: No Modal, just absolute positioned View - allows map interaction!
+  if (isHudMode && selectedPlace) {
+    return (
+      <GestureHandlerRootView style={styles.hudOnlyContainer} pointerEvents="box-none">
         <Animated.View style={[styles.sheet, animatedStyle]}>
           {/* Glassmorphism background */}
           <View style={styles.glassContainer}>
@@ -386,7 +375,6 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
             ) : (
               <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
             )}
-            
             <LinearGradient
               colors={[COLORS.primaryGlow + '40', 'transparent', COLORS.secondaryGlow + '20']}
               start={{ x: 0, y: 0 }}
@@ -394,14 +382,12 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
               style={styles.glowBorder}
             />
           </View>
-
-          {/* HUD MODE - Compact action bar when a place is selected */}
-        {isHudMode && selectedPlace ? (
+          
+          {/* HUD Content */}
           <GestureDetector gesture={panGesture}>
             <Animated.View style={styles.hudContainer}>
               <View style={styles.handleIndicator} />
               <View style={styles.hudContent}>
-                {/* Place Info */}
                 <View style={styles.hudInfo}>
                   <Text style={styles.hudPlaceName} numberOfLines={1}>
                     {selectedPlace.name || 'Selected Place'}
@@ -423,9 +409,7 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                   </View>
                 </View>
                 
-                {/* Action Buttons */}
                 <View style={styles.hudActions}>
-                  {/* 360° ORBIT Button */}
                   {onOrbit && (
                     <TouchableOpacity 
                       style={[styles.hudOrbitButton, isOrbiting && styles.hudOrbitButtonActive]}
@@ -435,15 +419,10 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                       }}
                       disabled={isOrbiting}
                     >
-                      <Ionicons 
-                        name="sync" 
-                        size={22} 
-                        color={isOrbiting ? '#FFCC00' : '#8B5CF6'} 
-                      />
+                      <Ionicons name="sync" size={22} color={isOrbiting ? '#FFCC00' : '#8B5CF6'} />
                     </TouchableOpacity>
                   )}
                   
-                  {/* Directions Button */}
                   {onDirections && (
                     <TouchableOpacity 
                       style={styles.hudGoButton}
@@ -452,10 +431,7 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                         onDirections(selectedPlace);
                       }}
                     >
-                      <LinearGradient
-                        colors={['#FF9900', '#FF6600']}
-                        style={styles.hudGoGradient}
-                      >
+                      <LinearGradient colors={['#FF9900', '#FF6600']} style={styles.hudGoGradient}>
                         <Ionicons name="navigate" size={18} color="white" />
                         <Text style={styles.hudGoText}>GO</Text>
                       </LinearGradient>
@@ -464,17 +440,46 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                 </View>
               </View>
               
-              {/* Expand hint */}
               <View style={styles.hudExpandHint}>
                 <Ionicons name="chevron-up" size={14} color={COLORS.textSecondary} />
                 <Text style={styles.hudExpandText}>Swipe up for details</Text>
               </View>
             </Animated.View>
           </GestureDetector>
-        ) : (
-          <>
-            {/* Header with gesture handler - ONLY this area is draggable */}
-            <GestureDetector gesture={panGesture}>
+        </Animated.View>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // LIST MODE: Use Modal with backdrop
+  return (
+    <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
+      <GestureHandlerRootView style={styles.modalContainer}>
+        {/* Backdrop - tap to collapse */}
+        <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
+          <View style={StyleSheet.absoluteFill} />
+        </Pressable>
+
+        {/* Sheet */}
+        <Animated.View style={[styles.sheet, animatedStyle]}>
+          {/* Glassmorphism background */}
+          <View style={styles.glassContainer}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
+            )}
+            
+            <LinearGradient
+              colors={[COLORS.primaryGlow + '40', 'transparent', COLORS.secondaryGlow + '20']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.glowBorder}
+            />
+          </View>
+
+          {/* LIST MODE - Header with gesture handler */}
+          <GestureDetector gesture={panGesture}>
               <Animated.View style={styles.sheetHeader}>
                 <View style={styles.handleIndicator} />
                 <View style={styles.headerContent}>
@@ -508,8 +513,6 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
               nestedScrollEnabled={true}
               removeClippedSubviews={false}
             />
-          </>
-        )}
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
@@ -520,13 +523,18 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
   },
+  // HUD-only container - positioned absolute, allows map touches to pass through
+  hudOnlyContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    zIndex: 1000, // Ensure HUD is above map
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
-  },
-  transparentBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
   },
   sheet: {
     position: 'absolute',
