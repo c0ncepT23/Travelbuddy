@@ -3,15 +3,16 @@
  * 
  * Features:
  * - Glassmorphism (frosted glass HUD effect)
- * - Snap points: 10% (peek), 50% (browse), 85% (full)
+ * - Snap points: 12% (peek), 50% (browse), 85% (full)
  * - Large image cards for places
  * - Interactive scroll syncs with map camera
  * - Auto-snap down on place selection for fly-to animation
+ * - Drag handle only on header (FlatList scrolls independently)
  * 
  * Uses react-native-reanimated for smooth animations
  */
 
-import React, { useCallback, useMemo, useRef, forwardRef, useImperativeHandle, useEffect, memo } from 'react';
+import React, { useCallback, useMemo, useRef, forwardRef, useImperativeHandle, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -23,11 +24,11 @@ import {
   Platform,
   Modal,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { MotiView } from 'moti';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -35,7 +36,7 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SavedItem } from '../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -194,9 +195,8 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   const currentSnapPoint = useSharedValue(SNAP_POINTS.HALF);
   const context = useSharedValue({ y: 0 });
 
-  // Snap to nearest point
+  // Snap to a specific point - can be called from JS or worklet
   const snapTo = useCallback((point: number) => {
-    'worklet';
     translateY.value = withSpring(SCREEN_HEIGHT - point, {
       damping: 20,
       stiffness: 150,
@@ -231,15 +231,26 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
     }
   }, [isVisible]);
 
-  // Pan gesture for dragging
+  // Track if we're at collapsed state (to allow close on further drag down)
+  const [isAtCollapsed, setIsAtCollapsed] = useState(false);
+
+  // Update collapsed state when snap point changes
+  useEffect(() => {
+    const checkCollapsed = currentSnapPoint.value === SNAP_POINTS.COLLAPSED;
+    setIsAtCollapsed(checkCollapsed);
+  }, [currentSnapPoint.value]);
+
+  // Pan gesture for dragging - ONLY works on the header handle area
   const panGesture = Gesture.Pan()
     .onStart(() => {
       context.value = { y: translateY.value };
     })
     .onUpdate((event) => {
+      const newY = context.value.y + event.translationY;
+      // Clamp between expanded and slightly below collapsed (for close gesture)
       translateY.value = Math.max(
         SCREEN_HEIGHT - SNAP_POINTS.EXPANDED,
-        Math.min(SCREEN_HEIGHT, context.value.y + event.translationY)
+        Math.min(SCREEN_HEIGHT + 50, newY)
       );
     })
     .onEnd((event) => {
@@ -253,8 +264,12 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
         // Fast swipe down
         if (currentHeight > SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
-        } else {
+        } else if (currentHeight > SNAP_POINTS.COLLAPSED * 0.5) {
           targetSnap = SNAP_POINTS.COLLAPSED;
+        } else {
+          // Swiped past collapsed - close the sheet
+          runOnJS(onClose)();
+          return;
         }
       } else if (velocity < -500) {
         // Fast swipe up
@@ -269,7 +284,11 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
         const distToHalf = Math.abs(currentHeight - SNAP_POINTS.HALF);
         const distToExpanded = Math.abs(currentHeight - SNAP_POINTS.EXPANDED);
 
-        if (distToCollapsed < distToHalf && distToCollapsed < distToExpanded) {
+        if (currentHeight < SNAP_POINTS.COLLAPSED * 0.5) {
+          // Below half of collapsed - close
+          runOnJS(onClose)();
+          return;
+        } else if (distToCollapsed < distToHalf && distToCollapsed < distToExpanded) {
           targetSnap = SNAP_POINTS.COLLAPSED;
         } else if (distToExpanded < distToHalf) {
           targetSnap = SNAP_POINTS.EXPANDED;
@@ -323,32 +342,32 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
 
   return (
     <Modal transparent visible={isVisible} animationType="none" statusBarTranslucent>
-      {/* Backdrop */}
+      {/* Backdrop - tap to collapse (not close) */}
       <Pressable style={styles.backdrop} onPress={() => snapTo(SNAP_POINTS.COLLAPSED)}>
         <View style={StyleSheet.absoluteFill} />
       </Pressable>
 
       {/* Sheet */}
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.sheet, animatedStyle]}>
-          {/* Glassmorphism background */}
-          <View style={styles.glassContainer}>
-            {Platform.OS === 'ios' ? (
-              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-            ) : (
-              <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
-            )}
-            
-            <LinearGradient
-              colors={[COLORS.primaryGlow + '40', 'transparent', COLORS.secondaryGlow + '20']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.glowBorder}
-            />
-          </View>
+      <Animated.View style={[styles.sheet, animatedStyle]}>
+        {/* Glassmorphism background */}
+        <View style={styles.glassContainer}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
+          )}
+          
+          <LinearGradient
+            colors={[COLORS.primaryGlow + '40', 'transparent', COLORS.secondaryGlow + '20']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.glowBorder}
+          />
+        </View>
 
-          {/* Header */}
-          <View style={styles.sheetHeader}>
+        {/* Header with gesture handler - ONLY this area is draggable */}
+        <GestureDetector gesture={panGesture}>
+          <Animated.View style={styles.sheetHeader}>
             <View style={styles.handleIndicator} />
             <View style={styles.headerContent}>
               <View style={styles.headerLeft}>
@@ -362,21 +381,27 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                 <Ionicons name="close" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
-          </View>
+            {/* Expand/Collapse hint */}
+            <View style={styles.dragHint}>
+              <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.dragHintText}>Drag to expand</Text>
+            </View>
+          </Animated.View>
+        </GestureDetector>
 
-          {/* List */}
-          <FlatList
-            data={items}
-            keyExtractor={(item: SavedItem) => item.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            onViewableItemsChanged={handleViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            ListEmptyComponent={renderEmpty}
-          />
-        </Animated.View>
-      </GestureDetector>
+        {/* List - scrolls independently */}
+        <FlatList
+          data={items}
+          keyExtractor={(item: SavedItem) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          onViewableItemsChanged={handleViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          ListEmptyComponent={renderEmpty}
+          nestedScrollEnabled={true}
+        />
+      </Animated.View>
     </Modal>
   );
 });
@@ -421,9 +446,23 @@ const styles = StyleSheet.create({
   sheetHeader: {
     paddingTop: 12,
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    // Make header taller for easier drag target
+    minHeight: 100,
+  },
+  dragHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    opacity: 0.6,
+  },
+  dragHintText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
   },
   handleIndicator: {
     width: 40,

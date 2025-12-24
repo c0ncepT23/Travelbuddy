@@ -667,6 +667,7 @@ export default function CountryBubbleScreen() {
   }, [allItems, countryCoords, animateToRegion]);
 
   // Handle map region change (debounced)
+  // SKIP filtering when orbital bubbles are expanded or bottom sheet is visible
   const handleRegionDidChange = useCallback((feature: any) => {
     // Clear any pending timeout
     if (mapFilterTimeoutRef.current) {
@@ -675,6 +676,12 @@ export default function CountryBubbleScreen() {
     
     const zoom = feature.properties?.zoomLevel || 0;
     setCurrentZoom(zoom);
+    
+    // IMPORTANT: Skip map filtering when in orbital/bottom sheet interaction flow
+    // We don't want to update bubble counts or filter while user is browsing places
+    if (expandedCategory || bottomSheetVisible) {
+      return;
+    }
     
     // Skip if in a specific filter mode (AI or nearMe controls these)
     if (filterMode === 'nearMe' || filterMode === 'area') {
@@ -711,7 +718,7 @@ export default function CountryBubbleScreen() {
         }
       }
     }, 300);
-  }, [allItems, filterMode, isMapFilterActive]);
+  }, [allItems, filterMode, isMapFilterActive, expandedCategory, bottomSheetVisible]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -952,13 +959,24 @@ export default function CountryBubbleScreen() {
     }
   }, []);
 
-  // Close bottom sheet
+  // Close bottom sheet - return to orbital expansion (not fully close)
   const handleBottomSheetClose = () => {
     setBottomSheetVisible(false);
     setSelectedPlaceId(undefined);
     
-    // Reset camera to country view
-    animateToRegion(countryCoords.latitude, countryCoords.longitude, countryCoords.latDelta, countryCoords.lngDelta);
+    // Return to orbital expansion state (don't reset camera or clear expandedCategory)
+    // User can tap backdrop of orbital to fully collapse back to macro bubbles
+    if (selectedCategory) {
+      // Re-expand the category orbital bubbles
+      setExpandedCategory(selectedCategory);
+    }
+    
+    // Reset camera to a reasonable zoom but keep the area
+    cameraRef.current?.setCamera({
+      zoomLevel: 10,
+      pitch: 0,
+      animationDuration: 800,
+    });
   };
 
   // Legacy handler for backward compatibility (still used by microBubbles)
