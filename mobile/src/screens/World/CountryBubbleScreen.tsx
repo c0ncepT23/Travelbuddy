@@ -515,22 +515,9 @@ export default function CountryBubbleScreen() {
   const bottomSheetRef = useRef<GameBottomSheetRef>(null);
   
   // Refs for checking state in callbacks (avoids stale closure issue)
-  const expandedCategoryRef = useRef<string | null>(null);
-  const bottomSheetVisibleRef = useRef<boolean>(false);
+  // These are updated IMMEDIATELY in handlers, not via useEffect (which is async)
+  const isInRPGFlowRef = useRef<boolean>(false);
   const selectedPlaceIdRef = useRef<string | undefined>(undefined);
-  
-  // Keep refs in sync with state
-  useEffect(() => {
-    expandedCategoryRef.current = expandedCategory;
-  }, [expandedCategory]);
-  
-  useEffect(() => {
-    bottomSheetVisibleRef.current = bottomSheetVisible;
-  }, [bottomSheetVisible]);
-  
-  useEffect(() => {
-    selectedPlaceIdRef.current = selectedPlaceId;
-  }, [selectedPlaceId]);
 
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
@@ -695,10 +682,9 @@ export default function CountryBubbleScreen() {
     const zoom = feature.properties?.zoomLevel || 0;
     setCurrentZoom(zoom);
     
-    // IMPORTANT: Skip map filtering when in orbital/bottom sheet interaction flow
-    // We don't want to update bubble counts or filter while user is browsing places
-    // Using REFS to avoid stale closure issue
-    if (expandedCategoryRef.current || bottomSheetVisibleRef.current) {
+    // IMPORTANT: Skip map filtering when in RPG interaction flow
+    // (orbital bubbles, bottom sheet, place selection)
+    if (isInRPGFlowRef.current) {
       return;
     }
     
@@ -914,9 +900,13 @@ export default function CountryBubbleScreen() {
   // RPG-style: Tap macro bubble → orbital explosion (no navigation!)
   const handleMacroBubblePress = (bubble: BubbleData) => {
     if (bubble.category) {
+      // IMMEDIATELY mark as in RPG flow to prevent map filtering
+      isInRPGFlowRef.current = true;
+      
       // Toggle expansion - if same category, collapse
       if (expandedCategory === bubble.category) {
         setExpandedCategory(null);
+        isInRPGFlowRef.current = false; // Exiting RPG flow
       } else {
         setSelectedCategory(bubble.category);
         setExpandedCategory(bubble.category);
@@ -927,6 +917,9 @@ export default function CountryBubbleScreen() {
 
   // RPG-style: Tap sub-category → open bottom sheet (no navigation!)
   const handleSubCategoryPress = (subCategory: { id: string; label: string; count: number; items: SavedItem[] }) => {
+    // IMMEDIATELY mark as in RPG flow to prevent map filtering
+    isInRPGFlowRef.current = true;
+    
     // Collapse orbital bubbles
     setExpandedCategory(null);
     
@@ -945,35 +938,52 @@ export default function CountryBubbleScreen() {
     setTimeout(() => bottomSheetRef.current?.snapToIndex(1), 100);
   };
 
-  // Collapse orbital bubbles
+  // Collapse orbital bubbles - exit RPG flow
   const handleCollapseOrbit = () => {
     setExpandedCategory(null);
+    isInRPGFlowRef.current = false;
   };
 
   // Ref to track if we're in fly-to animation (prevent scroll sync from interfering)
   const isAnimatingRef = useRef(false);
 
-  // Handle place selection from bottom sheet - cinematic fly-to!
+  // Handle place selection from bottom sheet - CINEMATIC fly-to!
   const handlePlaceSelect = useCallback((place: SavedItem) => {
     setSelectedPlaceId(place.id);
+    selectedPlaceIdRef.current = place.id;
     
     // Mark as animating to prevent scroll sync from interfering
     isAnimatingRef.current = true;
     
-    // Cinematic fly-to with 60° pitch
+    // CINEMATIC fly-to: zoom 18 for 3D buildings, 65° pitch for drama
     if (place.location_lat && place.location_lng && cameraRef.current) {
+      // Capture coordinates for use in setTimeout
+      const lng = place.location_lng;
+      const lat = place.location_lat;
+      
+      // First, quickly zoom out a bit for dramatic effect
       cameraRef.current.setCamera({
-        centerCoordinate: [place.location_lng, place.location_lat],
-        zoomLevel: 16,
-        pitch: 60,
-        heading: -20, // Use heading instead of bearing for Mapbox
-        animationDuration: 2000,
+        centerCoordinate: [lng, lat],
+        zoomLevel: 12,
+        pitch: 0,
+        animationDuration: 300,
       });
+      
+      // Then dive in dramatically
+      setTimeout(() => {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [lng, lat],
+          zoomLevel: 18, // Higher zoom for 3D buildings
+          pitch: 65,     // More dramatic tilt
+          heading: 30,   // Slight rotation for cinematic feel
+          animationDuration: 2500,
+        });
+      }, 350);
       
       // Clear animation flag after animation completes
       setTimeout(() => {
         isAnimatingRef.current = false;
-      }, 2500);
+      }, 3000);
     }
   }, []);
 
@@ -999,12 +1009,17 @@ export default function CountryBubbleScreen() {
   const handleBottomSheetClose = () => {
     setBottomSheetVisible(false);
     setSelectedPlaceId(undefined);
+    selectedPlaceIdRef.current = undefined;
     
     // Return to orbital expansion state (don't reset camera or clear expandedCategory)
     // User can tap backdrop of orbital to fully collapse back to macro bubbles
     if (selectedCategory) {
-      // Re-expand the category orbital bubbles
+      // Re-expand the category orbital bubbles - stay in RPG flow
       setExpandedCategory(selectedCategory);
+      isInRPGFlowRef.current = true;
+    } else {
+      // Exit RPG flow
+      isInRPGFlowRef.current = false;
     }
     
     // Reset camera to a reasonable zoom but keep the area

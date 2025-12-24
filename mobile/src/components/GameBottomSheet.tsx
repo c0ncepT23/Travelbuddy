@@ -309,18 +309,15 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
     onPlaceSelect(item);
   }, [onPlaceSelect, snapTo]);
 
-  const handleViewableItemsChanged = useCallback(({ viewableItems }: any) => {
-    if (viewableItems.length > 0 && onPlaceScroll) {
-      const centerItem = viewableItems[Math.floor(viewableItems.length / 2)];
-      if (centerItem?.item) {
-        onPlaceScroll(centerItem.item);
-      }
-    }
-  }, [onPlaceScroll]);
-
-  const viewabilityConfig = useMemo(() => ({
-    itemVisiblePercentThreshold: 50,
-  }), []);
+  // Disabled scroll sync for now - was causing crashes and interfering with fly-to
+  // const handleViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+  //   if (viewableItems.length > 0 && onPlaceScroll) {
+  //     const centerItem = viewableItems[Math.floor(viewableItems.length / 2)];
+  //     if (centerItem?.item) {
+  //       onPlaceScroll(centerItem.item);
+  //     }
+  //   }
+  // }, [onPlaceScroll]);
 
   const renderItem = useCallback(({ item, index }: { item: SavedItem; index: number }) => (
     <PlaceCard
@@ -397,10 +394,9 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
             renderItem={renderItem}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            onViewableItemsChanged={handleViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
             ListEmptyComponent={renderEmpty}
             nestedScrollEnabled={true}
+            removeClippedSubviews={false}
           />
         </Animated.View>
       </GestureHandlerRootView>
