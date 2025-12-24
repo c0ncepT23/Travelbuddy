@@ -183,6 +183,8 @@ interface GameBottomSheetProps {
   selectedPlace?: SavedItem | null;
   onDirections?: (item: SavedItem) => void;
   onCheckIn?: (item: SavedItem) => void;
+  onOrbit?: () => void;  // 360° orbit trigger
+  isOrbiting?: boolean;  // Show orbiting state
 }
 
 export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetProps>(({
@@ -197,6 +199,8 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   selectedPlace,
   onDirections,
   onCheckIn,
+  onOrbit,
+  isOrbiting,
 }, ref) => {
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const currentSnapPoint = useSharedValue(SNAP_POINTS.HALF);
@@ -415,13 +419,18 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                 
                 {/* Action Buttons */}
                 <View style={styles.hudActions}>
-                  {/* Check-In Button */}
-                  {onCheckIn && (
+                  {/* 360° ORBIT Button */}
+                  {onOrbit && (
                     <TouchableOpacity 
-                      style={styles.hudActionButton}
-                      onPress={() => onCheckIn(selectedPlace)}
+                      style={[styles.hudOrbitButton, isOrbiting && styles.hudOrbitButtonActive]}
+                      onPress={onOrbit}
+                      disabled={isOrbiting}
                     >
-                      <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />
+                      <Ionicons 
+                        name="sync" 
+                        size={22} 
+                        color={isOrbiting ? '#FFCC00' : '#8B5CF6'} 
+                      />
                     </TouchableOpacity>
                   )}
                   
@@ -787,6 +796,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginLeft: 4,
+  },
+  hudOrbitButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(139, 92, 246, 0.5)',
+  },
+  hudOrbitButtonActive: {
+    backgroundColor: 'rgba(255, 204, 0, 0.2)',
+    borderColor: '#FFCC00',
   },
   hudExpandHint: {
     flexDirection: 'row',

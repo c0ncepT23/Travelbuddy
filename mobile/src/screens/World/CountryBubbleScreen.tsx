@@ -1387,37 +1387,7 @@ export default function CountryBubbleScreen() {
           </MarkerView>
         )}
         
-        {/* TAPPABLE BUILDING AREA - Tap to trigger 360° orbit */}
-        {heroCoordinates && selectedPlace && !isOrbiting && (
-          <MarkerView
-            coordinate={heroCoordinates}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <TouchableOpacity
-              style={styles.buildingTapArea}
-              onPress={handleBuildingTap}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.orbitHint, isOrbiting && styles.orbitHintActive]}>
-                <Ionicons name="sync" size={16} color="white" />
-                <Text style={styles.orbitHintText}>TAP TO ORBIT</Text>
-              </View>
-            </TouchableOpacity>
-          </MarkerView>
-        )}
-        
-        {/* ORBITING INDICATOR - Show when 360° rotation in progress */}
-        {isOrbiting && heroCoordinates && (
-          <MarkerView
-            coordinate={heroCoordinates}
-            anchor={{ x: 0.5, y: 1.5 }}
-          >
-            <View style={styles.orbitingIndicator}>
-              <Ionicons name="sync" size={20} color="#FFCC00" />
-              <Text style={styles.orbitingText}>ORBITING...</Text>
-            </View>
-          </MarkerView>
-        )}
+        {/* ORBIT button moved to HUD in GameBottomSheet */}
       </MapView>
 
       {/* Gradient Overlay - Dark theme */}
@@ -1549,6 +1519,8 @@ export default function CountryBubbleScreen() {
         selectedPlaceId={selectedPlaceId}
         selectedPlace={selectedPlace}
         onDirections={openGoogleMaps}
+        onOrbit={triggerOrbit}
+        isOrbiting={isOrbiting}
       />
 
       {/* Empty State - Only show when NO places saved at all */}
