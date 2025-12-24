@@ -1043,6 +1043,42 @@ export default function CountryBubbleScreen() {
     return baseBearing;
   }, []);
 
+  // Calculate distance between two coordinates in meters (Haversine formula)
+  const getDistanceMeters = useCallback((coord1: [number, number], coord2: [number, number]): number => {
+    const [lng1, lat1] = coord1;
+    const [lng2, lat2] = coord2;
+    
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    
+    const a = Math.sin(dLat / 2) ** 2 + 
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+              Math.sin(dLng / 2) ** 2;
+    
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }, []);
+
+  // Handle map tap - trigger orbit if tapped near hero building (NATIVE TAP DETECTION!)
+  const handleMapPress = useCallback((event: any) => {
+    // Only process if we have a selected building
+    if (!heroCoordinatesRef.current || isOrbitingRef.current) return;
+    
+    const tapCoords = event.geometry?.coordinates as [number, number];
+    if (!tapCoords) return;
+    
+    const distance = getDistanceMeters(tapCoords, heroCoordinatesRef.current);
+    
+    console.log('🗺️ Map tapped at:', tapCoords, 'Distance to hero:', distance.toFixed(0) + 'm');
+    
+    // If tapped within 150 meters of the hero building, trigger orbit!
+    if (distance < 150) {
+      console.log('🏢 BUILDING AREA TAPPED! Triggering 360° orbit...');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      triggerOrbit();
+    }
+  }, [getDistanceMeters, triggerOrbit]);
+
   // Handle place selection from bottom sheet - CINEMATIC "LOCK-ON" fly-to!
   const handlePlaceSelect = useCallback((place: SavedItem) => {
     // 1. HAPTIC FEEDBACK - Physical "lock-on" feel
@@ -1317,6 +1353,7 @@ export default function CountryBubbleScreen() {
         compassEnabled={false}
         scaleBarEnabled={false}
         onRegionDidChange={handleRegionDidChange}
+        onPress={handleMapPress}
       >
         <Camera
           ref={cameraRef}
