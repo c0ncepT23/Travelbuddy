@@ -13,6 +13,7 @@ const shareIntentEmitter = Platform.OS === 'android' && ShareIntentModule
   : null;
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from './src/stores/authStore';
 import { useTripStore } from './src/stores/tripStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -425,130 +426,132 @@ export default function App() {
   }
 
   return (
-    <ErrorBoundary>
-      <StatusBar style="dark" />
-      
-      <NavigationContainer ref={navigationRef} linking={linking}>
-        <Stack.Navigator
-          screenOptions={{
-            headerStyle: { 
-              backgroundColor: theme.colors.background,
-              elevation: 0,
-              shadowOpacity: 0,
-              borderBottomWidth: 2,
-              borderBottomColor: theme.colors.border,
-            },
-            headerTintColor: theme.colors.textPrimary,
-            headerTitleStyle: { 
-              fontWeight: '700',
-              fontSize: 18,
-              color: theme.colors.textPrimary,
-            },
-          }}
-        >
-          {!isAuthenticated ? (
-            // Auth Stack
-            <>
-              <Stack.Screen
-                name="Login"
-                component={LoginScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="Register"
-                component={RegisterScreen}
-                options={{ title: 'Create Account' }}
-              />
-            </>
-          ) : (
-            // Main Stack - V2 UI
-            <>
-              {/* V2: World Map as Home */}
-              <Stack.Screen
-                name="WorldMap"
-                component={WorldMapScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="CountryBubbles"
-                component={CountryBubbleScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="CategoryList"
-                component={CategoryListScreen}
-                options={{ headerShown: false }}
-              />
-              
-              {/* Legacy: Keep TripHome for backward compatibility */}
-              <Stack.Screen
-                name="TripHome"
-                component={TripTabScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="JoinTrip"
-                component={JoinTripScreen}
-                options={{ title: 'Join Trip' }}
-              />
-              
-              {/* Chat & Agent */}
-              <Stack.Screen
-                name="Chat"
-                component={ChatScreen}
-                options={{ title: 'Travel Agent' }}
-              />
-              <Stack.Screen
-                name="GroupChat"
-                component={GroupChatScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="Companion"
-                component={CompanionScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="AgentChat"
-                component={AgentChatScreen}
-                options={{ headerShown: false }}
-              />
-              
-              {/* Utility Screens */}
-              <Stack.Screen
-                name="BrowseItems"
-                component={BrowseItemsScreen}
-                options={{ title: 'Saved Items' }}
-              />
-              <Stack.Screen
-                name="Profile"
-                component={ProfileScreen}
-                options={{ title: 'Profile' }}
-              />
-              <Stack.Screen
-                name="ItinerarySetup"
-                component={ItinerarySetupScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="Timeline"
-                component={TimelineScreen}
-                options={{ headerShown: false }}
-              />
-            </>
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
-      
-      {/* Smart Share Processor - AFTER NavigationContainer to render on top */}
-      {showShareModal && sharedContent && isAuthenticated && (
-        <SmartShareProcessor
-          url={sharedContent.data}
-          onComplete={handleShareComplete}
-          onError={handleShareError}
-          onClose={handleShareClose}
-        />
-      )}
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <StatusBar style="dark" />
+        
+        <NavigationContainer ref={navigationRef} linking={linking}>
+          <Stack.Navigator
+            screenOptions={{
+              headerStyle: { 
+                backgroundColor: theme.colors.background,
+                elevation: 0,
+                shadowOpacity: 0,
+                borderBottomWidth: 2,
+                borderBottomColor: theme.colors.border,
+              },
+              headerTintColor: theme.colors.textPrimary,
+              headerTitleStyle: { 
+                fontWeight: '700',
+                fontSize: 18,
+                color: theme.colors.textPrimary,
+              },
+            }}
+          >
+            {!isAuthenticated ? (
+              // Auth Stack
+              <>
+                <Stack.Screen
+                  name="Login"
+                  component={LoginScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="Register"
+                  component={RegisterScreen}
+                  options={{ title: 'Create Account' }}
+                />
+              </>
+            ) : (
+              // Main Stack - V2 UI
+              <>
+                {/* V2: World Map as Home */}
+                <Stack.Screen
+                  name="WorldMap"
+                  component={WorldMapScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="CountryBubbles"
+                  component={CountryBubbleScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="CategoryList"
+                  component={CategoryListScreen}
+                  options={{ headerShown: false }}
+                />
+                
+                {/* Legacy: Keep TripHome for backward compatibility */}
+                <Stack.Screen
+                  name="TripHome"
+                  component={TripTabScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="JoinTrip"
+                  component={JoinTripScreen}
+                  options={{ title: 'Join Trip' }}
+                />
+                
+                {/* Chat & Agent */}
+                <Stack.Screen
+                  name="Chat"
+                  component={ChatScreen}
+                  options={{ title: 'Travel Agent' }}
+                />
+                <Stack.Screen
+                  name="GroupChat"
+                  component={GroupChatScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="Companion"
+                  component={CompanionScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="AgentChat"
+                  component={AgentChatScreen}
+                  options={{ headerShown: false }}
+                />
+                
+                {/* Utility Screens */}
+                <Stack.Screen
+                  name="BrowseItems"
+                  component={BrowseItemsScreen}
+                  options={{ title: 'Saved Items' }}
+                />
+                <Stack.Screen
+                  name="Profile"
+                  component={ProfileScreen}
+                  options={{ title: 'Profile' }}
+                />
+                <Stack.Screen
+                  name="ItinerarySetup"
+                  component={ItinerarySetupScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="Timeline"
+                  component={TimelineScreen}
+                  options={{ headerShown: false }}
+                />
+              </>
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+        
+        {/* Smart Share Processor - AFTER NavigationContainer to render on top */}
+        {showShareModal && sharedContent && isAuthenticated && (
+          <SmartShareProcessor
+            url={sharedContent.data}
+            onComplete={handleShareComplete}
+            onError={handleShareError}
+            onClose={handleShareClose}
+          />
+        )}
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

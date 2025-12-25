@@ -1,6 +1,6 @@
 /**
  * PlaceDetailSheet - Google Maps style bottom sheet for single place detail
- * Uses @gorhom/bottom-sheet with footerComponent for fixed action buttons
+ * Uses @gorhom/bottom-sheet v4 with footerComponent for fixed action buttons
  */
 
 import React, { useCallback, useMemo, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
@@ -11,8 +11,14 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ScrollView as RNScrollView,
 } from 'react-native';
-import BottomSheet, { BottomSheetScrollView, BottomSheetFooter, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import BottomSheet, { 
+  BottomSheetScrollView, 
+  BottomSheetFooter, 
+  BottomSheetBackdrop,
+  BottomSheetFooterProps
+} from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { SavedItem } from '../types';
 import { getGooglePhotoUrl } from '../config/maps';
@@ -52,7 +58,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 }, ref) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // Snap points: 40% peek, 70% half, 90% expanded
+  // Snap points for v4
   const snapPoints = useMemo(() => ['40%', '70%', '90%'], []);
 
   // Handle sheet changes
@@ -99,7 +105,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 
   // FIXED FOOTER with action buttons
   const renderFooter = useCallback(
-    (props: any) => (
+    (props: BottomSheetFooterProps) => (
       <BottomSheetFooter {...props} bottomInset={24}>
         <View style={styles.footerContainer}>
           <TouchableOpacity 
@@ -208,7 +214,12 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
         </View>
 
         {/* Photo Carousel */}
-        <View style={styles.photoCarousel}>
+        <RNScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.photoCarousel}
+          contentContainerStyle={styles.photoCarouselContent}
+        >
           {photoUrls.length > 0 ? (
             photoUrls.map((url, i) => (
               <Image
@@ -223,7 +234,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
               <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
             </View>
           )}
-        </View>
+        </RNScrollView>
 
         {/* Creator Insights */}
         {place.description && (
@@ -239,7 +250,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
         )}
 
         {/* Extra bottom padding for footer */}
-        <View style={{ height: 120 }} />
+        <View style={{ height: 140 }} />
       </BottomSheetScrollView>
     </BottomSheet>
   );
@@ -304,9 +315,13 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   photoCarousel: {
+    marginBottom: 16,
+    marginHorizontal: -16,
+  },
+  photoCarouselContent: {
+    paddingHorizontal: 16,
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
   },
   photo: {
     width: 180,
@@ -382,4 +397,3 @@ const styles = StyleSheet.create({
 });
 
 export default PlaceDetailSheet;
-
