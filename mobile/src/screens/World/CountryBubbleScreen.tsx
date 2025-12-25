@@ -21,6 +21,7 @@ import {
   StatusBar,
   Keyboard,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -285,6 +286,26 @@ const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'or
   'green', 'blue', 'pink', 'orange', 'purple', 'yellow'
 ];
 
+// Category Filter Chips Configuration
+type CategoryFilterType = 'all' | 'food' | 'activity' | 'place' | 'shopping' | 'nightlife' | 'accommodation';
+
+interface CategoryFilterConfig {
+  key: CategoryFilterType;
+  label: string;
+  icon: string;
+  color: string;  // Hex color for chips and clusters when filtered
+}
+
+const CATEGORY_FILTERS: CategoryFilterConfig[] = [
+  { key: 'all', label: 'All', icon: '🌍', color: '#8B5CF6' },
+  { key: 'food', label: 'Food', icon: '🍔', color: '#22C55E' },
+  { key: 'activity', label: 'Activity', icon: '🎯', color: '#3B82F6' },
+  { key: 'place', label: 'Place', icon: '📍', color: '#6366F1' },
+  { key: 'shopping', label: 'Shopping', icon: '🛍️', color: '#EAB308' },
+  { key: 'nightlife', label: 'Nightlife', icon: '🎉', color: '#EC4899' },
+  { key: 'accommodation', label: 'Stay', icon: '🏨', color: '#A855F7' },
+];
+
 // Mapbox style - navigation night for dark Zenly aesthetic
 const MAPBOX_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
@@ -387,6 +408,63 @@ function filterItemsByMapBounds(items: SavedItem[], bounds: number[][]): SavedIt
 
 // Minimum zoom level to activate map-based filtering (5 = city level)
 const MIN_ZOOM_FOR_FILTERING = 5;
+
+/**
+ * Calculate bounding box from a list of items
+ * Returns center coordinates and appropriate zoom level
+ */
+function calculateBoundsFromItems(items: SavedItem[]): { 
+  center: [number, number]; 
+  zoomLevel: number;
+  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } | null;
+} {
+  const itemsWithCoords = items.filter(item => item.location_lat && item.location_lng);
+  
+  if (itemsWithCoords.length === 0) {
+    return { center: [0, 0], zoomLevel: 2, bounds: null };
+  }
+  
+  if (itemsWithCoords.length === 1) {
+    const item = itemsWithCoords[0];
+    return { 
+      center: [item.location_lng!, item.location_lat!], 
+      zoomLevel: 14,
+      bounds: { minLat: item.location_lat!, maxLat: item.location_lat!, minLng: item.location_lng!, maxLng: item.location_lng! }
+    };
+  }
+  
+  // Calculate bounds
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLng = Infinity, maxLng = -Infinity;
+  
+  itemsWithCoords.forEach(item => {
+    const lat = item.location_lat!;
+    const lng = item.location_lng!;
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+  });
+  
+  // Calculate center
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  
+  // Calculate zoom level to fit all points
+  // Add padding (20% on each side)
+  const latDelta = (maxLat - minLat) * 1.4;
+  const lngDelta = (maxLng - minLng) * 1.4;
+  const maxDelta = Math.max(latDelta, lngDelta, 0.01); // Minimum delta to avoid infinite zoom
+  
+  // zoom = log2(360 / delta) - approximation
+  const zoomLevel = Math.min(Math.max(Math.log2(360 / maxDelta) - 1, 2), 16);
+  
+  return { 
+    center: [centerLng, centerLat], 
+    zoomLevel,
+    bounds: { minLat, maxLat, minLng, maxLng }
+  };
+}
 
 /**
  * Filter items by location name/area match + proximity
@@ -496,6 +574,9 @@ export default function CountryBubbleScreen() {
   const [userInCountry, setUserInCountry] = useState<boolean>(false);
   const [hasAutoFocused, setHasAutoFocused] = useState<boolean>(false);
   
+  // Category filter state (for chip filtering)
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilterType>('all');
+  
   // Map bounds filtering state
   const [currentZoom, setCurrentZoom] = useState<number>(0);
   const [isMapFilterActive, setIsMapFilterActive] = useState<boolean>(false);
@@ -526,20 +607,89 @@ export default function CountryBubbleScreen() {
   const countryCoords = COUNTRY_COORDS[countryName.toLowerCase()] || COUNTRY_COORDS.default;
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
   const countryBounds = COUNTRY_BOUNDS[countryName.toLowerCase()];
-  const items = filteredItems;
+  
+  // Calculate category counts for chips (based on allItems, not filtered)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<CategoryFilterType, number> = {
+      all: allItems.length,
+      food: 0,
+      activity: 0,
+      place: 0,
+      shopping: 0,
+      nightlife: 0,
+      accommodation: 0,
+    };
+    
+    allItems.forEach(item => {
+      const category = (item.category?.toLowerCase() || 'place') as CategoryFilterType;
+      if (counts[category] !== undefined) {
+        counts[category]++;
+      } else {
+        // Unknown categories default to 'place'
+        counts.place++;
+      }
+    });
+    
+    return counts;
+  }, [allItems]);
+  
+  // Apply category filter on top of location-based filtering
+  const categoryFilteredItems = useMemo(() => {
+    if (selectedCategory === 'all') {
+      return filteredItems;
+    }
+    return filteredItems.filter(item => {
+      const itemCategory = item.category?.toLowerCase() || 'place';
+      return itemCategory === selectedCategory;
+    });
+  }, [filteredItems, selectedCategory]);
+  
+  // Use category-filtered items for map display
+  const items = categoryFilteredItems;
+  
+  // Get current category color for clusters (when filtered)
+  const currentCategoryColor = useMemo(() => {
+    if (selectedCategory === 'all') return null;
+    const config = CATEGORY_FILTERS.find(c => c.key === selectedCategory);
+    return config?.color || '#8B5CF6';
+  }, [selectedCategory]);
 
-  // CONTROLLED CAMERA STATE - This is the fix for camera not responding to setCamera()
-  // Instead of using cameraRef.current.setCamera(), we control camera via React state
-  const [cameraConfig, setCameraConfig] = useState(() => ({
+  // RPG CAMERA FIX - Use ref-only approach to avoid state/ref fighting
+  // Initial camera position (only used on first render)
+  const initialCameraConfig = useMemo(() => ({
     centerCoordinate: [countryCoords.longitude, countryCoords.latitude] as [number, number],
     zoomLevel: Math.log2(360 / Math.max(countryCoords.latDelta, 0.01)),
-    pitch: 0,
-    heading: 0,
-    animationDuration: 800,
-  }));
+  }), [countryCoords]);
   
   // Ref to track current zoom for callbacks (avoids stale closure)
-  const currentZoomRef = useRef(cameraConfig.zoomLevel);
+  const currentZoomRef = useRef(initialCameraConfig.zoomLevel);
+  
+  // Helper function for camera animations (replaces setCameraConfig)
+  const flyToCamera = useCallback((options: {
+    center: [number, number];
+    zoom?: number;
+    pitch?: number;
+    heading?: number;
+    duration?: number;
+    mode?: 'flyTo' | 'easeTo' | 'linearTo';
+  }) => {
+    if (!cameraRef.current) {
+      console.log('⚠️ Camera ref not ready');
+      return;
+    }
+    
+    // Use requestAnimationFrame to ensure touch event is finished
+    requestAnimationFrame(() => {
+      cameraRef.current?.setCamera({
+        centerCoordinate: options.center,
+        zoomLevel: options.zoom ?? currentZoomRef.current,
+        pitch: options.pitch ?? 0,
+        heading: options.heading ?? 0,
+        animationDuration: options.duration ?? 800,
+        animationMode: options.mode ?? 'flyTo',
+      });
+    });
+  }, []);
 
   // Start location tracking
   useEffect(() => {
@@ -577,6 +727,21 @@ export default function CountryBubbleScreen() {
       const fetchedItems: SavedItem[] = itemsResponse.data.data || itemsResponse.data || [];
       setAllItems(fetchedItems);
       setFilteredItems(fetchedItems);
+
+      // FIX: Center camera on actual places, not default country coords
+      if (fetchedItems.length > 0) {
+        const { center, zoomLevel } = calculateBoundsFromItems(fetchedItems);
+        console.log(`📍 Centering on ${fetchedItems.length} places: [${center[0].toFixed(2)}, ${center[1].toFixed(2)}] zoom ${zoomLevel.toFixed(1)}`);
+        // Use timeout to ensure camera ref is ready after initial render
+        setTimeout(() => {
+          flyToCamera({
+            center,
+            zoom: zoomLevel,
+            duration: 1000,
+            mode: 'easeTo',
+          });
+        }, 100);
+      }
 
       try {
         const clustersResponse = await api.get(`/trips/${tripId}/items/sub-clusters`);
@@ -626,15 +791,15 @@ export default function CountryBubbleScreen() {
     // zoom = log2(360 / latDelta)
     const zoomLevel = Math.log2(360 / Math.max(latDelta, 0.01));
     
-    // Use controlled camera state instead of ref
-    setCameraConfig(prev => ({
-      ...prev,
-      centerCoordinate: [lng, lat] as [number, number],
-      zoomLevel: Math.min(Math.max(zoomLevel, 1), 18),
+    // Use ref-based camera for smooth animations
+    flyToCamera({
+      center: [lng, lat],
+      zoom: Math.min(Math.max(zoomLevel, 1), 18),
       pitch: 0,
-      animationDuration: 800,
-    }));
-  }, []);
+      duration: 800,
+      mode: 'flyTo',
+    });
+  }, [flyToCamera]);
 
   const applyNearMeFilter = useCallback((lat: number, lng: number, radiusKm: number = DEFAULT_RADIUS_KM) => {
     // Filter items within radius
@@ -770,6 +935,13 @@ export default function CountryBubbleScreen() {
     };
   }, []);
 
+  // Handle category chip tap
+  const handleCategorySelect = useCallback((category: CategoryFilterType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedCategory(category);
+    console.log(`🏷️ Category filter: ${category}`);
+  }, []);
+
   const handleNearMePress = useCallback(() => {
     if (!location) {
       setChatMessages(prev => [...prev, {
@@ -851,8 +1023,8 @@ export default function CountryBubbleScreen() {
   // HANDLERS
   // ============================================================
 
-  // Handle cluster tap - CONTROLLED CAMERA APPROACH
-  // Uses React state (setCameraConfig) instead of imperative ref (cameraRef.setCamera)
+  // Handle cluster tap - RPG "Deep Dive" with getClusterExpansionZoom()
+  // Uses Mapbox's native cluster expansion for perfect zoom levels
   const handleClusterPress = useCallback(async (feature: any) => {
     // Prevent rapid tapping during animation
     if (isClusterAnimatingRef.current) {
@@ -862,98 +1034,60 @@ export default function CountryBubbleScreen() {
     
     const coordinates = feature.geometry?.coordinates as [number, number];
     const pointCount = feature.properties?.point_count || 0;
+    const clusterId = feature.properties?.cluster_id;
     
     if (!coordinates) return;
     
-    // Use ref for current zoom (more reliable than state in callbacks)
-    const effectiveZoom = currentZoomRef.current > 1 ? currentZoomRef.current : 5;
-    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    console.log(`📍 Cluster tapped: ${pointCount} places at zoom ${effectiveZoom.toFixed(1)}`, coordinates);
+    console.log(`📍 Cluster tapped: ${pointCount} places, cluster_id: ${clusterId}`, coordinates);
     
     // Lock animation
     isClusterAnimatingRef.current = true;
     
-    // LOGIC: Show bottom sheet list if:
-    // 1. Cluster is small (≤ 3 places) at any zoom 10+
-    // 2. Already at high zoom (14+) regardless of cluster size
-    const shouldShowList = (effectiveZoom >= 10 && pointCount <= 3) || (effectiveZoom >= 14);
+    // RPG FIX: Ask Mapbox exactly how much we need to zoom to break this cluster
+    let expansionZoom: number;
+    const effectiveZoom = currentZoomRef.current > 1 ? currentZoomRef.current : 5;
     
-    if (shouldShowList) {
-      console.log(`🏢 Showing list directly (zoom: ${effectiveZoom.toFixed(1)}, count: ${pointCount})`);
-      
-      // Find nearby places for this cluster
-      const [lng, lat] = coordinates;
-      const nearbyPlaces = items.filter(item => {
-        if (!item.location_lat || !item.location_lng) return false;
-        const distance = Math.sqrt(
-          Math.pow(item.location_lat - lat, 2) + 
-          Math.pow(item.location_lng - lng, 2)
-        );
-        return distance < 0.01; // ~1km radius
-      });
-      
-      if (nearbyPlaces.length >= 1) {
-        console.log('📋 Opening bottom sheet with', nearbyPlaces.length, 'places');
-        setBottomSheetItems(nearbyPlaces);
-        setBottomSheetLabel(`${nearbyPlaces.length} Places`);
-        setBottomSheetEmoji('📍');
-        setBottomSheetVisible(true);
-        isInRPGFlowRef.current = true;
+    try {
+      if (shapeSourceRef.current && clusterId !== undefined) {
+        // Get the exact zoom level needed to expand this cluster
+        // NOTE: rnmapbox expects the FEATURE object, not just the cluster_id
+        expansionZoom = await shapeSourceRef.current.getClusterExpansionZoom(feature);
+        console.log(`🎯 Mapbox expansion zoom: ${expansionZoom}`);
         
-        // Animate camera using STATE (not ref!)
-        setCameraConfig(prev => ({
-          ...prev,
-          centerCoordinate: coordinates,
-          zoomLevel: 16,
-          pitch: 50,
-          animationDuration: 600,
-        }));
-        
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        isClusterAnimatingRef.current = false;
-        return;
+        // Add +0.5 to ensure the cluster actually breaks
+        expansionZoom = Math.min(expansionZoom + 0.5, 18);
+      } else {
+        // Fallback if cluster_id not available
+        expansionZoom = Math.min(effectiveZoom + 3, 18);
+        console.log(`⚠️ No cluster_id, using fallback zoom: ${expansionZoom}`);
       }
+    } catch (error) {
+      console.log('⚠️ getClusterExpansionZoom failed, using fallback:', error);
+      expansionZoom = Math.min(effectiveZoom + 3, 18);
     }
     
-    // ZOOM IN to expand cluster
-    let targetZoom: number;
+    console.log(`🎬 CINEMATIC DIVE: zooming to ${expansionZoom.toFixed(1)}`);
     
-    if (pointCount > 15) {
-      targetZoom = Math.min(effectiveZoom + 4, 14);
-    } else if (pointCount > 8) {
-      targetZoom = Math.min(effectiveZoom + 3, 15);
-    } else if (pointCount > 4) {
-      targetZoom = Math.min(effectiveZoom + 2.5, 16);
-    } else {
-      targetZoom = Math.min(effectiveZoom + 2, 17);
-    }
+    // The "Cinematic Dive" - flyTo for curved game-like movement
+    flyToCamera({
+      center: coordinates,
+      zoom: expansionZoom,
+      pitch: 45, // Lean in like an RPG
+      duration: 1200,
+      mode: 'flyTo',
+    });
     
-    // Ensure minimum jumps
-    if (effectiveZoom < 8) {
-      targetZoom = Math.max(targetZoom, 11);
-    } else if (effectiveZoom < 11) {
-      targetZoom = Math.max(targetZoom, 13);
-    }
-    
-    console.log(`🎬 Zooming: ${effectiveZoom.toFixed(1)} → ${targetZoom.toFixed(1)}`);
-    
-    // CONTROLLED CAMERA: Update state to trigger camera move
-    setCameraConfig(prev => ({
-      ...prev,
-      centerCoordinate: coordinates,
-      zoomLevel: targetZoom,
-      pitch: 30,
-      animationDuration: 800,
-    }));
+    // Update zoom ref for future calculations
+    currentZoomRef.current = expansionZoom;
     
     // Unlock after animation
     setTimeout(() => {
       isClusterAnimatingRef.current = false;
       console.log('🔓 Animation complete');
-    }, 900);
+    }, 1300);
     
-  }, [items]);
+  }, [flyToCamera]);
 
   // handlePinPress is defined after handlePlaceSelect (see below)
 
@@ -1106,18 +1240,18 @@ export default function CountryBubbleScreen() {
     const coords = heroCoordinatesRef.current;
     const bearing = currentBearingRef.current;
     
-    // CONTROLLED CAMERA: Fly back to the building
-    setCameraConfig(prev => ({
-      ...prev,
-      centerCoordinate: coords,
-      zoomLevel: 16.5,
+    // RPG: Fly back to the building with cinematic movement
+    flyToCamera({
+      center: coords,
+      zoom: 16.5,
       pitch: 70,
       heading: bearing,
-      animationDuration: 800,
-    }));
+      duration: 800,
+      mode: 'flyTo',
+    });
     
     setShowRecenter(false);
-  }, []);
+  }, [flyToCamera]);
 
   // Check if camera has moved away from hero (called on region change)
   const checkIfPannedAway = useCallback((centerCoords: [number, number]) => {
@@ -1157,29 +1291,30 @@ export default function CountryBubbleScreen() {
       // 3. Calculate best viewing angle
       const bestBearing = calculateBestBearing(lng, lat);
       
-      // CONTROLLED CAMERA: Cinematic lock-on animation
+      // RPG CAMERA: Cinematic lock-on with flyTo
       // Phase 1: Quick zoom out + center
-      setCameraConfig(prev => ({
-        ...prev,
-        centerCoordinate: [lng, lat] as [number, number],
-        zoomLevel: 14,
+      flyToCamera({
+        center: coords,
+        zoom: 14,
         pitch: 30,
         heading: 0,
-        animationDuration: 300,
-      }));
+        duration: 300,
+        mode: 'easeTo',
+      });
       
-      // Phase 2: Zoom in with tilt
+      // Phase 2: Zoom in with tilt ("Hero Reveal")
       setTimeout(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setCameraConfig(prev => ({
-          ...prev,
-          centerCoordinate: [lng, lat] as [number, number],
-          zoomLevel: 16.5,
+        flyToCamera({
+          center: coords,
+          zoom: 16.5,
           pitch: 65,
           heading: bestBearing,
-          animationDuration: 800,
-        }));
+          duration: 800,
+          mode: 'flyTo',
+        });
         currentBearingRef.current = bestBearing;
+        currentZoomRef.current = 16.5;
       }, 350);
       
       // Clear animation flag after full animation
@@ -1188,7 +1323,7 @@ export default function CountryBubbleScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }, 1200);
     }
-  }, [calculateBestBearing]);
+  }, [calculateBestBearing, flyToCamera]);
 
   // Handle individual pin tap - show HUD with place details (defined after handlePlaceSelect)
   const handlePinPress = useCallback((feature: any) => {
@@ -1220,19 +1355,19 @@ export default function CountryBubbleScreen() {
     }
     
     if (place.location_lat && place.location_lng) {
-      // CONTROLLED CAMERA
-      setCameraConfig(prev => ({
-        ...prev,
-        centerCoordinate: [place.location_lng!, place.location_lat!] as [number, number],
-        zoomLevel: 14,
+      // RPG: Smooth pan to place
+      flyToCamera({
+        center: [place.location_lng!, place.location_lat!],
+        zoom: 14,
         pitch: 45,
-        animationDuration: 500,
-      }));
+        duration: 500,
+        mode: 'easeTo',
+      });
     }
-  }, []); // No deps needed - using refs
+  }, [flyToCamera]);
 
   // Close bottom sheet - return to map view
-  const handleBottomSheetClose = () => {
+  const handleBottomSheetClose = useCallback(() => {
     // Haptic feedback on close
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -1252,16 +1387,17 @@ export default function CountryBubbleScreen() {
     // Reset cluster animation lock
     isClusterAnimatingRef.current = false;
     
-    // CONTROLLED CAMERA: Zoom out using state
-    setCameraConfig(prev => ({
-      ...prev,
+    // RPG: Zoom out with flyTo (keeps the current center)
+    cameraRef.current?.setCamera({
       zoomLevel: 10,
       pitch: 0,
       animationDuration: 400,
-    }));
+      animationMode: 'easeTo',
+    });
+    currentZoomRef.current = 10;
     
     console.log('🔙 Bottom sheet closed, camera reset');
-  };
+  }, []);
 
   // Legacy handleMicroBubblePress REMOVED - no longer using bubbles
 
@@ -1402,15 +1538,16 @@ export default function CountryBubbleScreen() {
         onMapIdle={handleMapIdle}
         onPress={handleMapPress}
       >
-        {/* CONTROLLED CAMERA - Uses React state instead of defaultSettings */}
+        {/* RPG CAMERA - Uses ref-only approach to avoid state fighting
+            defaultSettings is ONLY used for initial position, then camera is free-roaming
+            All animations go through cameraRef.setCamera() */}
         <Camera
           ref={cameraRef}
-          centerCoordinate={cameraConfig.centerCoordinate}
-          zoomLevel={cameraConfig.zoomLevel}
-          pitch={cameraConfig.pitch}
-          heading={cameraConfig.heading}
-          animationDuration={cameraConfig.animationDuration}
-          animationMode="easeTo"
+          defaultSettings={{
+            centerCoordinate: initialCameraConfig.centerCoordinate,
+            zoomLevel: initialCameraConfig.zoomLevel,
+          }}
+          followUserLocation={false}
           minZoomLevel={1}
           maxZoomLevel={20}
           maxBounds={countryBounds ? {
@@ -1437,21 +1574,30 @@ export default function CountryBubbleScreen() {
               }
             }}
           >
-            {/* CLUSTER CIRCLES - Shows count, colored by category */}
+            {/* CLUSTER CIRCLES - Category color when filtered, RPG Rarity when "All" */}
             <CircleLayer
               id="clusters"
               filter={['has', 'point_count']}
               style={{
+                // Scale size based on density (bigger = more loot!)
                 circleRadius: [
                   'step',
                   ['get', 'point_count'],
-                  20, // default size
-                  5, 25, // 5+ places = 25px
-                  10, 30, // 10+ places = 30px
-                  25, 40, // 25+ places = 40px
+                  22, // 1-4 places (Common)
+                  5, 28, // 5-9 places (Rare)
+                  10, 34, // 10-14 places (Epic)
+                  15, 42, // 15+ places (Legendary)
                 ],
-                circleColor: '#8B5CF6', // Purple theme
-                circleOpacity: 0.85,
+                // Use category color when filtered, otherwise RPG rarity colors
+                circleColor: currentCategoryColor || [
+                  'step',
+                  ['get', 'point_count'],
+                  '#51bbd6', // Common - Cyan
+                  5, '#f1f075', // Rare - Gold
+                  10, '#ec8b4e', // Epic - Orange
+                  15, '#f28cb1', // Legendary - Pink/Magenta
+                ],
+                circleOpacity: 0.88,
                 circleStrokeWidth: 3,
                 circleStrokeColor: '#FFFFFF',
               }}
@@ -1581,6 +1727,53 @@ export default function CountryBubbleScreen() {
         )}
 
         {/* Category indicator - REMOVED (no longer using orbital expansion) */}
+      </View>
+
+      {/* Category Filter Chips - Horizontal Scrollable */}
+      <View style={styles.categoryChipsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryChipsScroll}
+        >
+          {CATEGORY_FILTERS.map((category) => {
+            const count = categoryCounts[category.key];
+            const isSelected = selectedCategory === category.key;
+            // Don't show chips with 0 items (except "All")
+            if (count === 0 && category.key !== 'all') return null;
+            
+            return (
+              <TouchableOpacity
+                key={category.key}
+                style={[
+                  styles.categoryChip,
+                  isSelected && { backgroundColor: category.color, borderColor: category.color },
+                ]}
+                onPress={() => handleCategorySelect(category.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.categoryChipIcon}>{category.icon}</Text>
+                <Text style={[
+                  styles.categoryChipLabel,
+                  isSelected && styles.categoryChipLabelActive,
+                ]}>
+                  {category.label}
+                </Text>
+                <View style={[
+                  styles.categoryChipCount,
+                  isSelected && styles.categoryChipCountActive,
+                ]}>
+                  <Text style={[
+                    styles.categoryChipCountText,
+                    isSelected && styles.categoryChipCountTextActive,
+                  ]}>
+                    {count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Navigation Buttons (Near Me / All Places) */}
@@ -1744,9 +1937,69 @@ const styles = StyleSheet.create({
   },
   viewModeLabelText: { fontSize: 12, fontWeight: '600', color: '#c4b5fd' },
   
+  // Category Filter Chips
+  categoryChipsContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 135 : 120,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  categoryChipsScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+    flexDirection: 'row',
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(139, 92, 246, 0.4)',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  categoryChipIcon: {
+    fontSize: 14,
+  },
+  categoryChipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#E2E8F0',
+  },
+  categoryChipLabelActive: {
+    color: '#FFFFFF',
+  },
+  categoryChipCount: {
+    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  categoryChipCountActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  categoryChipCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#A78BFA',
+  },
+  categoryChipCountTextActive: {
+    color: '#FFFFFF',
+  },
+  
   navButtonsContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 140 : 128,
+    top: Platform.OS === 'ios' ? 185 : 170,
     right: 16,
     flexDirection: 'column',
     gap: 8,
