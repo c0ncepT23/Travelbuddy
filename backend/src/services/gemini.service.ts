@@ -224,6 +224,12 @@ RESPOND ONLY WITH JSON:
       location_name?: string;
       distance?: number;
       source_title?: string;
+      // NEW: Creator insights from video/post extraction
+      tags?: string[];
+      cuisine_type?: string;
+      place_type?: string;
+      rating?: number;
+      creator_insights?: string; // Extracted from transcript/caption
     }>
   ): Promise<string> {
     try {
@@ -231,17 +237,34 @@ RESPOND ONLY WITH JSON:
         model: MODELS.FLASH,
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 400,
+          maxOutputTokens: 500, // Increased for richer responses
         }
       });
 
-      const placesContext = places.map((p, i) => `
-${i + 1}. ${p.name} - ${p.category}
-   Location: ${p.location_name || 'Unknown'}
-   ${p.distance ? `Distance: ${p.distance < 1000 ? `${Math.round(p.distance)}m` : `${(p.distance / 1000).toFixed(1)}km`}` : ''}
-   ${p.description ? `Info: ${p.description.substring(0, 80)}...` : ''}
-   Source: ${p.source_title || 'Saved places'}
-      `).join('\n');
+      const placesContext = places.map((p, i) => {
+        let placeInfo = `
+${i + 1}. ${p.name} - ${p.category}${p.cuisine_type ? ` (${p.cuisine_type})` : ''}${p.place_type ? ` (${p.place_type})` : ''}
+   Location: ${p.location_name || 'Unknown'}`;
+        
+        if (p.distance) {
+          placeInfo += `\n   Distance: ${p.distance < 1000 ? `${Math.round(p.distance)}m` : `${(p.distance / 1000).toFixed(1)}km`}`;
+        }
+        if (p.rating) {
+          placeInfo += `\n   Rating: ⭐ ${p.rating}`;
+        }
+        if (p.description) {
+          placeInfo += `\n   Why it's special: ${p.description}`;
+        }
+        if (p.tags && p.tags.length > 0) {
+          placeInfo += `\n   Tags: ${p.tags.join(', ')}`;
+        }
+        if (p.creator_insights) {
+          placeInfo += `\n   Creator said: "${p.creator_insights}"`;
+        }
+        placeInfo += `\n   Saved from: ${p.source_title || 'User saved'}`;
+        
+        return placeInfo;
+      }).join('\n');
 
       const prompt = `You are TravelPal helping ${context.userName} explore ${context.destination}.
 
@@ -251,14 +274,18 @@ Time: ${context.currentTime}
 THEIR SAVED PLACES (${places.length} found):
 ${placesContext || 'No saved places match this query'}
 
+YOUR SPECIAL POWER: You have access to CREATOR INSIGHTS - what the YouTuber/Instagrammer/blogger said about each place when the user saved it. Use this to give personalized, insider tips!
+
 RULES:
 - ONLY mention places from the list above
 - If places found: Highlight 2-3 with brief details
-- If none found: Say you don't have any saved spots for that
+- USE THE CREATOR INSIGHTS when answering questions like "is this good for X?"
+- Reference the source/creator when relevant (e.g., "According to @TravelVlogger...")
+- If a place has tags like "hidden gem" or "michelin", mention it!
 - Be friendly, use 1-2 emojis max
-- Keep it to 2-3 sentences
+- Keep response focused and helpful (3-4 sentences max)
 
-Generate a helpful response:`;
+Generate a helpful response that leverages the creator's insider knowledge:`;
 
       const result = await model.generateContent(prompt);
       return result.response.text() || "I found some interesting places for you! 🎯";

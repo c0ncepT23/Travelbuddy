@@ -27,7 +27,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, SymbolLayer } from '@rnmapbox/maps';
+import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, SymbolLayer, Images } from '@rnmapbox/maps';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import api from '../../config/api';
@@ -278,9 +278,15 @@ const COUNTRY_FLAGS: Record<string, string> = {
   france: '🇫🇷', italy: '🇮🇹', spain: '🇪🇸', uk: '🇬🇧', australia: '🇦🇺',
 };
 
-const CATEGORY_COLORS: Record<string, 'green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'orange'> = {
-  food: 'green', activity: 'blue', shopping: 'yellow',
-  accommodation: 'purple', place: 'blue', tip: 'pink',
+const CATEGORY_COLORS: Record<string, string> = {
+  food: '#22C55E',        // green
+  activity: '#3B82F6',    // blue  
+  shopping: '#EAB308',    // yellow
+  accommodation: '#8B5CF6', // purple
+  place: '#3B82F6',       // blue
+  tip: '#EC4899',         // pink
+  nightlife: '#F97316',   // orange
+  default: '#8B5CF6',     // purple
 };
 
 const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'orange')[] = [
@@ -1023,14 +1029,36 @@ export default function CountryBubbleScreen() {
   // GEOJSON CLUSTER GENERATION (Replaced bubbles)
   // ============================================================
 
-  // Category emoji icons for pins (also used in HUD)
+  // Category emoji icons for UI (drawer, HUD)
   const CATEGORY_ICONS: Record<string, string> = useMemo(() => ({
     food: '🍔',
     activity: '🎯',
     place: '📍',
     shopping: '🛍️',
     nightlife: '🎉',
+    accommodation: '🏨',
     default: '📍',
+  }), []);
+
+  // Remote PNG icons for map pins (white icons from icons8)
+  const PIN_ICONS = useMemo(() => ({
+    'icon-food': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/restaurant.png' },
+    'icon-activity': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/star--v1.png' },
+    'icon-shopping': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/shopping-bag.png' },
+    'icon-nightlife': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/wine-glass.png' },
+    'icon-accommodation': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/bedroom.png' },
+    'icon-place': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/marker.png' },
+  }), []);
+
+  // Map category to icon name
+  const ICON_NAMES: Record<string, string> = useMemo(() => ({
+    food: 'icon-food',
+    activity: 'icon-activity',
+    place: 'icon-place',
+    shopping: 'icon-shopping',
+    nightlife: 'icon-nightlife',
+    accommodation: 'icon-accommodation',
+    default: 'icon-place',
   }), []);
 
   // Generate GeoJSON FeatureCollection for clustering
@@ -1049,9 +1077,10 @@ export default function CountryBubbleScreen() {
           name: item.name || 'Unknown Place',
           category: item.category || 'place',
           subcategory: item.cuisine_type || item.place_type || 'other',
-          rating: item.rating || 0,
+          rating: parseFloat(String(item.rating)) || 0,  // Ensure number for Mapbox filter
           icon: CATEGORY_ICONS[item.category || 'place'] || CATEGORY_ICONS.default,
-          color: CATEGORY_COLORS[item.category || 'place'] || '#8B5CF6',
+          iconName: ICON_NAMES[item.category || 'place'] || ICON_NAMES.default,
+          color: CATEGORY_COLORS[item.category || 'place'] || CATEGORY_COLORS.default,
         },
       }));
 
@@ -1589,6 +1618,9 @@ export default function CountryBubbleScreen() {
         onMapIdle={handleMapIdle}
         onPress={handleMapPress}
       >
+        {/* Load category icons from CDN */}
+        <Images images={PIN_ICONS} />
+
         {/* RPG CAMERA - Uses ref-only approach to avoid state fighting
             defaultSettings is ONLY used for initial position, then camera is free-roaming
             All animations go through cameraRef.setCamera() */}
@@ -1680,15 +1712,16 @@ export default function CountryBubbleScreen() {
               }}
             />
 
-            {/* PIN ICONS (emojis) */}
+            {/* PIN ICONS - Category icons loaded from CDN */}
             <SymbolLayer
               id="pin-icons"
               filter={['!', ['has', 'point_count']]}
               style={{
-                textField: ['get', 'icon'],
-                textSize: 16,
-                textAllowOverlap: true,
-                textOffset: [0, 0],
+                iconImage: ['get', 'iconName'],
+                iconSize: 0.4,
+                iconAllowOverlap: true,
+                iconIgnorePlacement: true,
+                iconAnchor: 'center',
               }}
             />
 

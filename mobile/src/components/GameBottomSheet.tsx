@@ -137,11 +137,33 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected 
               {item.area_name || item.location_name || 'Unknown location'}
             </Text>
           </View>
-          {item.cuisine_type && (
-            <View style={styles.tagContainer}>
+          
+          {/* Tags row */}
+          <View style={styles.tagContainer}>
+            {item.cuisine_type && (
               <View style={styles.tag}>
                 <Text style={styles.tagText}>{item.cuisine_type}</Text>
               </View>
+            )}
+            {item.tags && Array.isArray(item.tags) && item.tags.slice(0, 2).map((tag: string, i: number) => (
+              <View key={i} style={styles.tag}>
+                <Text style={styles.tagText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+          
+          {/* Creator insights - the "why I saved this" */}
+          {item.description && (
+            <View style={styles.creatorInsights}>
+              <View style={styles.creatorHeader}>
+                <Ionicons name="chatbubble-outline" size={12} color={COLORS.primaryGlow} />
+                <Text style={styles.creatorLabel}>
+                  {item.source_title ? `From ${item.source_title}` : 'Why it\'s special'}
+                </Text>
+              </View>
+              <Text style={styles.creatorQuote} numberOfLines={2}>
+                "{item.description}"
+              </Text>
             </View>
           )}
         </View>
@@ -460,6 +482,16 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                       {selectedPlace.cuisine_type || selectedPlace.place_type || categoryLabel}
                     </Text>
                   </View>
+                  {/* Tags row - visible in peek state */}
+                  {selectedPlace.tags && Array.isArray(selectedPlace.tags) && selectedPlace.tags.length > 0 && (
+                    <View style={styles.hudTagsRow}>
+                      {selectedPlace.tags.slice(0, 3).map((tag: string, i: number) => (
+                        <View key={i} style={styles.hudTag}>
+                          <Text style={styles.hudTagText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
                 
                 <View style={styles.hudActions}>
@@ -777,6 +809,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: 10,
+    gap: 6,
   },
   tag: {
     backgroundColor: COLORS.surfaceLight,
@@ -789,6 +822,30 @@ const styles = StyleSheet.create({
     color: COLORS.primaryGlow,
     fontWeight: '600',
     textTransform: 'uppercase',
+  },
+  // Creator insights section (expanded view)
+  creatorInsights: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  creatorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  creatorLabel: {
+    fontSize: 11,
+    color: COLORS.primaryGlow,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  creatorQuote: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
   cardActions: {
     flexDirection: 'row',
@@ -858,6 +915,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
+  },
+  // Tags in HUD (peek state)
+  hudTagsRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+    gap: 4,
+  },
+  hudTag: {
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  hudTagText: {
+    fontSize: 10,
+    color: COLORS.primaryGlow,
+    fontWeight: '500',
   },
   hudActions: {
     flexDirection: 'row',

@@ -689,8 +689,41 @@ export class AICompanionService {
   }
 
   /**
+   * Extract creator insights from originalContent (transcript/caption)
+   * This is the "secret sauce" - the creator's personal tips!
+   */
+  private static extractCreatorInsights(originalContent: any): string | undefined {
+    if (!originalContent) return undefined;
+    
+    // Try to get the most relevant creator content
+    let insight = '';
+    
+    // YouTube: transcript has the creator talking about places
+    if (originalContent.transcript) {
+      // Get first 300 chars of transcript (usually has the most relevant context)
+      insight = originalContent.transcript.substring(0, 300);
+    }
+    // Instagram: caption has the creator's description
+    else if (originalContent.caption) {
+      insight = originalContent.caption.substring(0, 300);
+    }
+    // Reddit: body text
+    else if (originalContent.body) {
+      insight = originalContent.body.substring(0, 300);
+    }
+    
+    // Clean up and return if meaningful
+    if (insight && insight.length > 20) {
+      return insight.trim() + (insight.length >= 300 ? '...' : '');
+    }
+    
+    return undefined;
+  }
+
+  /**
    * Generate natural language response
    * NOW USES: Gemini 2.5 Flash (100x cheaper than GPT-4)
+   * ENHANCED: Includes creator insights from originalContent!
    */
   private static async generateResponse(
     query: string,
@@ -700,6 +733,7 @@ export class AICompanionService {
   ): Promise<CompanionResponse> {
     try {
       // Use Gemini 2.5 Flash for response generation (fast & cheap)
+      // NOW includes creator insights from transcript/caption!
       const message = await GeminiService.generatePlacesResponse(
         query,
         {
@@ -714,6 +748,12 @@ export class AICompanionService {
           location_name: p.location_name,
           distance: p.distance,
           source_title: p.source_title,
+          // NEW: Creator insights from video/post
+          tags: p.tags || [],
+          cuisine_type: p.cuisine_type,
+          place_type: p.place_type,
+          rating: p.rating,
+          creator_insights: this.extractCreatorInsights(p.original_content),
         }))
       );
 
