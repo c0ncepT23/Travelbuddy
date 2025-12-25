@@ -40,6 +40,7 @@ import { SavedItem, ItemCategory, SubClusters } from '../../types';
 import { FloatingAIOrb } from '../../components/FloatingAIOrb';
 import { CompactAIChat } from '../../components/CompactAIChat';
 import { GameBottomSheet, GameBottomSheetRef } from '../../components/GameBottomSheet';
+import { PersistentPlacesDrawer, PersistentPlacesDrawerRef } from '../../components/PersistentPlacesDrawer';
 // Removed: FloatingCloud, GlowingBubble, OrbitalBubbles - replaced with Mapbox clusters
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
@@ -594,6 +595,7 @@ export default function CountryBubbleScreen() {
   const [bottomSheetEmoji, setBottomSheetEmoji] = useState('📍');
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | undefined>(undefined);
   const bottomSheetRef = useRef<GameBottomSheetRef>(null);
+  const placesDrawerRef = useRef<PersistentPlacesDrawerRef>(null);
   
   // Refs for checking state in callbacks (avoids stale closure issue)
   // These are updated IMMEDIATELY in handlers, not via useEffect (which is async)
@@ -652,6 +654,12 @@ export default function CountryBubbleScreen() {
     if (selectedCategory === 'all') return null;
     const config = CATEGORY_FILTERS.find(c => c.key === selectedCategory);
     return config?.color || '#8B5CF6';
+  }, [selectedCategory]);
+  
+  // Get current category config for the persistent drawer
+  const currentCategoryConfig = useMemo(() => {
+    const config = CATEGORY_FILTERS.find(c => c.key === selectedCategory);
+    return config || CATEGORY_FILTERS[0]; // Default to 'All'
   }, [selectedCategory]);
 
   // RPG CAMERA FIX - Use ref-only approach to avoid state/ref fighting
@@ -1799,7 +1807,19 @@ export default function CountryBubbleScreen() {
 
       {/* CLUSTERS AND PINS are now rendered inside MapView - see ShapeSource "places-source" */}
 
-      {/* Game Bottom Sheet - Places list with HUD mode */}
+      {/* Persistent Places Drawer - Always visible, Airbnb style */}
+      <PersistentPlacesDrawer
+        ref={placesDrawerRef}
+        items={items}
+        selectedCategory={selectedCategory}
+        categoryLabel={currentCategoryConfig.label}
+        categoryEmoji={currentCategoryConfig.icon}
+        categoryColor={currentCategoryConfig.color}
+        onPlaceSelect={handlePlaceSelect}
+        selectedPlaceId={selectedPlaceId}
+      />
+
+      {/* Game Bottom Sheet - Places list with HUD mode (for cluster/pin taps) */}
       <GameBottomSheet
         ref={bottomSheetRef}
         items={bottomSheetItems}
