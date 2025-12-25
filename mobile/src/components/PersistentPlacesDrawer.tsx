@@ -35,6 +35,7 @@ import Animated, {
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SavedItem } from '../types';
 import * as Haptics from 'expo-haptics';
+import { getPlacePhotoUrl } from '../config/maps';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -66,19 +67,9 @@ interface CompactCardProps {
 }
 
 const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) => {
+  // Use the helper that converts photo_reference to Google Photo URL
   const photoUrl = useMemo(() => {
-    try {
-      if (!item?.photos_json) return null;
-      const photos = typeof item.photos_json === 'string' 
-        ? JSON.parse(item.photos_json) 
-        : item.photos_json;
-      if (Array.isArray(photos) && photos.length > 0) {
-        return photos[0]?.url || (typeof photos[0] === 'string' ? photos[0] : null);
-      }
-      return null;
-    } catch {
-      return null;
-    }
+    return getPlacePhotoUrl(item?.photos_json, 200); // 200px width for compact cards
   }, [item?.photos_json]);
 
   const categoryEmoji = useMemo(() => {
@@ -107,6 +98,10 @@ const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) 
             <Text style={styles.compactPlaceholderEmoji}>{categoryEmoji}</Text>
           </View>
         )}
+        {/* Category badge - top right corner */}
+        <View style={styles.compactCategoryBadge}>
+          <Text style={styles.compactCategoryEmoji}>{categoryEmoji}</Text>
+        </View>
       </View>
       <Text style={styles.compactName} numberOfLines={1}>{item.name}</Text>
       {item.rating && (
@@ -129,19 +124,9 @@ interface FullCardProps {
 }
 
 const FullCard: React.FC<FullCardProps> = ({ item, onPress, isSelected }) => {
+  // Use the helper that converts photo_reference to Google Photo URL
   const photoUrl = useMemo(() => {
-    try {
-      if (!item?.photos_json) return null;
-      const photos = typeof item.photos_json === 'string' 
-        ? JSON.parse(item.photos_json) 
-        : item.photos_json;
-      if (Array.isArray(photos) && photos.length > 0) {
-        return photos[0]?.url || (typeof photos[0] === 'string' ? photos[0] : null);
-      }
-      return null;
-    } catch {
-      return null;
-    }
+    return getPlacePhotoUrl(item?.photos_json, 300); // 300px width for full cards
   }, [item?.photos_json]);
 
   const categoryEmoji = useMemo(() => {
@@ -563,6 +548,20 @@ const styles = StyleSheet.create({
   },
   compactPlaceholderEmoji: {
     fontSize: 24,
+  },
+  compactCategoryBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactCategoryEmoji: {
+    fontSize: 10,
   },
   compactName: {
     fontSize: 11,
