@@ -270,10 +270,10 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
     .onUpdate((event) => {
       'worklet';
       const newY = context.value.y + event.translationY;
-      // Clamp between expanded and compact
+      // Clamp between expanded and below compact (to allow close gesture)
       translateY.value = Math.max(
         SCREEN_HEIGHT - SNAP_POINTS.EXPANDED,
-        Math.min(SCREEN_HEIGHT - SNAP_POINTS.COMPACT + 10, newY)
+        Math.min(SCREEN_HEIGHT, newY) // Allow swiping down to close
       );
     })
     .onEnd((event) => {
@@ -285,13 +285,18 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
       let targetSnap = SNAP_POINTS.HALF;
 
       if (velocity > 500) {
-        // Fast swipe down - step down through snap points
+        // Fast swipe down - step down through snap points (or close if at COMPACT)
         if (currentHeight > SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
         } else if (currentHeight > SNAP_POINTS.COLLAPSED) {
           targetSnap = SNAP_POINTS.COLLAPSED;
-        } else {
+        } else if (currentHeight > SNAP_POINTS.COMPACT) {
           targetSnap = SNAP_POINTS.COMPACT;
+        } else {
+          // Below COMPACT - close the drawer!
+          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 300 });
+          runOnJS(safeClose)();
+          return;
         }
       } else if (velocity < -500) {
         // Fast swipe up - step up through snap points
@@ -323,16 +328,46 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
         stiffness: 150,
       });
       currentSnapPoint.value = targetSnap;
+      
+      // If snapping to COMPACT and we have a selected place, switch to HUD mode
+      if (targetSnap === SNAP_POINTS.COMPACT) {
+        runOnJS(setIsHudMode)(true);
+      }
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
 
+  // Separate gesture for HUD mode - swipe up to expand to list, swipe down to close
+  const hudPanGesture = Gesture.Pan()
+    .onEnd((event) => {
+      'worklet';
+      const velocity = event.velocityY;
+      
+      if (velocity < -300) {
+        // Swipe up - expand to list mode
+        console.log('📤 HUD swipe up - expanding to list');
+        runOnJS(setIsHudMode)(false);
+        translateY.value = withSpring(SCREEN_HEIGHT - SNAP_POINTS.HALF, {
+          damping: 20,
+          stiffness: 150,
+        });
+        currentSnapPoint.value = SNAP_POINTS.HALF;
+      } else if (velocity > 300) {
+        // Swipe down - close
+        console.log('📥 HUD swipe down - closing');
+        runOnJS(safeClose)();
+      }
+    });
+
   const handlePlacePress = useCallback((item: SavedItem) => {
+    console.log('👆 Place pressed:', item.name);
     // Snap to COMPACT (15%) so user can see the cinematic fly-to animation
     snapTo(SNAP_POINTS.COMPACT);
+    console.log('📐 Snapped to COMPACT, isHudMode should be true now');
     onPlaceSelect(item);
+    console.log('✅ onPlaceSelect called');
   }, [onPlaceSelect, snapTo]);
 
   // Disabled scroll sync for now - was causing crashes and interfering with fly-to
@@ -361,14 +396,19 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
     </View>
   ), []);
 
+  // Debug logging disabled to prevent console spam
+  // console.log('🎮 GameBottomSheet render:', { isVisible, isHudMode, hasSelectedPlace: !!selectedPlace, selectedPlaceName: selectedPlace?.name });
+
   if (!isVisible) return null;
 
   // HUD MODE: No Modal, just absolute positioned View - allows map interaction!
   if (isHudMode && selectedPlace) {
+    // console.log('🎯 Rendering HUD MODE for:', selectedPlace.name);
     return (
       <View style={styles.hudWrapper} pointerEvents="box-none">
         <GestureHandlerRootView style={styles.hudGestureContainer}>
-          <Animated.View style={[styles.hudSheet, animatedStyle]}>
+          {/* Don't apply animatedStyle here - HUD should stay fixed at bottom */}
+          <View style={styles.hudSheet}>
           {/* Glassmorphism background */}
           <View style={styles.glassContainer}>
             {Platform.OS === 'ios' ? (
@@ -384,11 +424,23 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
             />
           </View>
           
-          {/* HUD Content */}
-          <GestureDetector gesture={panGesture}>
+          {/* HUD Content - with separate gesture for expand/close */}
+          <GestureDetector gesture={hudPanGesture}>
             <Animated.View style={styles.hudContainer}>
               <View style={styles.handleIndicator} />
               <View style={styles.hudContent}>
+                {/* Close button on left */}
+                <TouchableOpacity 
+                  style={styles.hudCloseButton}
+                  onPress={() => {
+                    console.log('❌ HUD CLOSE BUTTON PRESSED');
+                    onClose();
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close-circle" size={28} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+                
                 <View style={styles.hudInfo}>
                   <Text style={styles.hudPlaceName} numberOfLines={1}>
                     {selectedPlace.name || 'Selected Place'}
@@ -447,7 +499,7 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
               </View>
             </Animated.View>
           </GestureDetector>
-          </Animated.View>
+          </View>
         </GestureHandlerRootView>
       </View>
     );
@@ -772,6 +824,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 8,
+  },
+  hudCloseButton: {
+    marginRight: 12,
+    opacity: 0.7,
   },
   hudInfo: {
     flex: 1,
