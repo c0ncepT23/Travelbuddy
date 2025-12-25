@@ -896,64 +896,27 @@ export default function CountryBubbleScreen() {
     }
     
     // ============================================================
-    // DRAWER SYNC: Query visible features to update drawer inventory
+    // DRAWER SYNC: Get visible bounds and filter items
     // ============================================================
-    // Use queryRenderedFeatures for accurate "what's on screen" sync
+    // Use getVisibleBounds() - more reliable than callback properties
     if (mapViewRef.current) {
       try {
-        // Query both individual pins AND clusters visible on screen
-        const result = await mapViewRef.current.queryRenderedFeaturesInRect(
-          [0, 0, SCREEN_WIDTH, SCREEN_HEIGHT], // Full screen rect
-          null, // No filter
-          ['unclustered-pins', 'clusters'] // Our layer IDs
-        );
+        // Get current visible bounds directly from MapView
+        const visibleBounds = await mapViewRef.current.getVisibleBounds();
         
-        // Extract IDs from visible features
-        // Result can be FeatureCollection or array depending on version
-        const visibleFeatures = result?.features || result || [];
-        const featuresArray = Array.isArray(visibleFeatures) ? visibleFeatures : [];
-        const visibleIds = new Set<string>();
-        let totalClusteredCount = 0;
-        
-        featuresArray.forEach((f: any) => {
-          if (f.properties?.cluster) {
-            // It's a cluster - add the point_count
-            totalClusteredCount += f.properties.point_count || 0;
-          } else if (f.properties?.id) {
-            // It's an individual pin
-            visibleIds.add(f.properties.id);
-          }
-        });
-        
-        // If we have clusters, we need to use bounds filtering instead
-        // (queryRenderedFeatures doesn't give us the IDs inside clusters)
-        const bounds = feature.properties?.visibleBounds;
-        
-        if (bounds && Array.isArray(bounds) && bounds.length === 2) {
-          // Filter items based on visible map bounds
-          const boundsFiltered = filterItemsByMapBounds(items, bounds);
+        if (visibleBounds && Array.isArray(visibleBounds) && visibleBounds.length === 2) {
+          // visibleBounds format: [[ne_lng, ne_lat], [sw_lng, sw_lat]]
+          const boundsFiltered = filterItemsByMapBounds(items, visibleBounds);
           setDrawerItems(boundsFiltered);
-          console.log(`📋 Drawer sync: ${boundsFiltered.length} places in view (bounds-based)`);
-        } else if (visibleIds.size > 0) {
-          // Fallback: filter by visible pin IDs
-          const idFiltered = items.filter(item => visibleIds.has(item.id));
-          setDrawerItems(idFiltered);
-          console.log(`📋 Drawer sync: ${idFiltered.length} places in view (ID-based)`);
+          console.log(`📋 Drawer sync: ${boundsFiltered.length}/${items.length} places in view`);
         } else {
-          // Zoomed out or no specific data - show all category-filtered items
+          // Bounds not available - show all
           setDrawerItems(items);
-          console.log(`📋 Drawer sync: showing all ${items.length} places`);
+          console.log(`📋 Drawer sync: bounds unavailable, showing all ${items.length}`);
         }
       } catch (error) {
-        console.log('⚠️ queryRenderedFeatures failed, using bounds fallback:', error);
-        // Fallback to bounds-based filtering
-        const bounds = feature.properties?.visibleBounds;
-        if (bounds && Array.isArray(bounds) && bounds.length === 2) {
-          const boundsFiltered = filterItemsByMapBounds(items, bounds);
-          setDrawerItems(boundsFiltered);
-        } else {
-          setDrawerItems(items);
-        }
+        console.log('⚠️ getVisibleBounds failed:', error);
+        setDrawerItems(items);
       }
     } else {
       // No mapRef - just use all items
