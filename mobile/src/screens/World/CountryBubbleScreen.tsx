@@ -614,10 +614,10 @@ export default function CountryBubbleScreen() {
   const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
   const countryBounds = COUNTRY_BOUNDS[countryName.toLowerCase()];
   
-  // Calculate category counts for chips (based on allItems, not filtered)
+  // Calculate category counts for chips (based on drawerItems = visible in map view)
   const categoryCounts = useMemo(() => {
     const counts: Record<CategoryFilterType, number> = {
-      all: allItems.length,
+      all: drawerItems.length,
       food: 0,
       activity: 0,
       place: 0,
@@ -626,7 +626,7 @@ export default function CountryBubbleScreen() {
       accommodation: 0,
     };
     
-    allItems.forEach(item => {
+    drawerItems.forEach(item => {
       const category = (item.category?.toLowerCase() || 'place') as CategoryFilterType;
       if (counts[category] !== undefined) {
         counts[category]++;
@@ -637,7 +637,7 @@ export default function CountryBubbleScreen() {
     });
     
     return counts;
-  }, [allItems]);
+  }, [drawerItems]);
   
   // Apply category filter on top of location-based filtering
   const categoryFilteredItems = useMemo(() => {
