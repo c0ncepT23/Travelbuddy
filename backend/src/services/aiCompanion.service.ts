@@ -2,19 +2,15 @@ import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripSegmentModel } from '../models/tripSegment.model';
 import { UserModel } from '../models/user.model';
-import { GroupMessageModel } from '../models/groupMessage.model';
-import { GuideModel } from '../models/guide.model';
 import { SavedItem, ItemCategory, CompanionContext } from '../types';
 import { ContentProcessorService } from './contentProcessor.service';
 import { GeocodingService } from './geocoding.service';
-import { ItineraryService } from './itinerary.service';
-import { DayPlanningService } from './dayPlanning.service';
 import { GeminiService } from './gemini.service';
 import { extractUrls } from '../utils/helpers';
 import logger from '../config/logger';
 
 // NOTE: Migrated from OpenAI to Gemini 2.5 Flash (100x cheaper, faster)
-// Complex tasks use Gemini 2.5 Pro as fallback
+// SIMPLIFIED: Removed guide/day planning features - just extract and save places
 
 interface UserContext {
   location?: {
@@ -119,87 +115,6 @@ export class AICompanionService {
         return await this.processContentUrl(userId, tripGroupId, urls[0]);
       }
 
-      // Check if this is a guide video import choice
-      const guideImportChoice = this.detectGuideImportChoice(query);
-      if (guideImportChoice) {
-        return await this.handleGuideVideoImport(userId, tripGroupId, guideImportChoice);
-      }
-
-      // Check if user wants to finish itinerary collection
-      if (ItineraryService.isFinishIntent(query)) {
-        const summary = await ItineraryService.generateItinerarySummary(tripGroupId);
-        return {
-          message: summary,
-          suggestions: ['Show my places', 'What should I do today?'],
-        };
-      }
-
-      // Check if this is an itinerary-related query (adding segments)
-      if (ItineraryService.isItineraryIntent(query)) {
-        const result = await ItineraryService.generateItineraryResponse(
-          tripGroupId,
-          userId,
-          query
-        );
-        
-        return {
-          message: result.message,
-          suggestions: result.action === 'created_segment' 
-            ? ['Add another city', "That's all", 'Show my itinerary']
-            : undefined,
-        };
-      }
-
-      // Check if user is specifying activities for a day (e.g., "Day 2 morning Siam, evening Chinatown")
-      if (DayPlanningService.isDayActivityIntent(query)) {
-        const parsed = await DayPlanningService.parseUserPlanRequest(query);
-        
-        if (parsed.anchors.length > 0) {
-          // User has specific activities - build plan around them
-          const result = await DayPlanningService.generatePlanWithAnchors(
-            tripGroupId,
-            userId,
-            parsed.anchors
-          );
-          
-          return {
-            message: result.message,
-            suggestions: ['View Day Planner', 'Change something', 'Add more activities'],
-            planId: result.plan.id, // Include plan ID for clickable link
-          };
-        }
-      }
-
-      // Check if this is a generic "plan my day" request
-      if (DayPlanningService.isPlanIntent(query)) {
-        const result = await DayPlanningService.generateDayPlan(
-          tripGroupId,
-          userId
-        );
-        
-        return {
-          message: result.message,
-          suggestions: ['View Day Planner', 'Change something', 'Show on map'],
-          planId: result.plan.id,
-        };
-      }
-
-      // Check if this is a plan modification request (swap, remove, add)
-      if (DayPlanningService.isPlanModificationIntent(query)) {
-        const result = await DayPlanningService.handlePlanModification(
-          tripGroupId,
-          userId,
-          query
-        );
-        
-        return {
-          message: result.message,
-          suggestions: result.success 
-            ? ['Lock plan', 'Show updated plan', 'More changes']
-            : undefined,
-        };
-      }
-
       // Get user context
       const context = await this.getUserContext(userId, tripGroupId, userLocation);
       
@@ -273,57 +188,16 @@ export class AICompanionService {
       
       let placesToSave: Array<any> = [];
       let summary = '';
-      
-      // Variables for guide creation
-      let guideMetadata: any = null;
+      let creatorName: string | undefined;
       
       // Use appropriate extraction method based on content type
+      // SIMPLIFIED: All videos (including guides) just extract places - no day structure
       if (contentType === 'youtube') {
-        // Extract MULTIPLE places from YouTube video
         const analysis = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
         placesToSave = analysis.places;
         summary = analysis.summary;
-        guideMetadata = analysis.guideMetadata;
-        logger.info(`[Companion] Extracted ${placesToSave.length} places from YouTube video by ${guideMetadata?.creatorName}`);
-        
-        // Handle GUIDE/ITINERARY videos differently - show preview with options
-        if (analysis.video_type === 'guide' && analysis.itinerary && analysis.itinerary.length > 0) {
-          logger.info(`[Companion] Guide video detected: ${analysis.duration_days} days in ${analysis.destination}`);
-          
-          // Build itinerary preview with creator info
-          const creatorName = guideMetadata?.creatorName || 'a creator';
-          let message = `📅 I found a **${analysis.duration_days}-day ${analysis.destination || ''} itinerary guide** by **${creatorName}**!\n\n`;
-          message += `📝 ${analysis.summary}\n\n`;
-          message += `**Here's the day-by-day plan:**\n\n`;
-          
-          for (const day of analysis.itinerary) {
-            message += `**Day ${day.day}**: ${day.title}\n`;
-            message += day.places.map(p => `  • ${p}`).join('\n');
-            message += '\n\n';
-          }
-          
-          message += `I found **${placesToSave.length} places** mentioned in this guide.\n\n`;
-          message += `**How would you like me to save this?**`;
-          
-          return {
-            message,
-            suggestions: [
-              '📅 Import as Day Plans',
-              '📍 Just save places',
-              '✨ Both'
-            ],
-            // Include guide metadata for follow-up handling
-            metadata: {
-              type: 'guide_video_preview',
-              url,
-              destination: analysis.destination,
-              duration_days: analysis.duration_days,
-              itinerary: analysis.itinerary,
-              places: placesToSave,
-              guideMetadata, // Include for guide record creation
-            },
-          };
-        }
+        creatorName = analysis.guideMetadata?.creatorName;
+        logger.info(`[Companion] Extracted ${placesToSave.length} places from YouTube video${creatorName ? ` by ${creatorName}` : ''}`);
       } else if (contentType === 'reddit') {
         // Extract MULTIPLE places from Reddit post
         const analysis = await ContentProcessorService.extractMultiplePlacesFromReddit(url);
@@ -408,44 +282,6 @@ export class AICompanionService {
         }
       }
       
-      // Create Guide record and link places (for YouTube/Instagram/Reddit sources)
-      let guideRecord = null;
-      if (guideMetadata && savedItems.length > 0) {
-        try {
-          guideRecord = await GuideModel.create(
-            tripGroupId,
-            url,
-            userId,
-            {
-              sourceType: contentType as any,
-              title: guideMetadata.title,
-              creatorName: guideMetadata.creatorName,
-              creatorChannelId: guideMetadata.creatorChannelId,
-              thumbnailUrl: guideMetadata.thumbnailUrl,
-              hasDayStructure: guideMetadata.hasDayStructure,
-              totalDays: guideMetadata.totalDays,
-              summary,
-            }
-          );
-          
-          // Link saved items to guide with day numbers
-          for (let i = 0; i < savedItems.length; i++) {
-            const item = savedItems[i];
-            const place = placesWithCoords[i];
-            await GuideModel.addPlace(
-              guideRecord.id,
-              item.id,
-              place.day || null, // Day number from the guide
-              i // Order
-            );
-          }
-          
-          logger.info(`[Companion] Created guide "${guideRecord.title}" with ${savedItems.length} places`);
-        } catch (error) {
-          logger.error('[Companion] Error creating guide record:', error);
-        }
-      }
-      
       // Generate conversational response based on number of items
       const categoryEmojis: Record<string, string> = {
         food: '🍽️',
@@ -494,7 +330,7 @@ export class AICompanionService {
         .join(', ');
       
       // Include creator info if available
-      const creatorInfo = guideMetadata?.creatorName ? ` by **${guideMetadata.creatorName}**` : '';
+      const creatorInfo = creatorName ? ` by **${creatorName}**` : '';
       let message = `${emoji} Got it! I processed that ${contentType === 'youtube' ? 'video' : 'post'}${creatorInfo} and found ${savedItems.length} amazing place${savedItems.length > 1 ? 's' : ''}!\n\n`;
       
       if (summary) {
@@ -527,210 +363,6 @@ export class AICompanionService {
       logger.error('Content URL processing error:', error);
       return {
         message: `Oops! I had trouble processing that link. ${error.message || 'Please check if the URL is valid and try again.'} 😅`,
-      };
-    }
-  }
-
-  /**
-   * Detect if user's message is a guide video import choice
-   */
-  private static detectGuideImportChoice(query: string): 'day_plans' | 'places' | 'both' | null {
-    const lowerQuery = query.toLowerCase();
-    
-    if (lowerQuery.includes('import as day') || lowerQuery.includes('day plan')) {
-      return 'day_plans';
-    }
-    if (lowerQuery.includes('just save') || lowerQuery.includes('save places') || lowerQuery.includes('only places')) {
-      return 'places';
-    }
-    if (lowerQuery.includes('both') || lowerQuery.includes('✨')) {
-      return 'both';
-    }
-    
-    return null;
-  }
-
-  /**
-   * Handle guide video import based on user's choice
-   */
-  private static async handleGuideVideoImport(
-    userId: string,
-    tripGroupId: string,
-    choice: 'day_plans' | 'places' | 'both'
-  ): Promise<CompanionResponse> {
-    try {
-      // Find the most recent guide video preview message
-      const guideMessage = await GroupMessageModel.getLastMessageWithMetadataType(
-        tripGroupId,
-        'guide_video_preview'
-      );
-      
-      if (!guideMessage || !guideMessage.metadata) {
-        return {
-          message: "I couldn't find a recent guide video to import. Try sharing a video link again! 📺",
-        };
-      }
-      
-      const metadata = guideMessage.metadata;
-      const places = metadata.places || [];
-      const itinerary = metadata.itinerary || [];
-      const destination = metadata.destination || '';
-      const guideMetadata = metadata.guideMetadata || {};
-      
-      // Get trip for geocoding context
-      const trip = await TripGroupModel.findById(tripGroupId);
-      const tripDestination = trip?.destination || destination;
-      
-      let savedCount = 0;
-      let dayPlanCount = 0;
-      const savedItems: SavedItem[] = [];
-      
-      // Build a map of place names to their day number from itinerary
-      // This is a fallback in case place.day isn't set
-      const placeNameToDayMap: Record<string, number> = {};
-      for (const day of itinerary) {
-        for (const placeName of day.places) {
-          // Normalize place name for matching
-          const normalizedName = placeName.toLowerCase().trim();
-          placeNameToDayMap[normalizedName] = day.day;
-        }
-      }
-      logger.info(`[Companion] Built place-to-day map from itinerary: ${JSON.stringify(placeNameToDayMap)}`);
-      
-      // Save places to saved_items (without assigning to user's day plan)
-      // The Guide Drawer will show these with the guide's day structure
-      // User can then manually add places to their day plan from the drawer
-      if (choice === 'places' || choice === 'both' || choice === 'day_plans') {
-        // Log places data for debugging
-        logger.info(`[Companion] Guide import - ${places.length} places to save from ${guideMetadata.creatorName || 'unknown'}`);
-        logger.info(`[Companion] Sample place: ${JSON.stringify(places[0])}`);
-        
-        // Geocode places
-        const geocodedPlaces = await GeocodingService.geocodePlaces(
-          places.map((p: any) => ({
-            name: p.name,
-            location: p.location_name || tripDestination,
-          })),
-          tripDestination
-        );
-        
-        for (let i = 0; i < places.length; i++) {
-          const place = places[i];
-          const geocoded = geocodedPlaces[i];
-          
-          // Get day number from guide (for linking to guide, NOT for user's plan)
-          let guideDayNumber = place.day;
-          if (!guideDayNumber) {
-            const normalizedName = place.name.toLowerCase().trim();
-            guideDayNumber = placeNameToDayMap[normalizedName];
-            if (guideDayNumber) {
-              logger.info(`[Companion] Found guide day ${guideDayNumber} for "${place.name}" from itinerary lookup`);
-            }
-          }
-          
-          try {
-            // Save place WITHOUT assigning to user's day plan (planned_day = null)
-            // The guide's day structure will be stored in guide_places table
-            const savedItem = await SavedItemModel.create(
-              tripGroupId,
-              userId,
-              place.name,
-              place.category,
-              place.description || '',
-              'youtube' as any,
-              geocoded.formatted_address || place.location_name || tripDestination,
-              geocoded.lat ?? undefined,
-              geocoded.lng ?? undefined,
-              metadata.url,
-              `From ${guideMetadata.creatorName || 'Guide'} - Day ${guideDayNumber || '?'}`,
-              { video_type: 'guide', guide_day: guideDayNumber, creator: guideMetadata.creatorName },
-              geocoded.confidence || 'medium',
-              geocoded.confidence_score || 0.5
-            );
-            
-            // Store guideDayNumber for linking to guide later
-            (savedItem as any).guideDayNumber = guideDayNumber;
-            savedItems.push(savedItem);
-            savedCount++;
-            
-            logger.info(`[Companion] Saved "${place.name}" (guide day ${guideDayNumber}) - NOT assigned to user's plan yet`);
-          } catch (error) {
-            logger.error(`[Companion] Error saving guide place: ${place.name}`, error);
-          }
-        }
-        
-        dayPlanCount = itinerary.length; // Count days from itinerary
-        
-        // Create Guide record and link places
-        if (savedItems.length > 0) {
-          try {
-            const guideRecord = await GuideModel.create(
-              tripGroupId,
-              metadata.url,
-              userId,
-              {
-                sourceType: 'youtube',
-                title: guideMetadata.title || `${destination} Guide`,
-                creatorName: guideMetadata.creatorName || 'Unknown Creator',
-                creatorChannelId: guideMetadata.creatorChannelId,
-                thumbnailUrl: guideMetadata.thumbnailUrl,
-                hasDayStructure: (metadata.duration_days || 0) > 0,
-                totalDays: metadata.duration_days || 0,
-                summary: metadata.summary || '',
-              }
-            );
-            
-            // Link saved items to guide with guide's day numbers
-            for (let i = 0; i < savedItems.length; i++) {
-              const item = savedItems[i] as any;
-              const guideDayNumber = item.guideDayNumber || null;
-              await GuideModel.addPlace(
-                guideRecord.id,
-                item.id,
-                guideDayNumber,
-                i
-              );
-              logger.info(`[Companion] Linked "${item.name}" to guide (guide day ${guideDayNumber})`);
-            }
-            
-            logger.info(`[Companion] Created guide "${guideRecord.title}" by ${guideRecord.creator_name} with ${savedItems.length} places linked`);
-          } catch (error) {
-            logger.error('[Companion] Error creating guide record for import:', error);
-          }
-        }
-      }
-      
-      // Note: We no longer create separate DailyPlan records
-      // The Day Planner UI reads from saved_items.planned_day
-      
-      // Generate response based on choice
-      let message = '';
-      const creatorName = guideMetadata.creatorName || 'the guide';
-      
-      if (choice === 'places') {
-        message = `✅ Done! I saved **${savedCount} places** from ${creatorName}'s guide!\n\n`;
-        message += `Browse them in your saved places. 📍`;
-      } else if (choice === 'day_plans') {
-        message = `📅 Done! I saved **${creatorName}'s ${dayPlanCount}-day itinerary**!\n\n`;
-        message += `Open the Day Planner and check the **Guide Sources** drawer at the bottom to see their recommendations. Tap [+ Add] to add places to your plan! ✨`;
-      } else {
-        message = `✨ Done! I imported ${creatorName}'s guide:\n\n`;
-        message += `• 📍 **${savedCount} places** saved\n`;
-        message += `• 📅 **${dayPlanCount}-day itinerary** ready\n\n`;
-        message += `Open the Day Planner → **Guide Sources** (at bottom) to see their day-by-day recommendations and add places to your plan!`;
-      }
-      
-      return {
-        message,
-        suggestions: choice === 'places' 
-          ? ['Show my places', 'What should I do today?']
-          : ['View Day Planner', 'Show my places'],
-      };
-      
-    } catch (error: any) {
-      logger.error('Guide video import error:', error);
-      return {
-        message: `Oops! Something went wrong while importing the guide. ${error.message} 😅`,
       };
     }
   }
