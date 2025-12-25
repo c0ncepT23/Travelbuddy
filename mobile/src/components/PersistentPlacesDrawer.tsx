@@ -369,12 +369,9 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
     <View style={styles.emptyContainer}>
       <Ionicons name="map-outline" size={36} color={COLORS.textSecondary} />
       <Text style={styles.emptyText}>No places in this area</Text>
+      <Text style={styles.emptyHint}>Zoom out to see more places</Text>
     </View>
   ), []);
-
-  if (items.length === 0) {
-    return null; // Don't show drawer if no items
-  }
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
@@ -415,16 +412,22 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
         {/* PEEK MODE: Horizontal scroll of compact cards */}
         <Animated.View style={[styles.peekContent, peekContentOpacity]} pointerEvents={isPeekMode ? 'auto' : 'none'}>
-          <FlatList
-            data={items.slice(0, 10)} // Limit to 10 for peek mode
-            keyExtractor={(item) => item.id}
-            renderItem={renderCompactItem}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.peekList}
-            snapToInterval={88}
-            decelerationRate="fast"
-          />
+          {items.length > 0 ? (
+            <FlatList
+              data={items.slice(0, 10)} // Limit to 10 for peek mode
+              keyExtractor={(item) => item.id}
+              renderItem={renderCompactItem}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.peekList}
+              snapToInterval={88}
+              decelerationRate="fast"
+            />
+          ) : (
+            <View style={styles.peekEmptyContainer}>
+              <Text style={styles.peekEmptyText}>🗺️ Pan or zoom out to discover places</Text>
+            </View>
+          )}
         </Animated.View>
 
         {/* HALF/FULL MODE: Vertical list */}
@@ -680,6 +683,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     marginTop: 8,
+  },
+  emptyHint: {
+    fontSize: 12,
+    color: COLORS.primaryGlow,
+    marginTop: 4,
+    opacity: 0.7,
+  },
+  peekEmptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  peekEmptyText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
 

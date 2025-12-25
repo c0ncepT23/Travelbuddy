@@ -582,6 +582,10 @@ export default function CountryBubbleScreen() {
   const [currentZoom, setCurrentZoom] = useState<number>(0);
   const [isMapFilterActive, setIsMapFilterActive] = useState<boolean>(false);
   const mapFilterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Visible items for drawer (filtered by map bounds) - "Mini-map inventory"
+  const [drawerItems, setDrawerItems] = useState<SavedItem[]>([]);
+  const mapViewRef = useRef<MapView>(null);
 
   // Compact Chat state
   const [isCompactChatOpen, setIsCompactChatOpen] = useState(false);
@@ -861,8 +865,8 @@ export default function CountryBubbleScreen() {
   }, [allItems, countryCoords, animateToRegion]);
 
   // Handle map idle (when user stops panning/zooming)
-  // SKIP filtering when bottom sheet is visible
-  const handleMapIdle = useCallback((feature: any) => {
+  // Updates drawer items based on what's visible on screen
+  const handleMapIdle = useCallback(async (feature: any) => {
     // Clear any pending timeout
     if (mapFilterTimeoutRef.current) {
       clearTimeout(mapFilterTimeoutRef.current);
@@ -891,8 +895,76 @@ export default function CountryBubbleScreen() {
       checkIfPannedAway(centerCoords);
     }
     
-    // IMPORTANT: Skip map filtering when in RPG interaction flow
-    // (orbital bubbles, bottom sheet, place selection)
+    // ============================================================
+    // DRAWER SYNC: Query visible features to update drawer inventory
+    // ============================================================
+    // Use queryRenderedFeatures for accurate "what's on screen" sync
+    if (mapViewRef.current) {
+      try {
+        // Query both individual pins AND clusters visible on screen
+        const result = await mapViewRef.current.queryRenderedFeaturesInRect(
+          [0, 0, SCREEN_WIDTH, SCREEN_HEIGHT], // Full screen rect
+          null, // No filter
+          ['unclustered-pins', 'clusters'] // Our layer IDs
+        );
+        
+        // Extract IDs from visible features
+        // Result can be FeatureCollection or array depending on version
+        const visibleFeatures = result?.features || result || [];
+        const featuresArray = Array.isArray(visibleFeatures) ? visibleFeatures : [];
+        const visibleIds = new Set<string>();
+        let totalClusteredCount = 0;
+        
+        featuresArray.forEach((f: any) => {
+          if (f.properties?.cluster) {
+            // It's a cluster - add the point_count
+            totalClusteredCount += f.properties.point_count || 0;
+          } else if (f.properties?.id) {
+            // It's an individual pin
+            visibleIds.add(f.properties.id);
+          }
+        });
+        
+        // If we have clusters, we need to use bounds filtering instead
+        // (queryRenderedFeatures doesn't give us the IDs inside clusters)
+        const bounds = feature.properties?.visibleBounds;
+        
+        if (bounds && Array.isArray(bounds) && bounds.length === 2) {
+          // Filter items based on visible map bounds
+          const boundsFiltered = filterItemsByMapBounds(items, bounds);
+          setDrawerItems(boundsFiltered);
+          console.log(`📋 Drawer sync: ${boundsFiltered.length} places in view (bounds-based)`);
+        } else if (visibleIds.size > 0) {
+          // Fallback: filter by visible pin IDs
+          const idFiltered = items.filter(item => visibleIds.has(item.id));
+          setDrawerItems(idFiltered);
+          console.log(`📋 Drawer sync: ${idFiltered.length} places in view (ID-based)`);
+        } else {
+          // Zoomed out or no specific data - show all category-filtered items
+          setDrawerItems(items);
+          console.log(`📋 Drawer sync: showing all ${items.length} places`);
+        }
+      } catch (error) {
+        console.log('⚠️ queryRenderedFeatures failed, using bounds fallback:', error);
+        // Fallback to bounds-based filtering
+        const bounds = feature.properties?.visibleBounds;
+        if (bounds && Array.isArray(bounds) && bounds.length === 2) {
+          const boundsFiltered = filterItemsByMapBounds(items, bounds);
+          setDrawerItems(boundsFiltered);
+        } else {
+          setDrawerItems(items);
+        }
+      }
+    } else {
+      // No mapRef - just use all items
+      setDrawerItems(items);
+    }
+    
+    // ============================================================
+    // ORIGINAL FILTER LOGIC (for other UI elements)
+    // ============================================================
+    
+    // Skip map filtering when in RPG interaction flow
     if (isInRPGFlowRef.current) {
       return;
     }
@@ -912,7 +984,7 @@ export default function CountryBubbleScreen() {
       return;
     }
     
-    // Debounce: wait 300ms after user stops moving
+    // Debounce: wait 300ms after user stops moving for main filter update
     mapFilterTimeoutRef.current = setTimeout(() => {
       const bounds = feature.properties?.visibleBounds;
       
@@ -932,7 +1004,7 @@ export default function CountryBubbleScreen() {
         }
       }
     }, 300);
-  }, [allItems, filterMode, isMapFilterActive]); // Using refs for bottomSheetVisible to avoid stale closures
+  }, [allItems, items, filterMode, isMapFilterActive]); // Using refs for bottomSheetVisible to avoid stale closures
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -942,6 +1014,13 @@ export default function CountryBubbleScreen() {
       }
     };
   }, []);
+  
+  // Initialize drawer items when items change (category filter or data load)
+  // This ensures drawer has data before first map idle event
+  useEffect(() => {
+    setDrawerItems(items);
+    console.log(`📋 Drawer initialized: ${items.length} items`);
+  }, [items]);
 
   // Handle category chip tap
   const handleCategorySelect = useCallback((category: CategoryFilterType) => {
@@ -1537,6 +1616,7 @@ export default function CountryBubbleScreen() {
       
       {/* Map Background - Mapbox */}
       <MapView
+        ref={mapViewRef}
         style={styles.map}
         styleURL={MAPBOX_STYLE}
         logoEnabled={false}
@@ -1808,9 +1888,10 @@ export default function CountryBubbleScreen() {
       {/* CLUSTERS AND PINS are now rendered inside MapView - see ShapeSource "places-source" */}
 
       {/* Persistent Places Drawer - Always visible, Airbnb style */}
+      {/* Persistent Places Drawer - Shows places visible in current map view */}
       <PersistentPlacesDrawer
         ref={placesDrawerRef}
-        items={items}
+        items={drawerItems}
         selectedCategory={selectedCategory}
         categoryLabel={currentCategoryConfig.label}
         categoryEmoji={currentCategoryConfig.icon}
