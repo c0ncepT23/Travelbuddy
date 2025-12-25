@@ -1,13 +1,13 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '../config/env';
 import { TripSegmentModel } from '../models/tripSegment.model';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripSegment } from '../types';
 import logger from '../config/logger';
 
-const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-});
+// Migrated from OpenAI to Gemini 2.5 Flash (100x cheaper, faster)
+const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
+const GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
 
 interface ParsedItineraryInfo {
   city?: string;
@@ -68,14 +68,24 @@ Respond with JSON only:
   "missingFields": ["list", "of", "missing", "required", "fields"]
 }`;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
+      const model = genAI.getGenerativeModel({ 
+        model: GEMINI_MODEL,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        }
       });
 
-      const result = JSON.parse(response.choices[0]?.message?.content || '{}');
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      
+      // Clean up JSON if wrapped in markdown
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+      
+      const result = JSON.parse(cleanText);
       
       logger.info(`[Itinerary] Parsed input: ${JSON.stringify(result)}`);
       

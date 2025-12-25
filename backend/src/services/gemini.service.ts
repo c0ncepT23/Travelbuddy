@@ -1,7 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { config } from '../config/env';
-import { ItemCategory } from '../types';
+import { ItemCategory, AgentContext } from '../types';
 import logger from '../config/logger';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -11,7 +11,312 @@ import * as os from 'os';
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
 
+// Model tiers for different use cases
+const MODELS = {
+  FLASH: 'gemini-2.5-flash-preview-05-20',  // Fast, cheap - for chat, intent detection
+  PRO: 'gemini-2.5-pro-preview-05-06',      // Complex reasoning - for planning, guides
+  FLASH_LEGACY: 'gemini-2.0-flash',         // Fallback if 2.5 not available
+};
+
 export class GeminiService {
+  // ============================================
+  // CHAT & AGENT METHODS (NEW - Gemini 2.5)
+  // ============================================
+
+  /**
+   * Generate system prompt for the travel agent
+   */
+  private static getTravelAgentSystemPrompt(context: AgentContext): string {
+    const startDateStr = context.startDate
+      ? new Date(context.startDate).toLocaleDateString()
+      : 'Not set';
+    const endDateStr = context.endDate 
+      ? new Date(context.endDate).toLocaleDateString() 
+      : 'Not set';
+
+    return `You are TravelPal, an excited travel companion AI helping users organize their trip research. Your personality is enthusiastic and encouraging, like a friend who's genuinely excited about the upcoming trip.
+
+Current trip: ${context.tripName} to ${context.destination}
+Trip dates: ${startDateStr} - ${endDateStr}
+Current user: ${context.userName}
+
+Key responsibilities:
+1. Help users remember what they've researched from their SAVED PLACES ONLY
+2. Answer questions about their saved places
+3. Suggest relevant saved items based on context (time, location, category)
+4. Be proactive about nearby saved places when user has location
+5. NEVER suggest new places that aren't in their saved list
+6. NEVER make up information - only use what's in their saved places
+
+Tone guidelines:
+- Be enthusiastic and encouraging
+- Use emojis appropriately (1-2 per message, not overwhelming)
+- Keep responses concise and friendly (2-4 sentences typically)
+- Celebrate when users visit places they researched
+- Be helpful without being pushy
+
+Response rules:
+- If user asks about something NOT in their saved places, politely say you don't have that saved
+- If user asks for recommendations, ONLY suggest from their saved places
+- Keep messages short and conversational`;
+  }
+
+  /**
+   * Chat with the travel agent using Gemini 2.5 Flash
+   * Fast, cheap, great for conversational interactions
+   */
+  static async chat(
+    context: AgentContext,
+    userMessage: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  ): Promise<string> {
+    try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        systemInstruction: this.getTravelAgentSystemPrompt(context),
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 500,
+        }
+      });
+
+      // Convert history to Gemini format
+      const history: Content[] = conversationHistory.map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }],
+      }));
+
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessage(userMessage);
+      
+      return result.response.text() || 'Sorry, I had trouble responding. 😅';
+    } catch (error: any) {
+      logger.error('Gemini chat error:', error);
+      // Fallback to legacy model
+      try {
+        logger.info('Falling back to gemini-2.0-flash for chat');
+        const fallbackModel = genAI.getGenerativeModel({ 
+          model: MODELS.FLASH_LEGACY,
+          generationConfig: { temperature: 0.8, maxOutputTokens: 500 }
+        });
+        const result = await fallbackModel.generateContent(
+          `${this.getTravelAgentSystemPrompt(context)}\n\nUser: ${userMessage}`
+        );
+        return result.response.text() || 'Sorry, I had trouble responding. 😅';
+      } catch (fallbackError) {
+        logger.error('Gemini fallback chat error:', fallbackError);
+        throw new Error('Failed to generate response');
+      }
+    }
+  }
+
+  /**
+   * Analyze user query intent using Gemini 2.5 Flash
+   * Returns structured intent for routing
+   */
+  static async analyzeIntent(
+    query: string,
+    context: { 
+      hasLocation: boolean; 
+      currentTime: string;
+      destination: string;
+    }
+  ): Promise<{
+    type: 'location_based' | 'category' | 'specific' | 'surprise' | 'general' | 'alternatives' | 'planning';
+    category?: ItemCategory;
+    keywords: string[];
+    distance?: 'nearby' | 'walking' | 'any';
+    time?: 'now' | 'later' | 'any';
+    referencedPlace?: string;
+    reason?: string;
+  }> {
+    try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        }
+      });
+
+      const prompt = `Analyze this travel query and classify the user's intent.
+
+User query: "${query}"
+Current time: ${context.currentTime}
+User location: ${context.hasLocation ? 'Known' : 'Unknown'}
+Destination: ${context.destination}
+
+Classify as ONE of:
+- location_based: "near me", "nearby", "around here", "close by"
+- category: asking about food/shopping/places/activities
+- specific: asking about a named place
+- surprise: "surprise me", "random", "anything", "you pick"
+- alternatives: can't go to a place, wants similar options ("X is closed", "alternative to X")
+- planning: wants to plan their day, create itinerary
+- general: other questions or conversation
+
+Extract:
+1. type: the intent type from above
+2. category: if mentioned (food, shopping, place, activity, accommodation, tip) or null
+3. keywords: relevant search words from the query
+4. distance: nearby (<500m), walking (<2km), or any
+5. time: now (immediate), later (planning), or any
+6. referencedPlace: for alternatives - the place name they can't visit (or null)
+7. reason: for alternatives - why they can't visit (or null)
+
+RESPOND ONLY WITH JSON:
+{
+  "type": "category",
+  "category": "food",
+  "keywords": ["ramen", "lunch"],
+  "distance": "any",
+  "time": "now",
+  "referencedPlace": null,
+  "reason": null
+}`;
+
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      
+      // Parse JSON
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+      
+      const parsed = JSON.parse(cleanText);
+      
+      return {
+        type: parsed.type || 'general',
+        category: parsed.category === 'null' || parsed.category === null ? undefined : parsed.category,
+        keywords: parsed.keywords || [],
+        distance: parsed.distance || 'any',
+        time: parsed.time || 'any',
+        referencedPlace: parsed.referencedPlace === 'null' || parsed.referencedPlace === null ? undefined : parsed.referencedPlace,
+        reason: parsed.reason === 'null' || parsed.reason === null ? undefined : parsed.reason,
+      };
+    } catch (error) {
+      logger.error('Gemini intent analysis error:', error);
+      return {
+        type: 'general',
+        keywords: [],
+        distance: 'any',
+        time: 'any',
+      };
+    }
+  }
+
+  /**
+   * Generate natural language response about saved places
+   * Uses Gemini 2.5 Flash for fast, conversational responses
+   */
+  static async generatePlacesResponse(
+    query: string,
+    context: {
+      userName: string;
+      destination: string;
+      currentTime: string;
+    },
+    places: Array<{
+      name: string;
+      category: string;
+      description?: string;
+      location_name?: string;
+      distance?: number;
+      source_title?: string;
+    }>
+  ): Promise<string> {
+    try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 400,
+        }
+      });
+
+      const placesContext = places.map((p, i) => `
+${i + 1}. ${p.name} - ${p.category}
+   Location: ${p.location_name || 'Unknown'}
+   ${p.distance ? `Distance: ${p.distance < 1000 ? `${Math.round(p.distance)}m` : `${(p.distance / 1000).toFixed(1)}km`}` : ''}
+   ${p.description ? `Info: ${p.description.substring(0, 80)}...` : ''}
+   Source: ${p.source_title || 'Saved places'}
+      `).join('\n');
+
+      const prompt = `You are TravelPal helping ${context.userName} explore ${context.destination}.
+
+User asked: "${query}"
+Time: ${context.currentTime}
+
+THEIR SAVED PLACES (${places.length} found):
+${placesContext || 'No saved places match this query'}
+
+RULES:
+- ONLY mention places from the list above
+- If places found: Highlight 2-3 with brief details
+- If none found: Say you don't have any saved spots for that
+- Be friendly, use 1-2 emojis max
+- Keep it to 2-3 sentences
+
+Generate a helpful response:`;
+
+      const result = await model.generateContent(prompt);
+      return result.response.text() || "I found some interesting places for you! 🎯";
+    } catch (error) {
+      logger.error('Gemini places response error:', error);
+      
+      // Fallback response
+      if (places.length === 0) {
+        return "Hmm, I couldn't find anything matching that in your saved places. Want to save some more content? 🔍";
+      }
+      return `Found ${places.length} place(s) that might interest you! Check them out below 👇`;
+    }
+  }
+
+  /**
+   * Complex reasoning tasks using Gemini 2.5 Pro
+   * Used for: Day planning, guide parsing, itinerary optimization
+   */
+  static async complexReasoning(
+    prompt: string,
+    options: {
+      jsonMode?: boolean;
+      temperature?: number;
+      maxTokens?: number;
+    } = {}
+  ): Promise<string> {
+    try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.PRO,
+        generationConfig: {
+          responseMimeType: options.jsonMode ? 'application/json' : 'text/plain',
+          temperature: options.temperature ?? 0.4,
+          maxOutputTokens: options.maxTokens ?? 2000,
+        }
+      });
+
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (error: any) {
+      logger.error('Gemini Pro reasoning error:', error);
+      // Fallback to Flash for complex tasks
+      logger.info('Falling back to Flash for complex reasoning');
+      const fallbackModel = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        generationConfig: {
+          responseMimeType: options.jsonMode ? 'application/json' : 'text/plain',
+          temperature: options.temperature ?? 0.4,
+          maxOutputTokens: options.maxTokens ?? 2000,
+        }
+      });
+      const result = await fallbackModel.generateContent(prompt);
+      return result.response.text();
+    }
+  }
+
+  // ============================================
+  // CONTENT EXTRACTION METHODS (Existing)
+  // ============================================
   /**
    * @deprecated Use analyzeVideoMetadata() instead - it uses transcript from yt-dlp
    * This method passes URL directly to Gemini which cannot "watch" videos

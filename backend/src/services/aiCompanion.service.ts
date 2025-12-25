@@ -1,5 +1,3 @@
-import OpenAI from 'openai';
-import { config } from '../config/env';
 import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripSegmentModel } from '../models/tripSegment.model';
@@ -11,12 +9,12 @@ import { ContentProcessorService } from './contentProcessor.service';
 import { GeocodingService } from './geocoding.service';
 import { ItineraryService } from './itinerary.service';
 import { DayPlanningService } from './dayPlanning.service';
+import { GeminiService } from './gemini.service';
 import { extractUrls } from '../utils/helpers';
 import logger from '../config/logger';
 
-const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-});
+// NOTE: Migrated from OpenAI to Gemini 2.5 Flash (100x cheaper, faster)
+// Complex tasks use Gemini 2.5 Pro as fallback
 
 interface UserContext {
   location?: {
@@ -765,6 +763,7 @@ export class AICompanionService {
 
   /**
    * Analyze user query to understand intent
+   * NOW USES: Gemini 2.5 Flash (100x cheaper than GPT-4)
    */
   private static async analyzeQueryIntent(
     query: string,
@@ -779,56 +778,24 @@ export class AICompanionService {
     reason?: string; // Why they can't visit (closed, crowded, etc.)
   }> {
     try {
-      const prompt = `Analyze this user query about their saved travel places:
-
-User query: "${query}"
-Current time: ${context.time.toLocaleTimeString()}
-User location: ${context.location ? 'Known' : 'Unknown'}
-
-Determine:
-1. Query type:
-   - location_based: "near me", "nearby", "around here"
-   - category: asking about food/shopping/places
-   - specific: asking about a named place
-   - surprise: "surprise me", "random", "anything"
-   - alternatives: user CAN'T go to a place and wants SIMILAR options (e.g., "can't go to X", "X is closed", "alternative to X", "similar to X", "what else like X")
-   - general: other queries
-
-2. Category if mentioned: food, shopping, place, activity, accommodation, tip
-3. Keywords to match
-4. Distance preference: nearby (<500m), walking (<2km), any
-5. Time preference: now (immediate), later (planning), any
-6. Referenced place (for alternatives): the place name they can't/don't want to visit
-7. Reason (for alternatives): why they can't visit (closed, crowded, too far, etc.)
-
-Respond with JSON:
-{
-  "type": "location_based|category|specific|surprise|general|alternatives",
-  "category": "food|shopping|place|activity|accommodation|tip|null",
-  "keywords": ["keyword1", "keyword2"],
-  "distance": "nearby|walking|any",
-  "time": "now|later|any",
-  "referencedPlace": "place name or null",
-  "reason": "reason or null"
-}`;
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
+      // Use Gemini 2.5 Flash for intent analysis (fast & cheap)
+      const result = await GeminiService.analyzeIntent(query, {
+        hasLocation: !!context.location,
+        currentTime: context.time.toLocaleTimeString(),
+        destination: context.destination,
       });
-
-      const result = JSON.parse(response.choices[0]?.message?.content || '{}');
+      
+      // Filter out 'planning' type which is handled separately
+      const type = result.type === 'planning' ? 'general' : result.type;
       
       return {
-        type: result.type || 'general',
-        category: result.category === 'null' ? undefined : result.category,
-        keywords: result.keywords || [],
-        distance: result.distance || 'any',
-        time: result.time || 'any',
-        referencedPlace: result.referencedPlace === 'null' ? undefined : result.referencedPlace,
-        reason: result.reason === 'null' ? undefined : result.reason,
+        type: type as any,
+        category: result.category,
+        keywords: result.keywords,
+        distance: result.distance,
+        time: result.time,
+        referencedPlace: result.referencedPlace,
+        reason: result.reason,
       };
     } catch (error) {
       logger.error('Intent analysis error:', error);
@@ -1091,6 +1058,7 @@ Respond with JSON:
 
   /**
    * Generate natural language response
+   * NOW USES: Gemini 2.5 Flash (100x cheaper than GPT-4)
    */
   private static async generateResponse(
     query: string,
@@ -1099,51 +1067,26 @@ Respond with JSON:
     _intent: any
   ): Promise<CompanionResponse> {
     try {
-      const placesContext = places.map((p, i) => `
-${i + 1}. ${p.name} - ${p.category}
-   Location: ${p.location_name || 'Unknown'}
-   ${p.distance ? `Distance: ${p.distance < 1000 ? `${Math.round(p.distance)}m` : `${(p.distance / 1000).toFixed(1)}km`}` : ''}
-   Description: ${p.description?.substring(0, 100)}
-   Source: ${p.source_title || 'Your saved places'}
-      `).join('\n');
+      // Use Gemini 2.5 Flash for response generation (fast & cheap)
+      const message = await GeminiService.generatePlacesResponse(
+        query,
+        {
+          userName: context.userName,
+          destination: context.destination,
+          currentTime: context.time.toLocaleTimeString(),
+        },
+        places.map(p => ({
+          name: p.name,
+          category: p.category,
+          description: p.description,
+          location_name: p.location_name,
+          distance: p.distance,
+          source_title: p.source_title,
+        }))
+      );
 
-      const prompt = `You are a helpful travel companion assisting ${context.userName} with their trip to ${context.destination}.
-
-User query: "${query}"
-Current time: ${context.time.toLocaleTimeString()}
-
-IMPORTANT RULES:
-- ONLY reference places from the user's saved items list below
-- NEVER suggest or recommend places that are NOT in their saved list
-- If no saved places match, simply say you don't have any saved spots matching their request and suggest they save some places first
-
-User's saved places (${places.length} found):
-${placesContext || 'No saved places match this query'}
-
-Generate a helpful response:
-- ONLY mention places from the list above
-- If places found: Share 2-3 from their saved list with brief details
-- If none found: Let them know you don't have saved spots for that and suggest they add some via YouTube guides or manual search
-- Be friendly but concise
-- Use 1-2 emojis max
-
-Respond with JSON:
-{
-  "message": "Your response here - ONLY referencing their saved places"
-}`;
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.8,
-        response_format: { type: 'json_object' },
-      });
-
-      const result = JSON.parse(response.choices[0]?.message?.content || '{}');
-
-      // Don't include suggestions - removed per user request
       return {
-        message: result.message || "I found some interesting places for you! 🎯",
+        message,
         places: places.map((p) => ({
           id: p.id,
           name: p.name,
@@ -1152,7 +1095,6 @@ Respond with JSON:
           location_name: p.location_name,
           distance: p.distance,
         })),
-        // suggestions removed - AI should not suggest actions
       };
     } catch (error) {
       logger.error('Response generation error:', error);
@@ -1585,6 +1527,7 @@ Respond with JSON:
 
   /**
    * Generate AI-enhanced briefing message
+   * NOW USES: Gemini 2.5 Flash (100x cheaper than GPT-4)
    */
   private static async generateAIBriefingMessage(
     context: CompanionContext,
@@ -1608,16 +1551,26 @@ Guidelines:
 - Mention a specific place if highly rated
 - If last day, create urgency
 - If morning, suggest breakfast; if afternoon, activities; if evening, dinner
-- Keep it under 150 characters`;
+- Keep it under 150 characters
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.8,
-      max_tokens: 100,
-    });
+Generate ONLY the message text, no JSON:`;
 
-    return response.choices[0]?.message?.content || 'Ready to explore? Check out your top picks! 🗺️';
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const { config } = await import('../config/env');
+      const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
+      
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.5-flash-preview-05-20',
+        generationConfig: { temperature: 0.8, maxOutputTokens: 100 }
+      });
+      
+      const result = await model.generateContent(prompt);
+      return result.response.text() || 'Ready to explore? Check out your top picks! 🗺️';
+    } catch (error) {
+      logger.warn('Failed to generate AI briefing, using fallback:', error);
+      return 'Ready to explore? Check out your top picks! 🗺️';
+    }
   }
 }
 

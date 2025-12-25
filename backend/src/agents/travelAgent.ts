@@ -1,11 +1,15 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '../config/env';
 import { AgentContext, ItemCategory, ProcessedContent } from '../types';
 import logger from '../config/logger';
 
-const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-});
+// Migrated from OpenAI to Gemini 2.5 Flash (100x cheaper, faster)
+const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
+
+const MODELS = {
+  FLASH: 'gemini-2.5-flash-preview-05-20',
+  FLASH_LEGACY: 'gemini-2.0-flash',
+};
 
 export class TravelAgent {
   /**
@@ -13,9 +17,9 @@ export class TravelAgent {
    */
   private static getSystemPrompt(context: AgentContext): string {
     const startDateStr = context.startDate
-      ? context.startDate.toLocaleDateString()
+      ? new Date(context.startDate).toLocaleDateString()
       : 'Not set';
-    const endDateStr = context.endDate ? context.endDate.toLocaleDateString() : 'Not set';
+    const endDateStr = context.endDate ? new Date(context.endDate).toLocaleDateString() : 'Not set';
 
     return `You are an excited travel companion AI helping users organize their trip research. Your personality is enthusiastic and encouraging, like a friend who's genuinely excited about the upcoming trip.
 
@@ -46,7 +50,8 @@ When responding:
   }
 
   /**
-   * Chat with the agent
+   * Chat with the agent using Gemini 2.5 Flash
+   * NOW USES: Gemini 2.5 Flash (100x cheaper than GPT-4)
    */
   static async chat(
     context: AgentContext,
@@ -54,34 +59,61 @@ When responding:
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
   ): Promise<string> {
     try {
-      const messages: any[] = [
-        { role: 'system', content: this.getSystemPrompt(context) },
-        ...conversationHistory,
-        { role: 'user', content: userMessage },
-      ];
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: messages,
-        temperature: 0.8,
-        max_tokens: 500,
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        systemInstruction: this.getSystemPrompt(context),
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 500,
+        }
       });
 
-      return response.choices[0]?.message?.content || 'Sorry, I had trouble responding.';
-    } catch (error) {
+      // Convert history to Gemini format
+      const history = conversationHistory.map(msg => ({
+        role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
+        parts: [{ text: msg.content }],
+      }));
+
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessage(userMessage);
+      
+      return result.response.text() || 'Sorry, I had trouble responding. 😅';
+    } catch (error: any) {
       logger.error('Agent chat error:', error);
-      throw new Error('Failed to generate response');
+      // Fallback to legacy model
+      try {
+        logger.info('Falling back to gemini-2.0-flash for chat');
+        const fallbackModel = genAI.getGenerativeModel({ 
+          model: MODELS.FLASH_LEGACY,
+          generationConfig: { temperature: 0.8, maxOutputTokens: 500 }
+        });
+        const result = await fallbackModel.generateContent(
+          `${this.getSystemPrompt(context)}\n\nUser: ${userMessage}`
+        );
+        return result.response.text() || 'Sorry, I had trouble responding. 😅';
+      } catch (fallbackError) {
+        logger.error('Agent fallback chat error:', fallbackError);
+        throw new Error('Failed to generate response');
+      }
     }
   }
 
   /**
-   * Process and categorize content
+   * Process and categorize content using Gemini 2.5 Flash
    */
   static async processContent(
     contentText: string,
     sourceType: string
   ): Promise<ProcessedContent> {
     try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.3,
+        }
+      });
+
       const prompt = `Analyze the following ${sourceType} content and extract key information. 
 
 Content:
@@ -101,16 +133,16 @@ Respond ONLY with a valid JSON object in this exact format:
   "location_name": "location if mentioned or null"
 }`;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      });
-
-      const result = JSON.parse(
-        response.choices[0]?.message?.content || '{}'
-      ) as ProcessedContent;
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      
+      // Clean up JSON if wrapped in markdown
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+      
+      const result = JSON.parse(cleanText) as ProcessedContent;
 
       // Validate the result
       if (!result.name || !result.category || !result.description) {
@@ -268,7 +300,7 @@ Ready for an amazing trip? I'll be here to help you explore! 🌟`;
   }
 
   /**
-   * Check for duplicate items
+   * Check for duplicate items using Gemini 2.5 Flash
    */
   static async checkDuplicates(
     newItemName: string,
@@ -279,23 +311,32 @@ Ready for an amazing trip? I'll be here to help you explore! 🌟`;
     }
 
     try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+        }
+      });
+
       const prompt = `Check if "${newItemName}" is the same place/item as any of these:
 ${existingItems.map((item, i) => `${i + 1}. ${item.name}`).join('\n')}
 
 Respond with JSON:
 {
-  "is_duplicate": true/false,
+  "is_duplicate": true or false,
   "matched_index": index number if duplicate (null if not)
 }`;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-      });
-
-      const result = JSON.parse(response.choices[0]?.message?.content || '{}');
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+      
+      const result = JSON.parse(cleanText);
 
       if (result.is_duplicate && result.matched_index !== null) {
         const matchedItem = existingItems[result.matched_index];
@@ -314,13 +355,21 @@ Respond with JSON:
   }
 
   /**
-   * Extract summary from video transcript
+   * Extract summary from video transcript using Gemini 2.5 Flash
    */
   static async summarizeTranscript(
     transcript: string,
     title: string
   ): Promise<{ places: Array<{ name: string; description: string; location?: string }> }> {
     try {
+      const model = genAI.getGenerativeModel({ 
+        model: MODELS.FLASH,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.3,
+        }
+      });
+
       const prompt = `Extract all specific places, restaurants, or recommendations from this video:
 
 Title: ${title}
@@ -338,14 +387,15 @@ Respond with JSON:
   ]
 }`;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      });
-
-      return JSON.parse(response.choices[0]?.message?.content || '{"places":[]}');
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+      
+      return JSON.parse(cleanText);
     } catch (error) {
       logger.error('Transcript summarization error:', error);
       return { places: [] };
