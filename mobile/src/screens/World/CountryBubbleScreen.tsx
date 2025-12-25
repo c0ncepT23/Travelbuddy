@@ -1691,6 +1691,39 @@ export default function CountryBubbleScreen() {
                 textOffset: [0, 0],
               }}
             />
+
+            {/* RATING BADGE BACKGROUND - Small circle offset to bottom-right */}
+            <CircleLayer
+              id="rating-badge-bg"
+              filter={['all', 
+                ['!', ['has', 'point_count']],
+                ['>', ['get', 'rating'], 0]
+              ]}
+              style={{
+                circleRadius: 10,
+                circleColor: '#FFFFFF',
+                circleStrokeWidth: 1.5,
+                circleStrokeColor: '#FFD700',
+                circleTranslate: [12, 12],
+              }}
+            />
+
+            {/* RATING BADGE TEXT - Rating number */}
+            <SymbolLayer
+              id="rating-badge-text"
+              filter={['all', 
+                ['!', ['has', 'point_count']],
+                ['>', ['get', 'rating'], 0]
+              ]}
+              style={{
+                textField: ['number-format', ['get', 'rating'], { 'max-fraction-digits': 1 }],
+                textSize: 10,
+                textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+                textColor: '#1a1a1a',
+                textAllowOverlap: true,
+                textOffset: [1.2, 1.2],
+              }}
+            />
           </ShapeSource>
         )}
         
