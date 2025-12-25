@@ -17,10 +17,10 @@ import {
   StyleSheet,
   Dimensions,
   TouchableOpacity,
-  Image,
   FlatList,
   Platform,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,7 +92,11 @@ const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) 
     >
       <View style={styles.compactImageContainer}>
         {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.compactImage} resizeMode="cover" />
+          <FastImage 
+            source={{ uri: photoUrl, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
+            style={styles.compactImage}
+            resizeMode={FastImage.resizeMode.cover}
+          />
         ) : (
           <View style={styles.compactPlaceholder}>
             <Text style={styles.compactPlaceholderEmoji}>{categoryEmoji}</Text>
@@ -150,7 +154,11 @@ const FullCard: React.FC<FullCardProps> = ({ item, onPress, isSelected }) => {
       {/* Left: Image */}
       <View style={styles.fullCardImageContainer}>
         {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.fullCardImage} resizeMode="cover" />
+          <FastImage 
+            source={{ uri: photoUrl, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
+            style={styles.fullCardImage}
+            resizeMode={FastImage.resizeMode.cover}
+          />
         ) : (
           <View style={styles.fullCardPlaceholder}>
             <Text style={styles.fullCardPlaceholderEmoji}>{categoryEmoji}</Text>
