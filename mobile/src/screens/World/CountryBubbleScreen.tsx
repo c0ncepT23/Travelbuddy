@@ -40,6 +40,7 @@ import { SavedItem, ItemCategory, SubClusters } from '../../types';
 import { FloatingAIOrb } from '../../components/FloatingAIOrb';
 import { CompactAIChat } from '../../components/CompactAIChat';
 import { GameBottomSheet, GameBottomSheetRef } from '../../components/GameBottomSheet';
+import { PlaceDetailSheet, PlaceDetailSheetRef } from '../../components/PlaceDetailSheet';
 import { PersistentPlacesDrawer, PersistentPlacesDrawerRef } from '../../components/PersistentPlacesDrawer';
 // Removed: FloatingCloud, GlowingBubble, OrbitalBubbles - replaced with Mapbox clusters
 import { useCompanionStore } from '../../stores/companionStore';
@@ -605,6 +606,7 @@ export default function CountryBubbleScreen() {
   const [bottomSheetEmoji, setBottomSheetEmoji] = useState('📍');
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | undefined>(undefined);
   const bottomSheetRef = useRef<GameBottomSheetRef>(null);
+  const placeDetailSheetRef = useRef<PlaceDetailSheetRef>(null);
   const placesDrawerRef = useRef<PersistentPlacesDrawerRef>(null);
   
   // Refs for checking state in callbacks (avoids stale closure issue)
@@ -1263,6 +1265,21 @@ export default function CountryBubbleScreen() {
         Linking.openURL(webUrl);
       }
     });
+  }, []);
+
+  // Mark place as visited (check-in)
+  const handleCheckIn = useCallback(async (place: SavedItem) => {
+    console.log('✅ CHECK-IN! Marking as visited:', place.name);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
+    // TODO: API call to update place status
+    // For now just show feedback
+    // await api.patch(`/api/saved-items/${place.id}`, { status: 'visited' });
+    
+    // Close the bottom sheet after check-in
+    setBottomSheetVisible(false);
+    setSelectedPlace(null);
+    setSelectedPlaceId(undefined);
   }, []);
 
   // Calculate best viewing angle based on place position relative to map center
@@ -1929,21 +1946,34 @@ export default function CountryBubbleScreen() {
         selectedPlaceId={selectedPlaceId}
       />
 
-      {/* Game Bottom Sheet - Places list with HUD mode (for cluster/pin taps) */}
-      <GameBottomSheet
-        ref={bottomSheetRef}
-        items={bottomSheetItems}
-        categoryLabel={bottomSheetLabel}
-        categoryEmoji={bottomSheetEmoji}
-        isVisible={bottomSheetVisible}
+      {/* Game Bottom Sheet - For MULTIPLE places (clusters) */}
+      {bottomSheetItems.length > 1 && (
+        <GameBottomSheet
+          ref={bottomSheetRef}
+          items={bottomSheetItems}
+          categoryLabel={bottomSheetLabel}
+          categoryEmoji={bottomSheetEmoji}
+          isVisible={bottomSheetVisible}
+          onClose={handleBottomSheetClose}
+          onPlaceSelect={handlePlaceSelect}
+          onPlaceScroll={handlePlaceScroll}
+          selectedPlaceId={selectedPlaceId}
+          selectedPlace={selectedPlace}
+          onDirections={openGoogleMaps}
+          onCheckIn={handleCheckIn}
+          onOrbit={triggerOrbit}
+          isOrbiting={isOrbiting}
+        />
+      )}
+
+      {/* Place Detail Sheet - For SINGLE place (Google Maps style with fixed footer) */}
+      <PlaceDetailSheet
+        ref={placeDetailSheetRef}
+        place={bottomSheetItems.length === 1 ? bottomSheetItems[0] : null}
+        isVisible={bottomSheetVisible && bottomSheetItems.length === 1}
         onClose={handleBottomSheetClose}
-        onPlaceSelect={handlePlaceSelect}
-        onPlaceScroll={handlePlaceScroll}
-        selectedPlaceId={selectedPlaceId}
-        selectedPlace={selectedPlace}
         onDirections={openGoogleMaps}
-        onOrbit={triggerOrbit}
-        isOrbiting={isOrbiting}
+        onCheckIn={handleCheckIn}
       />
 
       {/* RE-CENTER BUTTON - Shows when user pans away from hero building */}

@@ -38,6 +38,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SavedItem } from '../types';
+import { getGooglePhotoUrl } from '../config/maps';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -71,7 +72,7 @@ interface PlaceCardProps {
 }
 
 const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected }) => {
-  // Safely get photo URL
+  // Safely get photo URL - handles Google Places photo_reference format
   const photoUrl = useMemo(() => {
     try {
       if (!item?.photos_json) return null;
@@ -79,7 +80,13 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected 
         ? JSON.parse(item.photos_json) 
         : item.photos_json;
       if (Array.isArray(photos) && photos.length > 0) {
-        return photos[0]?.url || (typeof photos[0] === 'string' ? photos[0] : null);
+        const p = photos[0];
+        // Google Places photo_reference format
+        if (p?.photo_reference) return getGooglePhotoUrl(p.photo_reference, 400);
+        // Direct URL
+        if (p?.url) return p.url;
+        if (typeof p === 'string') return p;
+        return null;
       }
       return null;
     } catch {
@@ -145,9 +152,9 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected 
                 <Text style={styles.tagText}>{item.cuisine_type}</Text>
               </View>
             )}
-            {item.tags && Array.isArray(item.tags) && item.tags.slice(0, 2).map((tag: string, i: number) => (
+            {item.tags && Array.isArray(item.tags) && item.tags.slice(0, 2).map((tag: any, i: number) => (
               <View key={i} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
+                <Text style={styles.tagText}>{typeof tag === 'string' ? tag : tag.value}</Text>
               </View>
             ))}
           </View>
@@ -156,9 +163,9 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ item, index, onPress, isSelected 
           {item.description && (
             <View style={styles.creatorInsights}>
               <View style={styles.creatorHeader}>
-                <Ionicons name="chatbubble-outline" size={12} color={COLORS.primaryGlow} />
+                <Ionicons name="bookmark" size={12} color={COLORS.primaryGlow} />
                 <Text style={styles.creatorLabel}>
-                  {item.source_title ? `From ${item.source_title}` : 'Why it\'s special'}
+                  {item.source_title ? `Saved from ${item.source_title}` : 'Why you saved this'}
                 </Text>
               </View>
               <Text style={styles.creatorQuote} numberOfLines={2}>
@@ -260,15 +267,18 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
   // Open animation when visible
   useEffect(() => {
     if (isVisible) {
-      translateY.value = withSpring(SCREEN_HEIGHT - SNAP_POINTS.HALF, {
+      // For single place, snap to EXPANDED so buttons are visible
+      // For multiple places, snap to HALF
+      const targetSnap = items.length === 1 ? SNAP_POINTS.EXPANDED : SNAP_POINTS.HALF;
+      translateY.value = withSpring(SCREEN_HEIGHT - targetSnap, {
         damping: 20,
         stiffness: 150,
       });
-      currentSnapPoint.value = SNAP_POINTS.HALF;
+      currentSnapPoint.value = targetSnap;
     } else {
       translateY.value = withTiming(SCREEN_HEIGHT, { duration: 300 });
     }
-  }, [isVisible]);
+  }, [isVisible, items.length]);
 
   // Stable close handler ref to avoid stale closure in gesture
   const onCloseRef = useRef(onClose);
@@ -485,9 +495,9 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
                   {/* Tags row - visible in peek state */}
                   {selectedPlace.tags && Array.isArray(selectedPlace.tags) && selectedPlace.tags.length > 0 && (
                     <View style={styles.hudTagsRow}>
-                      {selectedPlace.tags.slice(0, 3).map((tag: string, i: number) => (
+                      {selectedPlace.tags.slice(0, 3).map((tag: any, i: number) => (
                         <View key={i} style={styles.hudTag}>
-                          <Text style={styles.hudTagText}>{tag}</Text>
+                          <Text style={styles.hudTagText}>{typeof tag === 'string' ? tag : tag.value}</Text>
                         </View>
                       ))}
                     </View>
@@ -566,39 +576,202 @@ export const GameBottomSheet = forwardRef<GameBottomSheetRef, GameBottomSheetPro
 
           {/* LIST MODE - Header with gesture handler */}
           <GestureDetector gesture={panGesture}>
-              <Animated.View style={styles.sheetHeader}>
+              <Animated.View style={items.length === 1 ? styles.sheetHeaderMinimal : styles.sheetHeader}>
                 <View style={styles.handleIndicator} />
-                <View style={styles.headerContent}>
-                  <View style={styles.headerLeft}>
-                    <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
-                    <View>
-                      <Text style={styles.headerTitle}>{categoryLabel}</Text>
-                      <Text style={styles.headerSubtitle}>{items.length} places</Text>
+                {/* Full header only for multiple items - single place has no header content */}
+                {items.length > 1 && (
+                  <>
+                    <View style={styles.headerContent}>
+                      <View style={styles.headerLeft}>
+                        <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
+                        <View>
+                          <Text style={styles.headerTitle}>{categoryLabel}</Text>
+                          <Text style={styles.headerSubtitle}>{items.length} places</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                        <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+                      </TouchableOpacity>
                     </View>
-                  </View>
-                  <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                    <Ionicons name="close" size={20} color={COLORS.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                {/* Expand/Collapse hint */}
-                <View style={styles.dragHint}>
-                  <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
-                  <Text style={styles.dragHintText}>Drag to expand</Text>
-                </View>
+                    <View style={styles.dragHint}>
+                      <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
+                      <Text style={styles.dragHintText}>Drag to expand</Text>
+                    </View>
+                  </>
+                )}
               </Animated.View>
             </GestureDetector>
 
-            {/* List - scrolls independently */}
-            <FlatList
-              data={items}
-              keyExtractor={(item: SavedItem) => item.id}
-              renderItem={renderItem}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={renderEmpty}
-              nestedScrollEnabled={true}
-              removeClippedSubviews={false}
-            />
+            {/* Single place: Google Maps style detail view */}
+            {items.length === 1 ? (
+              <View style={styles.gmapsDetailContainer}>
+                {/* Scrollable Content */}
+                <ScrollView 
+                  style={styles.gmapsScrollContent}
+                  contentContainerStyle={styles.gmapsScrollContentInner}
+                  showsVerticalScrollIndicator={false}
+                  bounces={true}
+                >
+                  {/* Place Name + Close button row */}
+                  <View style={styles.gmapsHeaderRow}>
+                    <Text style={styles.gmapsPlaceName}>{items[0].name}</Text>
+                    <TouchableOpacity style={styles.gmapsCloseButton} onPress={onClose}>
+                      <Ionicons name="close" size={24} color="#94A3B8" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Rating · Category · Cuisine row */}
+                  <View style={styles.gmapsMetaRow}>
+                    {items[0].rating && (
+                      <>
+                        <Text style={styles.gmapsRating}>
+                          {typeof items[0].rating === 'number' ? items[0].rating.toFixed(1) : items[0].rating}
+                        </Text>
+                        <Ionicons name="star" size={14} color="#FBBF24" />
+                        <Text style={styles.gmapsMetaDot}>·</Text>
+                      </>
+                    )}
+                    {items[0].category && (
+                      <>
+                        <Text style={styles.gmapsMetaText}>{items[0].category}</Text>
+                        {items[0].cuisine_type && <Text style={styles.gmapsMetaDot}>·</Text>}
+                      </>
+                    )}
+                    {items[0].cuisine_type && (
+                      <Text style={styles.gmapsMetaText}>{items[0].cuisine_type}</Text>
+                    )}
+                  </View>
+
+                  {/* Location row */}
+                  <View style={styles.gmapsLocationRow}>
+                    <Ionicons name="location-outline" size={16} color="#64748B" />
+                    <Text style={styles.gmapsLocationText}>
+                      {items[0].area_name || items[0].location_name || 'Unknown location'}
+                    </Text>
+                  </View>
+
+                  {/* Photo Carousel - horizontal scroll */}
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.gmapsPhotoCarousel}
+                    contentContainerStyle={styles.gmapsPhotoCarouselContent}
+                  >
+                    {(() => {
+                      const item = items[0];
+                      let photoUrls: string[] = [];
+                      try {
+                        if (item?.photos_json) {
+                          const parsed = typeof item.photos_json === 'string' 
+                            ? JSON.parse(item.photos_json) 
+                            : item.photos_json;
+                          if (Array.isArray(parsed)) {
+                            // Handle multiple photo formats
+                            photoUrls = parsed.map((p: any) => {
+                              // Direct URL string
+                              if (typeof p === 'string') return p;
+                              // Google Places photo_reference - convert to URL
+                              if (p?.photo_reference) return getGooglePhotoUrl(p.photo_reference, 400);
+                              // Other URL formats
+                              if (p?.url) return p.url;
+                              if (p?.photo_url) return p.photo_url;
+                              if (p?.uri) return p.uri;
+                              return null;
+                            }).filter(Boolean);
+                          }
+                        }
+                      } catch (e) {
+                        console.log('Photo parse error:', e);
+                      }
+                      
+                      if (photoUrls.length === 0) {
+                        return (
+                          <View style={styles.gmapsPhotoPlaceholder}>
+                            <Ionicons name="image-outline" size={40} color="#64748B" />
+                          </View>
+                        );
+                      }
+                      
+                      return photoUrls.slice(0, 5).map((url, i) => (
+                        <Image 
+                          key={i}
+                          source={{ uri: url }} 
+                          style={[
+                            styles.gmapsPhoto,
+                            i === 0 && styles.gmapsPhotoFirst
+                          ]} 
+                          resizeMode="cover" 
+                        />
+                      ));
+                    })()}
+                  </ScrollView>
+
+                  {/* Creator insights - our unique feature */}
+                  {items[0].description && (
+                    <View style={styles.gmapsInsights}>
+                      <View style={styles.gmapsInsightsHeader}>
+                        <Ionicons name="bookmark" size={16} color="#8B5CF6" />
+                        <Text style={styles.gmapsInsightsLabel}>
+                          {items[0].source_title ? `Saved from ${items[0].source_title}` : 'Why you saved this'}
+                        </Text>
+                      </View>
+                      <Text style={styles.gmapsInsightsQuote}>
+                        "{items[0].description}"
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+
+                {/* FIXED Action Buttons at bottom - Google Maps style */}
+                <View style={styles.gmapsFixedActions}>
+                  <TouchableOpacity 
+                    style={styles.gmapsActionButton}
+                    onPress={() => onDirections?.(items[0])}
+                  >
+                    <View style={styles.gmapsActionIconWrap}>
+                      <Ionicons name="navigate" size={20} color="#4285F4" />
+                    </View>
+                    <Text style={styles.gmapsActionText}>Directions</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.gmapsActionButton}
+                    onPress={() => onCheckIn?.(items[0])}
+                  >
+                    <View style={[styles.gmapsActionIconWrap, { backgroundColor: 'rgba(52, 168, 83, 0.15)' }]}>
+                      <Ionicons name="checkmark-circle" size={20} color="#34A853" />
+                    </View>
+                    <Text style={styles.gmapsActionText}>Visited</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.gmapsActionButton}>
+                    <View style={styles.gmapsActionIconWrap}>
+                      <Ionicons name="share-outline" size={20} color="#4285F4" />
+                    </View>
+                    <Text style={styles.gmapsActionText}>Share</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.gmapsActionButton}>
+                    <View style={styles.gmapsActionIconWrap}>
+                      <Ionicons name="bookmark-outline" size={20} color="#4285F4" />
+                    </View>
+                    <Text style={styles.gmapsActionText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              /* Multiple places: List view */
+              <FlatList
+                data={items}
+                keyExtractor={(item: SavedItem) => item.id}
+                renderItem={renderItem}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={renderEmpty}
+                nestedScrollEnabled={true}
+                removeClippedSubviews={false}
+              />
+            )}
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
@@ -675,6 +848,12 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     // Make header taller for easier drag target
     minHeight: 100,
+  },
+  // Minimal header for single place - just drag handle (no content)
+  sheetHeaderMinimal: {
+    paddingTop: 8,
+    paddingBottom: 4,
+    alignItems: 'center',
   },
   dragHint: {
     flexDirection: 'row',
@@ -870,6 +1049,151 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   
+  // ============================================
+  // GOOGLE MAPS STYLE DETAIL VIEW
+  // ============================================
+  gmapsDetailContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  gmapsScrollContent: {
+    flex: 1,
+  },
+  gmapsScrollContentInner: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  gmapsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  gmapsPlaceName: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    flex: 1,
+    marginRight: 12,
+  },
+  gmapsCloseButton: {
+    padding: 4,
+  },
+  gmapsMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  gmapsRating: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginRight: 4,
+  },
+  gmapsMetaDot: {
+    fontSize: 14,
+    color: '#64748B',
+    marginHorizontal: 6,
+  },
+  gmapsMetaText: {
+    fontSize: 14,
+    color: '#94A3B8',
+  },
+  gmapsLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  gmapsLocationText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginLeft: 6,
+  },
+  // Photo carousel
+  gmapsPhotoCarousel: {
+    marginBottom: 16,
+    marginHorizontal: -16, // Full bleed
+  },
+  gmapsPhotoCarouselContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  gmapsPhoto: {
+    width: 200,
+    height: 140,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+  },
+  gmapsPhotoFirst: {
+    width: 260,
+    height: 140,
+  },
+  gmapsPhotoPlaceholder: {
+    width: 260,
+    height: 140,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Creator insights
+  gmapsInsights: {
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5CF6',
+  },
+  gmapsInsightsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  gmapsInsightsLabel: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  gmapsInsightsQuote: {
+    fontSize: 14,
+    color: '#CBD5E1',
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  // Fixed action buttons - Google Maps style (flex, not absolute)
+  gmapsFixedActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+    backgroundColor: COLORS.background,
+  },
+  gmapsActionButton: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 70,
+  },
+  gmapsActionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(66, 133, 244, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  gmapsActionText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  
   // HUD Mode Styles (15% Compact View)
   hudContainer: {
     paddingTop: 8,
@@ -996,3 +1320,4 @@ const styles = StyleSheet.create({
 });
 
 export default GameBottomSheet;
+
