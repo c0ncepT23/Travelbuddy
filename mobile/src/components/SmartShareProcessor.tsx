@@ -15,10 +15,11 @@ import {
   StyleSheet,
   Dimensions,
   Animated,
-  Easing,
+  Easing as RNEasing,
   TouchableOpacity,
 } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
+import { Easing } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { HapticFeedback } from '../utils/haptics';
@@ -99,7 +100,7 @@ const Confetti: React.FC<{ delay: number; x: number }> = ({ delay, x }) => (
       type: 'timing', 
       duration: 2000, 
       delay,
-      easing: Easing.out(Easing.quad),
+      easing: Easing.bezier(0.25, 0.46, 0.45, 0.94), // quad-out, worklet-safe
     }}
     style={[
       styles.confetti,
@@ -155,13 +156,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
         Animated.timing(orbScale, {
           toValue: 1.05,
           duration: 2000,
-          easing: Easing.inOut(Easing.ease),
+          easing: RNEasing.inOut(RNEasing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(orbScale, {
           toValue: 1,
           duration: 2000,
-          easing: Easing.inOut(Easing.ease),
+          easing: RNEasing.inOut(RNEasing.ease),
           useNativeDriver: true,
         }),
       ])
@@ -172,7 +173,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       Animated.timing(orbRotate, {
         toValue: 1,
         duration: 8000,
-        easing: Easing.linear,
+        easing: RNEasing.linear,
         useNativeDriver: true,
       })
     ).start();
@@ -183,13 +184,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
         Animated.timing(ring1Scale, {
           toValue: 1.3,
           duration: 2500,
-          easing: Easing.out(Easing.ease),
+          easing: RNEasing.out(RNEasing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(ring1Opacity, {
           toValue: 0,
           duration: 2500,
-          easing: Easing.out(Easing.ease),
+          easing: RNEasing.out(RNEasing.ease),
           useNativeDriver: true,
         }),
       ])
@@ -202,13 +203,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
           Animated.timing(ring2Scale, {
             toValue: 1.2,
             duration: 2500,
-            easing: Easing.out(Easing.ease),
+            easing: RNEasing.out(RNEasing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(ring2Opacity, {
             toValue: 0,
             duration: 2500,
-            easing: Easing.out(Easing.ease),
+            easing: RNEasing.out(RNEasing.ease),
             useNativeDriver: true,
           }),
         ])
@@ -221,13 +222,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
         Animated.timing(glowOpacity, {
           toValue: 0.6,
           duration: 2000,
-          easing: Easing.inOut(Easing.ease),
+          easing: RNEasing.inOut(RNEasing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(glowOpacity, {
           toValue: 0.3,
           duration: 2000,
-          easing: Easing.inOut(Easing.ease),
+          easing: RNEasing.inOut(RNEasing.ease),
           useNativeDriver: true,
         }),
       ])

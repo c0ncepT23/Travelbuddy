@@ -104,10 +104,35 @@ export class ContentProcessorService {
       throw new Error('Invalid YouTube URL');
     }
 
-    // Strategy 1: Try yt-dlp first (fastest, free)
+    // Strategy 1: Try Apify first (Most reliable in production/Railway)
+    // It handles proxy rotation and bot detection which yt-dlp struggles with in data centers
     try {
-      logger.info(`[ContentProcessor] Fetching video using yt-dlp: ${videoId}`);
+      const { ApifyYoutubeService } = await import('./apifyYoutube.service');
+      
+      if (ApifyYoutubeService.isConfigured()) {
+        logger.info(`[ContentProcessor] Fetching YouTube via Apify: ${videoId}`);
+        const apifyResult = await ApifyYoutubeService.getVideoTranscript(url);
+        
+        if (apifyResult) {
+          logger.info(`[ContentProcessor] Apify success: "${apifyResult.title}"`);
+          return {
+            title: apifyResult.title,
+            description: apifyResult.description || '',
+            transcript: apifyResult.transcript || '',
+            thumbnail_url: apifyResult.thumbnailUrl,
+            thumbnail: apifyResult.thumbnailUrl,
+            channel: apifyResult.channelName,
+          };
+        }
+      }
+    } catch (apifyError: any) {
+      logger.error('[ContentProcessor] Apify error:', apifyError.message);
+      // Fall through to yt-dlp
+    }
 
+    // Strategy 2: Try yt-dlp (Great for local dev, but often blocked on Railway)
+    try {
+      logger.info(`[ContentProcessor] Trying yt-dlp fallback: ${videoId}`);
       const videoData = await YtDlpService.getVideoData(url);
 
       return {
@@ -119,58 +144,10 @@ export class ContentProcessorService {
         channel: videoData.channelName,
       };
     } catch (error: any) {
-      logger.error('[ContentProcessor] yt-dlp error:', error.message);
-      
-      // Check if it's a bot detection error
-      const isBotBlocked = error.message.includes('bot') || error.message.includes('Sign in');
-      
-      if (!isBotBlocked) {
-        throw new Error(`Failed to fetch YouTube video: ${error.message}`);
-      }
-      
-      logger.info('[ContentProcessor] yt-dlp blocked by YouTube, trying Apify...');
+      logger.warn('[ContentProcessor] yt-dlp fallback failed:', error.message);
     }
 
-    // Strategy 2: Try Apify (handles bot detection, extracts transcripts)
-    try {
-      const { ApifyYoutubeService } = await import('./apifyYoutube.service');
-      
-      if (ApifyYoutubeService.isConfigured()) {
-        const apifyResult = await ApifyYoutubeService.getVideoTranscript(url);
-        
-        if (apifyResult && apifyResult.transcript) {
-          logger.info(`[ContentProcessor] Apify success: "${apifyResult.title}" - ${apifyResult.transcript.length} chars`);
-          
-          return {
-            title: apifyResult.title,
-            description: apifyResult.description || '',
-            transcript: apifyResult.transcript,
-            thumbnail_url: apifyResult.thumbnailUrl,
-            thumbnail: apifyResult.thumbnailUrl,
-            channel: apifyResult.channelName,
-          };
-        }
-        
-        // Apify worked but no transcript - still use metadata
-        if (apifyResult) {
-          logger.info(`[ContentProcessor] Apify got metadata but no transcript`);
-          return {
-            title: apifyResult.title,
-            description: apifyResult.description || '',
-            transcript: '', // Will trigger video analysis
-            thumbnail_url: apifyResult.thumbnailUrl,
-            thumbnail: apifyResult.thumbnailUrl,
-            channel: apifyResult.channelName,
-          };
-        }
-      } else {
-        logger.warn('[ContentProcessor] Apify not configured, skipping');
-      }
-    } catch (apifyError: any) {
-      logger.error('[ContentProcessor] Apify fallback error:', apifyError.message);
-    }
-
-    // Strategy 3: Final fallback to oEmbed (always works, no transcript)
+    // Strategy 3: Final fallback to oEmbed (Always works for metadata, but NO transcript)
     logger.info('[ContentProcessor] Falling back to oEmbed API');
     return await this.fetchYouTubeWithOembed(videoId);
   }
