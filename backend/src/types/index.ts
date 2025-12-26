@@ -177,6 +177,21 @@ export interface DiscoveryIntent {
   confidence_score: number;
 }
 
+export interface ScoutIntentRecord {
+  id: string;
+  trip_group_id: string;
+  user_id: string;
+  intent_type: DiscoveryIntentType;
+  item: string;
+  city: string;
+  vibe?: string;
+  scout_query?: string;
+  status: 'active' | 'resolved' | 'dismissed';
+  scout_results: any[];
+  created_at: Date;
+  updated_at: Date;
+}
+
 export interface ProcessedContent {
   name: string;
   category: ItemCategory;

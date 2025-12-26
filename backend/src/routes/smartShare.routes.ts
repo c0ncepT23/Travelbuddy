@@ -40,5 +40,25 @@ router.post(
  */
 router.get('/trips', SmartShareController.getCountryTrips);
 
+/**
+ * GET /api/share/scouts/:tripId
+ * 
+ * Get active scouts for a trip
+ */
+router.get('/scouts/:tripId', SmartShareController.getActiveScouts);
+
+/**
+ * PATCH /api/share/scouts/:scoutId/status
+ * 
+ * Update scout status (resolve/dismiss)
+ */
+router.patch(
+  '/scouts/:scoutId/status',
+  validate([
+    body('status').isIn(['active', 'resolved', 'dismissed']).withMessage('Invalid status'),
+  ]),
+  SmartShareController.updateScoutStatus
+);
+
 export default router;
 

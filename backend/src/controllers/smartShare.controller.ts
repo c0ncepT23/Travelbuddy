@@ -15,6 +15,7 @@ import { AuthRequest, DiscoveryIntent } from '../types';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripGroup } from '../types';
 import { SavedItemModel } from '../models/savedItem.model';
+import { ScoutIntentModel } from '../models/scoutIntent.model';
 import { ContentProcessorService } from '../services/contentProcessor.service';
 import { TravelAgent } from '../agents/travelAgent';
 import { ScoutService, ScoutResult } from '../services/scout.service';
@@ -41,6 +42,7 @@ interface ProcessResult {
   }>;
   discovery_intent?: DiscoveryIntent;
   scout_results?: ScoutResult[];
+  scout_id?: string;
 }
 
 export class SmartShareController {
@@ -106,6 +108,28 @@ export class SmartShareController {
         // Trigger Scout Service
         const scoutResults = await ScoutService.scout(extractionResult.discovery_intent);
         
+        // PERSIST the scout intent so it's not lost
+        let scoutId: string | undefined;
+        try {
+          const scoutRecord = await ScoutIntentModel.create(
+            trip.id,
+            userId,
+            {
+              type: extractionResult.discovery_intent.type,
+              item: extractionResult.discovery_intent.item,
+              city: extractionResult.discovery_intent.city,
+              vibe: extractionResult.discovery_intent.vibe,
+              scout_query: extractionResult.discovery_intent.scout_query,
+            },
+            scoutResults
+          );
+          scoutId = scoutRecord.id;
+          logger.info(`✅ [SmartShare] Persistent scout intent saved for ${extractionResult.discovery_intent.item}`);
+        } catch (dbError) {
+          logger.error(`❌ [SmartShare] Failed to save persistent scout intent:`, dbError);
+          // Don't fail the request, just log it
+        }
+        
         res.status(200).json({
           success: true,
           tripId: trip.id,
@@ -116,7 +140,8 @@ export class SmartShareController {
           placesExtracted: 0,
           places: [],
           discovery_intent: extractionResult.discovery_intent,
-          scout_results: scoutResults
+          scout_results: scoutResults,
+          scout_id: scoutId
         });
         return;
       }
@@ -301,6 +326,67 @@ export class SmartShareController {
     } catch (error: any) {
       logger.error(`❌ [SmartShare] Error fetching trips:`, error);
       res.status(500).json({ success: false, error: 'Failed to fetch trips' });
+    }
+  }
+
+  /**
+   * Get active scouts for a trip
+   */
+  static async getActiveScouts(req: AuthRequest, res: Response): Promise<void> {
+    const { tripId } = req.params;
+
+    if (!tripId) {
+      res.status(400).json({ success: false, error: 'Trip ID is required' });
+      return;
+    }
+
+    try {
+      const scouts = await ScoutIntentModel.findActiveByTrip(tripId);
+      res.status(200).json({
+        success: true,
+        scouts: scouts.map(s => ({
+          id: s.id,
+          intent: {
+            type: s.intent_type,
+            item: s.item,
+            city: s.city,
+            vibe: s.vibe,
+            scout_query: s.scout_query,
+          },
+          status: s.status,
+          results: s.scout_results,
+          created_at: s.created_at,
+        }))
+      });
+    } catch (error: any) {
+      logger.error(`❌ [SmartShare] Error fetching active scouts:`, error);
+      res.status(500).json({ success: false, error: 'Failed to fetch scouts' });
+    }
+  }
+
+  /**
+   * Update scout status (resolve/dismiss)
+   */
+  static async updateScoutStatus(req: AuthRequest, res: Response): Promise<void> {
+    const { scoutId } = req.params;
+    const { status } = req.body;
+
+    if (!scoutId || !status) {
+      res.status(400).json({ success: false, error: 'Scout ID and status are required' });
+      return;
+    }
+
+    if (!['active', 'resolved', 'dismissed'].includes(status)) {
+      res.status(400).json({ success: false, error: 'Invalid status' });
+      return;
+    }
+
+    try {
+      await ScoutIntentModel.updateStatus(scoutId, status);
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      logger.error(`❌ [SmartShare] Error updating scout status:`, error);
+      res.status(500).json({ success: false, error: 'Failed to update scout status' });
     }
   }
 }
