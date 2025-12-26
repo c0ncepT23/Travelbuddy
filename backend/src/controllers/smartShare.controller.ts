@@ -130,7 +130,7 @@ export class SmartShareController {
             if (duplicateCheck.isDuplicate) {
               logger.info(`⏭️ [SmartShare] Skipping duplicate: ${place.name}`);
               // Add existing item to result so user knows it's there
-              const existingItem = duplicates.find(d => d.id === duplicateCheck.duplicateId) || duplicates[0];
+              const existingItem = duplicateCheck.matchedItem || duplicates[0];
               savedPlaces.push({
                 id: existingItem.id,
                 name: existingItem.name,
