@@ -233,6 +233,8 @@ export default function App() {
         tripId: result.tripId,
         countryName: result.destinationCountry || result.destination || 'Unknown',
         discoveryIntent: result.discovery_intent,
+        scoutResults: result.scout_results,
+        scoutId: result.scout_id,
       });
     }
   };

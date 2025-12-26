@@ -48,6 +48,7 @@ import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 
 import { SkeletonLoader } from '../../components/SkeletonLoader';
+import { ScoutCarousel, ScoutResult } from '../../components/ScoutCarousel';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -633,6 +634,8 @@ export default function CountryBubbleScreen() {
   // NEW: Discovery Intent (Scout Mode)
   const [discoveryIntent, setDiscoveryIntent] = useState<any>((params as any).discoveryIntent || null);
   const [scoutResults, setScoutResults] = useState<any[]>((params as any).scoutResults || []);
+  const [scoutId, setScoutId] = useState<string | null>((params as any).scoutId || null);
+  const [isScoutCarouselVisible, setIsScoutCarouselVisible] = useState(false);
   
   // Category filter state (for chip filtering)
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilterType>('all');
@@ -796,6 +799,56 @@ export default function CountryBubbleScreen() {
     }
   }, [tripId]);
 
+  const handleScoutSelect = async (scout: ScoutResult) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      setIsScoutCarouselVisible(false);
+      setIsLoading(true);
+
+      // Save the scouted place to the trip
+      const response = await api.post(`/trips/${tripId}/items`, {
+        name: scout.name,
+        category: 'food', // Default to food for now, scout results usually have more detail
+        description: scout.generative_summary || `Found via AI scouting for ${discoveryIntent?.item}`,
+        locationName: scout.address,
+        locationLat: scout.location.lat,
+        locationLng: scout.location.lng,
+        googlePlaceId: scout.place_id,
+        rating: scout.rating,
+        userRatingsTotal: scout.user_rating_count,
+        photosJson: scout.photos,
+        cuisineType: discoveryIntent?.type === 'CULINARY_GOAL' ? discoveryIntent.item : undefined,
+        destination: discoveryIntent?.city,
+        sourceTitle: `AI Scout: ${discoveryIntent?.item}`,
+        originalSourceType: 'web',
+      });
+
+      if (response.data) {
+        // Mark the scout intent as resolved if we have an ID
+        if (scoutId) {
+          try {
+            await api.patch(`/share/scouts/${scoutId}/status`, { status: 'resolved' });
+            setDiscoveryIntent(null);
+            setScoutId(null);
+          } catch (e) {
+            console.error('[Scout] Failed to resolve scout status:', e);
+          }
+        }
+
+        // Refresh items
+        await fetchItems();
+        
+        // Show success
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Error saving scouted place:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const fetchItems = async () => {
     if (!tripId) {
       setIsLoading(false);
@@ -834,6 +887,21 @@ export default function CountryBubbleScreen() {
         setSubClusters(clustersResponse.data.data || clustersResponse.data);
       } catch (e) {
         setSubClusters(null);
+      }
+
+      // Also fetch active scouts for this trip
+      try {
+        const scoutsResponse = await api.get(`/share/scouts/${tripId}`);
+        if (scoutsResponse.data.success && scoutsResponse.data.scouts?.length > 0) {
+          // For now, let's just use the most recent active scout
+          const activeScout = scoutsResponse.data.scouts[0];
+          setDiscoveryIntent(activeScout.intent);
+          setScoutResults(activeScout.results || []);
+          setScoutId(activeScout.id);
+          console.log(`🔍 [Scout] Loaded active scout: ${activeScout.intent.item}`);
+        }
+      } catch (scoutError) {
+        console.error('Error fetching active scouts:', scoutError);
       }
     } catch (error) {
       console.error('[CountryBubbles] Fetch error:', error);
@@ -1972,6 +2040,10 @@ export default function CountryBubbleScreen() {
           <ShapeSource
             id="discovery-intent-source"
             shape={discoveryGeoJSON}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setIsScoutCarouselVisible(true);
+            }}
           >
             <CircleLayer
               id="ghost-pin-outer"
@@ -2225,6 +2297,26 @@ export default function CountryBubbleScreen() {
         isTyping={isAITyping || companionLoading}
         suggestions={dynamicSuggestions}
       />
+
+      {/* Scout Carousel Overlay */}
+      {isScoutCarouselVisible && scoutResults.length > 0 && (
+        <View style={styles.scoutOverlay}>
+          <TouchableOpacity 
+            style={styles.scoutOverlayBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setIsScoutCarouselVisible(false)} 
+          />
+          <View style={styles.scoutOverlayContent}>
+            <ScoutCarousel
+              scouts={scoutResults}
+              intentItem={discoveryIntent?.item}
+              intentCity={discoveryIntent?.city}
+              onSelect={handleScoutSelect}
+              onClose={() => setIsScoutCarouselVisible(false)}
+            />
+          </View>
+        </View>
+      )}
 
       {/* Skeleton Loading State */}
       {isLoading && (
@@ -2578,4 +2670,27 @@ const styles = StyleSheet.create({
   },
   
   loadingText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', marginTop: 16 },
+
+  // Scout Overlay Styles
+  scoutOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    justifyContent: 'flex-end',
+  },
+  scoutOverlayBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 10, 26, 0.7)',
+  },
+  scoutOverlayContent: {
+    backgroundColor: '#17191F',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+  },
 });
