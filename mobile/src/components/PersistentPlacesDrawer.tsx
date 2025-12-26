@@ -254,6 +254,8 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   // Pan gesture for dragging
   const panGesture = Gesture.Pan()
+    .activeOffsetY([-10, 10]) // Only trigger if vertical movement > 10px
+    .failOffsetX([-20, 20])   // Fail if horizontal movement > 20px (let horizontal list work)
     .onStart(() => {
       'worklet';
       context.value = { y: translateY.value };
@@ -525,7 +527,7 @@ const styles = StyleSheet.create({
   },
   peekList: {
     paddingHorizontal: 16,
-    gap: 12,
+    height: 120, // Explicit height for peek mode scroll
   },
   
   // Compact card (peek mode)

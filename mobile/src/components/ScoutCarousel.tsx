@@ -77,8 +77,9 @@ export const ScoutCarousel: React.FC<ScoutCarouselProps> = ({
         contentContainerStyle={styles.scoutList}
         snapToInterval={260}
         decelerationRate="fast"
-        nestedScrollEnabled
-        scrollEnabled
+        scrollEventThrottle={16}
+        bounces={true}
+        removeClippedSubviews={false} // Prevents disappearing items during scroll
       />
     </MotiView>
   );
@@ -136,6 +137,7 @@ const styles = StyleSheet.create({
   scoutSection: {
     width: SCREEN_WIDTH,
     marginTop: 20,
+    minHeight: 320, // Ensure enough height for the entire section
   },
   header: {
     flexDirection: 'row',
@@ -165,9 +167,11 @@ const styles = StyleSheet.create({
   scoutList: {
     paddingHorizontal: 20,
     paddingBottom: 20,
+    height: 220, // Explicit height for the horizontal list
   },
   scoutCard: {
     width: 240,
+    height: 200, // Explicit height for the card
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 20,
     marginRight: 20,

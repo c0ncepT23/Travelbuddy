@@ -1039,12 +1039,37 @@ export default function CountryBubbleScreen() {
   const discoveryGeoJSON = useMemo(() => {
     if (!discoveryIntent?.city) return null;
     
-    // Find city coordinates
-    const cityKey = discoveryIntent.city.toLowerCase().replace(/\s+/g, '');
+    // Find city coordinates - robust lookup
+    const searchCity = discoveryIntent.city.toLowerCase().trim();
     const countryKey = getCountryKey(countryName);
-    const cityData = CITY_COORDS[countryKey]?.[cityKey];
+    const countryCities = CITY_COORDS[countryKey] || {};
     
-    if (!cityData) return null;
+    let cityData: CityCoords | null = null;
+    
+    // 1. Try direct key match (e.g. "seoul")
+    const cityKey = searchCity.replace(/\s+/g, '');
+    if (countryCities[cityKey]) {
+      cityData = countryCities[cityKey];
+    } else {
+      // 2. Try alias match (e.g. "jeju island" -> "jeju")
+      for (const [key, data] of Object.entries(countryCities)) {
+        const matchFound = 
+          key === searchCity || 
+          data.aliases?.some(alias => searchCity.includes(alias.toLowerCase()) || alias.toLowerCase().includes(searchCity));
+        
+        if (matchFound) {
+          cityData = data;
+          break;
+        }
+      }
+    }
+    
+    if (!cityData) {
+      console.warn(`⚠️ [Scout] Map couldn't find coordinates for city: "${discoveryIntent.city}" in ${countryName}`);
+      return null;
+    }
+
+    console.log(`📍 [Scout] Ghost Pin location found: ${discoveryIntent.city} at [${cityData.longitude}, ${cityData.latitude}]`);
     
     return {
       type: 'FeatureCollection' as const,
@@ -2035,7 +2060,7 @@ export default function CountryBubbleScreen() {
           </ShapeSource>
         )}
 
-        {/* GHOST PIN (Discovery Intent) - Pulsing city center match */}
+        {/* GHOST PIN (Discovery Intent) - AI SONAR RADAR */}
         {discoveryGeoJSON && (
           <ShapeSource
             id="discovery-intent-source"
@@ -2045,41 +2070,88 @@ export default function CountryBubbleScreen() {
               setIsScoutCarouselVisible(true);
             }}
           >
+            {/* Outer Sonar Ripple 1 */}
             <CircleLayer
-              id="ghost-pin-outer"
+              id="ghost-pin-ripple-1"
               style={{
                 circleRadius: [
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 40,
-                  12, 60,
-                  16, 80
+                  8, 50,
+                  12, 80,
+                  16, 120
                 ],
                 circleColor: '#06B6D4',
-                circleOpacity: 0.2,
-                circleBlur: 0.8,
+                circleOpacity: 0.15,
+                circleBlur: 0.5,
               }}
             />
+            {/* Inner Sonar Ripple 2 */}
             <CircleLayer
-              id="ghost-pin-inner"
+              id="ghost-pin-ripple-2"
               style={{
-                circleRadius: 12,
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 25,
+                  12, 40,
+                  16, 60
+                ],
+                circleColor: '#22D3EE',
+                circleOpacity: 0.2,
+              }}
+            />
+            {/* Core Scanner Ring */}
+            <CircleLayer
+              id="ghost-pin-core"
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 12,
+                  12, 16,
+                  16, 20
+                ],
                 circleColor: '#06B6D4',
                 circleStrokeWidth: 3,
                 circleStrokeColor: '#FFFFFF',
+                circlePitchAlignment: 'map',
+              }}
+            />
+            {/* AI Search Icon */}
+            <SymbolLayer
+              id="ghost-pin-icon"
+              style={{
+                textField: '✨',
+                textSize: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 14,
+                  12, 18,
+                  16, 22
+                ],
+                textColor: '#FFFFFF',
+                textHaloColor: 'rgba(6, 182, 212, 0.8)',
+                textHaloWidth: 2,
               }}
             />
             <SymbolLayer
               id="ghost-pin-label"
               style={{
                 textField: ['get', 'name'],
-                textSize: 14,
-                textColor: '#FFFFFF',
+                textSize: 13,
+                textColor: '#06B6D4',
                 textHaloColor: 'rgba(10, 10, 26, 0.9)',
                 textHaloWidth: 2,
-                textOffset: [0, 2],
+                textOffset: [0, 2.5],
                 textAnchor: 'top',
+                textTransform: 'uppercase',
+                textLetterSpacing: 1,
+                fontWeight: '800',
               }}
             />
           </ShapeSource>
@@ -2676,6 +2748,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
     justifyContent: 'flex-end',
+    pointerEvents: 'box-none', // Ensure map stays interactive while carousel is open
   },
   scoutOverlayBackdrop: {
     ...StyleSheet.absoluteFillObject,
