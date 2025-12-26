@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -74,6 +74,26 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
   const navigationRef = React.useRef<any>(null);
+  const processedUrlsRef = useRef<Set<string>>(new Set());
+
+  // Centralized handler for shared URLs to prevent double-processing
+  const handleIncomingUrl = useCallback((url: string, source: string) => {
+    if (!isAuthenticated) return;
+    
+    const sharedUrl = extractSharedUrl(url) || (isSocialLink(url) ? url : null);
+    
+    if (sharedUrl) {
+      if (processedUrlsRef.current.has(sharedUrl)) {
+        console.log(`[App] ⏭️ Skipping already processed URL from ${source}:`, sharedUrl);
+        return;
+      }
+      
+      console.log(`[App] ✅ Triggering processing for URL from ${source}:`, sharedUrl);
+      processedUrlsRef.current.add(sharedUrl);
+      setSharedContent({ type: 'url', data: sharedUrl });
+      setShowShareModal(true);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const prepare = async () => {
@@ -134,59 +154,24 @@ export default function App() {
   useEffect(() => {
     const handleShareIntent = async () => {
       try {
-        console.log('[App] handleShareIntent started');
-        
         // On Android, use our native module to get the shared URL
         if (Platform.OS === 'android' && ShareIntentModule) {
           try {
             const nativeSharedUrl = await ShareIntentModule.getSharedUrl();
-            console.log('[App] Native shared URL:', nativeSharedUrl);
-            
             if (nativeSharedUrl) {
-              // Clear it so we don't process it again
               ShareIntentModule.clearSharedUrl();
-              
-              // Process the shared URL - show beautiful AI processor!
-              if (isSocialLink(nativeSharedUrl)) {
-                console.log('[App] ✅ Processing shared URL from native module:', nativeSharedUrl);
-                setSharedContent({ type: 'url', data: nativeSharedUrl });
-                setShowShareModal(true);
-                return;
-              }
+              handleIncomingUrl(nativeSharedUrl, 'NativeModule');
+              return;
             }
           } catch (nativeErr) {
-            console.log('[App] Native module error (expected on iOS):', nativeErr);
+            console.log('[App] Native module error:', nativeErr);
           }
         }
         
-        // Fallback: Check Linking API (works for deep links)
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const initialUrl = await Linking.getInitialURL();
-          console.log(`[App] Linking URL check #${attempt + 1}:`, initialUrl);
-          
-          if (initialUrl) {
-            // Check if it's our custom share deep link
-            const extractedUrl = extractSharedUrl(initialUrl);
-            if (extractedUrl) {
-              console.log('[App] ✅ Extracted shared URL:', extractedUrl);
-              setSharedContent({ type: 'url', data: extractedUrl });
-              setShowShareModal(true);
-              return;
-            }
-            
-            // Direct social link check (fallback)
-            if (isSocialLink(initialUrl) && !initialUrl.includes('travelagent.app/join')) {
-              console.log('[App] ✅ Direct social link:', initialUrl);
-              setSharedContent({ type: 'url', data: initialUrl });
-              setShowShareModal(true);
-              return;
-            }
-          }
-          
-          // Wait before next attempt
-          if (attempt < 2) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
+        // Fallback: Check Linking API
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          handleIncomingUrl(initialUrl, 'InitialURL');
         }
       } catch (err) {
         console.error('[App] Share intent error:', err);
@@ -196,59 +181,30 @@ export default function App() {
     if (isReady && isAuthenticated) {
       handleShareIntent();
     }
-  }, [isReady, isAuthenticated]);
+  }, [isReady, isAuthenticated, handleIncomingUrl]);
 
   // Listen for incoming shared links while app is running (Expo Linking)
   useEffect(() => {
     const subscription = Linking.addEventListener('url', (event) => {
-      const url = event.url;
-      console.log('[App] URL event:', url);
-      
-      // Check if it's our custom share deep link
-      const extractedUrl = extractSharedUrl(url);
-      if (extractedUrl) {
-        console.log('[App] Extracted shared URL from event:', extractedUrl);
-        setSharedContent({ type: 'url', data: extractedUrl });
-        if (isAuthenticated) {
-          setShowShareModal(true);
-        }
-        return;
-      }
-      
-      // Direct social link check (fallback)
-      if (isSocialLink(url) && !url.includes('travelagent.app/join')) {
-        console.log('[App] Received shared URL:', url);
-        setSharedContent({ type: 'url', data: url });
-        if (isAuthenticated) {
-          setShowShareModal(true);
-        }
-      }
+      handleIncomingUrl(event.url, 'LinkingEvent');
     });
 
     return () => subscription.remove();
-  }, [isAuthenticated]);
+  }, [handleIncomingUrl]);
 
   // Listen for share intent events from native Android module (when app is already open)
   useEffect(() => {
     if (!shareIntentEmitter || !isAuthenticated) return;
 
     const subscription = shareIntentEmitter.addListener('onShareIntent', (url: string) => {
-      console.log('[App] Native share intent event:', url);
-      
-      if (url && isSocialLink(url)) {
-        // Clear the stored URL
-        if (ShareIntentModule) {
-          ShareIntentModule.clearSharedUrl();
-        }
-        
-        // Show beautiful AI processor!
-        setSharedContent({ type: 'url', data: url });
-        setShowShareModal(true);
+      if (url) {
+        if (ShareIntentModule) ShareIntentModule.clearSharedUrl();
+        handleIncomingUrl(url, 'NativeEvent');
       }
     });
 
     return () => subscription.remove();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleIncomingUrl]);
 
   const handleShareComplete = (result: any) => {
     setShowShareModal(false);
@@ -530,7 +486,7 @@ export default function App() {
                 <Stack.Screen
                   name="Profile"
                   component={ProfileScreen}
-                  options={{ title: 'Profile' }}
+                  options={{ headerShown: false }}
                 />
                 <Stack.Screen
                   name="ItinerarySetup"

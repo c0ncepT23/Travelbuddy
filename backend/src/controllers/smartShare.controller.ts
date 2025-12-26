@@ -16,6 +16,7 @@ import { TripGroupModel } from '../models/tripGroup.model';
 import { TripGroup } from '../types';
 import { SavedItemModel } from '../models/savedItem.model';
 import { ContentProcessorService } from '../services/contentProcessor.service';
+import { TravelAgent } from '../agents/travelAgent';
 import logger from '../config/logger';
 
 interface ProcessResult {
@@ -112,6 +113,39 @@ export class SmartShareController {
       
       for (const place of extractionResult.places) {
         try {
+          // Check for existing duplicates in this trip
+          const duplicates = await SavedItemModel.findDuplicates(
+            trip.id,
+            place.name,
+            place.location_name
+          );
+
+          if (duplicates.length > 0) {
+            // Use AI to check if it's truly a duplicate
+            const duplicateCheck = await TravelAgent.checkDuplicates(
+              place.name,
+              duplicates.map((d) => ({ name: d.name, id: d.id }))
+            );
+
+            if (duplicateCheck.isDuplicate) {
+              logger.info(`⏭️ [SmartShare] Skipping duplicate: ${place.name}`);
+              // Add existing item to result so user knows it's there
+              const existingItem = duplicates.find(d => d.id === duplicateCheck.duplicateId) || duplicates[0];
+              savedPlaces.push({
+                id: existingItem.id,
+                name: existingItem.name,
+                category: existingItem.category,
+                description: existingItem.description || '',
+                cuisine_type: (existingItem as any).cuisine_type,
+                place_type: (existingItem as any).place_type,
+                location_lat: existingItem.location_lat,
+                location_lng: existingItem.location_lng,
+                rating: existingItem.rating,
+              });
+              continue;
+            }
+          }
+
           const savedItem = await SavedItemModel.create(
             trip.id,                                    // tripGroupId
             userId,                                     // addedBy
