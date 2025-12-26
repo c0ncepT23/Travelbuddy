@@ -451,27 +451,6 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
         </MotiView>
       )}
       
-      {/* Country count badge */}
-      {countries.length > 0 && !selectedCountry && (
-        <MotiView
-          from={{ opacity: 0, translateY: -20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'spring', delay: 300 }}
-          style={styles.countBadge}
-        >
-          <LinearGradient
-            colors={[COLORS.primaryGlow + '30', COLORS.secondaryGlow + '30']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.countBadgeGradient}
-          >
-            <Text style={styles.countText}>
-              ✨ {countries.length} {countries.length === 1 ? 'destination' : 'destinations'} saved
-            </Text>
-          </LinearGradient>
-        </MotiView>
-      )}
-      
       {/* Tap instruction hint */}
       {showHint && !selectedCountry && countries.length > 0 && (
         <MotiView
@@ -569,24 +548,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
-  },
-  countBadge: {
-    position: 'absolute',
-    top: 120,
-    alignSelf: 'center',
-    zIndex: 15,
-  },
-  countBadgeGradient: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.primaryGlow + '50',
-  },
-  countText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '700',
   },
   hintOverlay: {
     position: 'absolute',
