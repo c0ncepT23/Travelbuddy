@@ -17,9 +17,9 @@ import {
   StyleSheet,
   Dimensions,
   TouchableOpacity,
-  FlatList,
   Platform,
 } from 'react-native';
+import { FlatList } from 'react-native-gesture-handler';
 import FastImage from 'react-native-fast-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,7 +32,7 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { SavedItem } from '../types';
 import * as Haptics from 'expo-haptics';
 import { getPlacePhotoUrl } from '../config/maps';
@@ -384,59 +384,59 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
       </View>
 
       {/* Draggable Header */}
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={styles.header}>
-            <View style={styles.handleIndicator} />
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
-                <View>
-                  <Text style={styles.headerTitle}>{categoryLabel}</Text>
-                  <Text style={styles.headerSubtitle}>
-                    {items.length} {items.length === 1 ? 'place' : 'places'} in view
-                  </Text>
-                </View>
-              </View>
-              <View style={[styles.countBadge, { backgroundColor: categoryColor }]}>
-                <Text style={styles.countBadgeText}>{items.length}</Text>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={styles.header}>
+          <View style={styles.handleIndicator} />
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.headerEmoji}>{categoryEmoji}</Text>
+              <View>
+                <Text style={styles.headerTitle}>{categoryLabel}</Text>
+                <Text style={styles.headerSubtitle}>
+                  {items.length} {items.length === 1 ? 'place' : 'places'} in view
+                </Text>
               </View>
             </View>
-          </Animated.View>
-        </GestureDetector>
-
-        {/* PEEK MODE: Horizontal scroll of compact cards */}
-        <Animated.View style={[styles.peekContent, peekContentOpacity]} pointerEvents={isPeekMode ? 'auto' : 'none'}>
-          {items.length > 0 ? (
-            <FlatList
-              data={items.slice(0, 10)} // Limit to 10 for peek mode
-              keyExtractor={(item) => item.id}
-              renderItem={renderCompactItem}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.peekList}
-              snapToInterval={88}
-              decelerationRate="fast"
-            />
-          ) : (
-            <View style={styles.peekEmptyContainer}>
-              <Text style={styles.peekEmptyText}>🗺️ Pan or zoom out to discover places</Text>
+            <View style={[styles.countBadge, { backgroundColor: categoryColor }]}>
+              <Text style={styles.countBadgeText}>{items.length}</Text>
             </View>
-          )}
+          </View>
         </Animated.View>
+      </GestureDetector>
 
-        {/* HALF/FULL MODE: Vertical list */}
-        <Animated.View style={[styles.listContent, listContentOpacity]} pointerEvents={isPeekMode ? 'none' : 'auto'}>
+      {/* PEEK MODE: Horizontal scroll of compact cards */}
+      <Animated.View style={[styles.peekContent, peekContentOpacity]} pointerEvents={isPeekMode ? 'auto' : 'none'}>
+        {items.length > 0 ? (
           <FlatList
-            data={items}
+            data={items.slice(0, 10)} // Limit to 10 for peek mode
             keyExtractor={(item) => item.id}
-            renderItem={renderFullItem}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.fullList}
-            ListEmptyComponent={renderEmpty}
+            renderItem={renderCompactItem}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.peekList}
+            snapToInterval={88}
+            decelerationRate="fast"
+            nestedScrollEnabled={true}
+            scrollEnabled={true}
           />
-        </Animated.View>
-      </GestureHandlerRootView>
+        ) : (
+          <View style={styles.peekEmptyContainer}>
+            <Text style={styles.peekEmptyText}>🗺️ Pan or zoom out to discover places</Text>
+          </View>
+        )}
+      </Animated.View>
+
+      {/* HALF/FULL MODE: Vertical list */}
+      <Animated.View style={[styles.listContent, listContentOpacity]} pointerEvents={isPeekMode ? 'none' : 'auto'}>
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          renderItem={renderFullItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.fullList}
+          ListEmptyComponent={renderEmpty}
+        />
+      </Animated.View>
     </Animated.View>
   );
 });

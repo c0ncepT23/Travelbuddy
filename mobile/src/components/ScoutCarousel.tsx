@@ -4,9 +4,9 @@ import {
   Text, 
   StyleSheet, 
   Dimensions, 
-  TouchableOpacity, 
-  FlatList 
+  TouchableOpacity 
 } from 'react-native';
+import { FlatList } from 'react-native-gesture-handler';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,7 +79,9 @@ export const ScoutCarousel: React.FC<ScoutCarouselProps> = ({
         decelerationRate="fast"
         scrollEventThrottle={16}
         bounces={true}
-        removeClippedSubviews={false} // Prevents disappearing items during scroll
+        removeClippedSubviews={false}
+        nestedScrollEnabled={true}
+        scrollEnabled={true}
       />
     </MotiView>
   );

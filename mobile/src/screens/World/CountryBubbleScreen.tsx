@@ -28,6 +28,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
+import { BlurView } from 'expo-blur';
 import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, SymbolLayer, Images } from '@rnmapbox/maps';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
@@ -1884,14 +1885,14 @@ export default function CountryBubbleScreen() {
                   10, 55,
                   50, 85
                 ],
-                circleColor: '#06B6D4', // Electric Cyan
-                circleBlur: 0.8,
+                circleColor: '#6366F1', // Indigo/Purple for clusters (Radar density)
+                circleBlur: 0.9,
                 circleOpacity: [
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 0.6,
-                  13, 0.3,
+                  8, 0.5,
+                  13, 0.2,
                   15, 0 // Fade out as we zoom in
                 ],
               }}
@@ -2070,40 +2071,60 @@ export default function CountryBubbleScreen() {
               setIsScoutCarouselVisible(true);
             }}
           >
-            {/* Outer Sonar Ripple 1 */}
+            {/* Outer Sonar Ripple 1 (Electric Magenta Glow) */}
             <CircleLayer
-              id="ghost-pin-ripple-1"
+              id="ghost-pin-glow-outer"
               style={{
                 circleRadius: [
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 50,
-                  12, 80,
-                  16, 120
+                  5, 80,
+                  10, 120,
+                  14, 180
                 ],
-                circleColor: '#06B6D4',
+                circleColor: '#FF00FF', // Electric Magenta
                 circleOpacity: 0.15,
-                circleBlur: 0.5,
+                circleBlur: 0.8,
               }}
             />
-            {/* Inner Sonar Ripple 2 */}
+            {/* Middle Glow (Electric Cyan) */}
             <CircleLayer
-              id="ghost-pin-ripple-2"
+              id="ghost-pin-glow-mid"
               style={{
                 circleRadius: [
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 25,
-                  12, 40,
-                  16, 60
+                  5, 40,
+                  10, 70,
+                  14, 110
                 ],
-                circleColor: '#22D3EE',
-                circleOpacity: 0.2,
+                circleColor: '#00FFFF',
+                circleOpacity: 0.3,
+                circleBlur: 0.4,
               }}
             />
             {/* Core Scanner Ring */}
+            <CircleLayer
+              id="ghost-pin-ring"
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5, 20,
+                  10, 32,
+                  14, 48
+                ],
+                circleColor: '#FFFFFF',
+                circleOpacity: 0.5,
+                circleStrokeWidth: 2,
+                circleStrokeColor: '#00FFFF',
+              }}
+            />
+            {/* Solid Center */}
+            {/* Solid Center - White & Magenta */}
             <CircleLayer
               id="ghost-pin-core"
               style={{
@@ -2111,47 +2132,64 @@ export default function CountryBubbleScreen() {
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 12,
-                  12, 16,
-                  16, 20
+                  5, 12,
+                  10, 18,
+                  14, 24
                 ],
-                circleColor: '#06B6D4',
-                circleStrokeWidth: 3,
-                circleStrokeColor: '#FFFFFF',
-                circlePitchAlignment: 'map',
+                circleColor: '#FFFFFF',
+                circleStrokeWidth: 4,
+                circleStrokeColor: '#FF00FF',
               }}
             />
-            {/* AI Search Icon */}
+            {/* AI Radar Icon */}
             <SymbolLayer
               id="ghost-pin-icon"
               style={{
-                textField: '✨',
+                textField: '🛰️',
                 textSize: [
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 14,
-                  12, 18,
-                  16, 22
+                  5, 18,
+                  10, 24,
+                  14, 32
                 ],
-                textColor: '#FFFFFF',
-                textHaloColor: 'rgba(6, 182, 212, 0.8)',
-                textHaloWidth: 2,
+                textAllowOverlap: true,
               }}
             />
+            {/* Animated-looking Scanner Line (Horizontal Symbol) */}
+            <SymbolLayer
+              id="ghost-pin-scanner"
+              style={{
+                textField: '───',
+                textSize: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5, 24,
+                  10, 40,
+                  14, 60
+                ],
+                textColor: '#00FFFF',
+                textOpacity: 0.6,
+                textAllowOverlap: true,
+                textOffset: [0, 0],
+              }}
+            />
+            {/* Label below */}
             <SymbolLayer
               id="ghost-pin-label"
               style={{
                 textField: ['get', 'name'],
-                textSize: 13,
-                textColor: '#06B6D4',
+                textSize: 14,
+                textColor: '#FFFFFF',
                 textHaloColor: 'rgba(10, 10, 26, 0.9)',
                 textHaloWidth: 2,
-                textOffset: [0, 2.5],
+                textOffset: [0, 3.2],
                 textAnchor: 'top',
+                textAllowOverlap: true,
                 textTransform: 'uppercase',
                 textLetterSpacing: 1,
-                fontWeight: '800',
               }}
             />
           </ShapeSource>
@@ -2372,13 +2410,15 @@ export default function CountryBubbleScreen() {
 
       {/* Scout Carousel Overlay */}
       {isScoutCarouselVisible && scoutResults.length > 0 && (
-        <View style={styles.scoutOverlay}>
+        <View style={styles.scoutOverlay} pointerEvents="box-none">
           <TouchableOpacity 
             style={styles.scoutOverlayBackdrop} 
             activeOpacity={1} 
             onPress={() => setIsScoutCarouselVisible(false)} 
-          />
-          <View style={styles.scoutOverlayContent}>
+          >
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          </TouchableOpacity>
+          <View style={styles.scoutOverlayContent} pointerEvents="auto">
             <ScoutCarousel
               scouts={scoutResults}
               intentItem={discoveryIntent?.item}
