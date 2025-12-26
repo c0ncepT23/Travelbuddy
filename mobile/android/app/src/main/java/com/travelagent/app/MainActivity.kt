@@ -26,7 +26,27 @@ class MainActivity : ReactActivity() {
   override fun onNewIntent(intent: Intent?) {
     super.onNewIntent(intent)
     // Handle share intent when app is already running
-    intent?.let { handleShareIntent(it) }
+    intent?.let { 
+      handleShareIntent(it)
+      
+      // Notify JS module immediately if it's a share intent
+      val action = it.action
+      val type = it.type
+      if (Intent.ACTION_SEND == action && type != null && type.startsWith("text/")) {
+        val sharedText = it.getStringExtra(Intent.EXTRA_TEXT)
+        if (!sharedText.isNullOrEmpty()) {
+          val urlPattern = "(https?://[^\\s]+)".toRegex()
+          val matchResult = urlPattern.find(sharedText)
+          val url = matchResult?.value ?: sharedText
+          
+          // Emit event to JS
+          reactInstanceManager.currentReactContext?.let { context ->
+            val module = context.getNativeModule(ShareIntentModule::class.java)
+            module?.sendEvent(url)
+          }
+        }
+      }
+    }
   }
   
   private fun handleShareIntent(intent: Intent) {

@@ -435,8 +435,8 @@ If no specific places are mentioned, return an empty places array but still prov
   ): Promise<{
     summary: string;
     video_type: 'places' | 'howto' | 'guide';
-    destination?: string;  // Country or City, e.g., "Japan", "Tokyo", "Paris"
-    destination_country?: string;  // Always the country, e.g., "Japan"
+    destination?: string;
+    destination_country?: string;
     duration_days?: number;
     places: Array<{
       name: string;
@@ -444,11 +444,11 @@ If no specific places are mentioned, return an empty places array but still prov
       description: string;
       location?: string;
       day?: number;
-      // NEW: Sub-categorization fields
-      cuisine_type?: string;  // For food: "ramen", "wagyu", "sushi", "cheesecake", etc.
-      place_type?: string;    // For places: "temple", "shrine", "market", "viewpoint", etc.
-      tags?: string[];        // Additional tags: ["michelin", "local favorite", "hidden gem"]
+      cuisine_type?: string;
+      place_type?: string;
+      tags?: string[];
     }>;
+    discovery_intent?: DiscoveryIntent;
     itinerary?: Array<{
       day: number;
       title: string;
@@ -478,53 +478,18 @@ ${contentToAnalyze}
 
 STEP 1 - CLASSIFY VIDEO TYPE:
 Determine if this is a:
-
 - **GUIDE/ITINERARY VIDEO**: Provides a day-by-day travel itinerary or trip plan
-  Examples: "4 days in Bangkok", "Complete Tokyo itinerary", "One week Japan trip", "3 day Bali guide"
-  Key indicators: mentions specific days (Day 1, Day 2), suggests a complete trip plan, has "itinerary" or "X days" in title
-
 - **PLACES VIDEO**: Recommends specific restaurants, shops, attractions without a day-by-day structure
-  Examples: "Best restaurants in Bangkok", "Top 10 things to do", "Hidden gems in Tokyo"
-
 - **HOW-TO VIDEO**: Teaches tips, etiquette, or advice without recommending specific places
-  Examples: "How to eat sushi", "Travel tips for Japan", "Things to avoid"
 
 STEP 2 - EXTRACT DESTINATION:
-ALWAYS extract the destination country and city/region:
-- destination: The specific city or region (e.g., "Tokyo", "Kyoto", "Bangkok")
-- destination_country: The country name (e.g., "Japan", "Thailand", "France")
+ALWAYS extract the destination country and city/region.
 
-STEP 3 - EXTRACT PLACES WITH SUB-CATEGORIES:
+STEP 3 - EXTRACT PLACES OR INTENT:
 
 **CRITICAL RULES FOR PLACE EXTRACTION:**
-1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT the dish name
-   - ✅ CORRECT: "Pad Thai Fai Ta Lu" (the restaurant)
-   - ❌ WRONG: "Smoky Pad Thai" (the dish)
-   - ✅ CORRECT: "Go Ang" (the restaurant)  
-   - ❌ WRONG: "Hainanese Chicken" (the dish)
-2. Each restaurant/place should appear ONLY ONCE, even if multiple dishes are mentioned
-3. Use the exact name as spoken/shown in the video
-4. If a place name is unclear, include context like "Go Ang Chicken Rice" or "Kor Panich Sticky Rice"
-
-For EACH place, extract detailed categorization:
-
-For FOOD items, identify cuisine_type:
-- Japanese: "ramen", "sushi", "wagyu", "tempura", "udon", "yakitori", "izakaya", "kaiseki", "tonkatsu", "curry"
-- Desserts: "cheesecake", "matcha sweets", "mochi", "ice cream", "cafe", "bakery"
-- Street food: "takoyaki", "okonomiyaki", "gyoza", "street food"
-- Drinks: "sake bar", "whisky bar", "coffee", "tea house"
-
-For PLACE items, identify place_type:
-- Cultural: "temple", "shrine", "castle", "palace", "museum", "gallery"
-- Nature: "garden", "park", "viewpoint", "mountain", "beach", "onsen"
-- Urban: "neighborhood", "street", "market", "station", "observation deck"
-- Entertainment: "theme park", "arcade", "theater", "stadium"
-
-For SHOPPING items, identify place_type:
-- "department store", "mall", "vintage shop", "thrift store", "electronics", "fashion", "souvenir", "market"
-
-Also add relevant tags like:
-- ["michelin", "budget-friendly", "hidden gem", "local favorite", "instagram-worthy", "reservation needed"]
+1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT the dish name.
+2. If no specific businesses are named, but the video is clearly about a specific food/activity in a city (e.g. "Finding the best cheesecake in NYC"), you MUST return a "discovery_intent" object instead of empty places.
 
 RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
 {
@@ -544,36 +509,24 @@ RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
     {
       "name": "Ichiran Ramen Shibuya",
       "category": "food",
-      "description": "Famous tonkotsu ramen chain with solo dining booths",
-      "location": "Shibuya, Tokyo",
+      "description": "...",
+      "location": "...",
       "day": 1,
       "cuisine_type": "ramen",
-      "tags": ["local favorite", "solo dining friendly"]
-    },
-    {
-      "name": "Senso-ji Temple",
-      "category": "place",
-      "description": "Tokyo's oldest and most famous Buddhist temple",
-      "location": "Asakusa, Tokyo",
-      "day": 2,
-      "place_type": "temple",
-      "tags": ["iconic", "must-see", "free entry"]
-    },
-    {
-      "name": "Pad Thai Fai Ta Lu",
-      "category": "food",
-      "description": "Michelin-recommended street food for smoky Pad Thai with grilled pork or prawns",
-      "location": "Bangkok, Thailand",
-      "cuisine_type": "street food",
-      "tags": ["michelin", "budget-friendly", "street food"]
+      "tags": ["michelin", "budget"]
     }
-  ]
+  ],
+  "discovery_intent": {
+    "type": "CULINARY_GOAL" or "ACTIVITY_GOAL" or "SIGHTSEEING_GOAL",
+    "item": "The specific food or activity mentioned (e.g., Cheesecake, Street Tacos, Surfing)",
+    "city": "The city or area targeted",
+    "vibe": "The style (e.g., legendary, traditional, viral, hidden)",
+    "scout_query": "Best [vibe] [item] in [city]",
+    "confidence_score": 0.0 to 1.0
+  }
 }
 
-For GUIDE videos: Include both itinerary structure AND individual places with day numbers.
-For PLACES videos: Just include places array, no itinerary.
-For HOW-TO videos: Return empty places array.
-ALWAYS include destination and destination_country even for places/howto videos.`;
+If specific places ARE found, set "discovery_intent" to null. If NEITHER places nor intent found, return empty array for places.`;
 
       const result = await model.generateContent(prompt);
       const response = result.response;
@@ -617,6 +570,7 @@ ALWAYS include destination and destination_country even for places/howto videos.
         video_type: videoType,
         summary: parsed.summary || 'No summary available',
         places: parsed.places || [],
+        discovery_intent: parsed.discovery_intent,
         itinerary: parsed.itinerary,
         destination: parsed.destination,
         destination_country: parsed.destination_country,
@@ -894,6 +848,7 @@ If no specific place is mentioned (just "My trip to Paris"), return empty places
       place_type?: string;
       tags?: string[];
     }>;
+    discovery_intent?: DiscoveryIntent;
   }> {
     let tempFilePath: string | null = null;
     
@@ -996,10 +951,19 @@ RESPOND WITH VALID JSON:
       "place_type": "For non-food places",
       "tags": ["michelin", "budget-friendly", "hidden gem", etc.]
     }
-  ]
+  ],
+  "discovery_intent": {
+    "type": "CULINARY_GOAL" or "ACTIVITY_GOAL" or "SIGHTSEEING_GOAL",
+    "item": "The specific food or activity mentioned (e.g., Cheesecake, Street Tacos, Surfing)",
+    "city": "The city or area targeted",
+    "vibe": "The style (e.g., legendary, traditional, viral, hidden)",
+    "scout_query": "Best [vibe] [item] in [city]",
+    "confidence_score": 0.0 to 1.0
+  }
 }
 
-If no specific places are identifiable, return empty places array.`;
+**INTENT FALLBACK RULE:**
+If you cannot identify specific restaurant/business names, but the video is clearly about a specific food/activity in a city (e.g. "Exploring NYC for the best cheesecake"), you MUST return a "discovery_intent" object. If specific places ARE found, set "discovery_intent" to null.`;
 
       const result = await model.generateContent([
         {
@@ -1041,6 +1005,7 @@ If no specific places are identifiable, return empty places array.`;
         destination: parsed.destination,
         destination_country: parsed.destination_country,
         places: parsed.places || [],
+        discovery_intent: parsed.discovery_intent,
       };
       
     } catch (error: any) {

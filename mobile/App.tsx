@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View, Text, Alert, Platform, NativeModules, NativeEventEmitter } from 'react-native';
+import { ActivityIndicator, View, Text, Alert, Platform, NativeModules, NativeEventEmitter, AppState } from 'react-native';
 import * as Linking from 'expo-linking';
 
 // Native module for getting shared URLs on Android
@@ -80,7 +80,14 @@ export default function App() {
   const handleIncomingUrl = useCallback((url: string, source: string) => {
     if (!isAuthenticated) return;
     
-    const sharedUrl = extractSharedUrl(url) || (isSocialLink(url) ? url : null);
+    // Clean up the URL - it might be a long string with text and a link
+    let cleanUrl = url;
+    const urlMatch = url.match(/(https?:\/\/[^\s]+)/);
+    if (urlMatch) {
+      cleanUrl = urlMatch[1];
+    }
+    
+    const sharedUrl = extractSharedUrl(cleanUrl) || (isSocialLink(cleanUrl) ? cleanUrl : null);
     
     if (sharedUrl) {
       if (processedUrlsRef.current.has(sharedUrl)) {
@@ -159,6 +166,7 @@ export default function App() {
           try {
             const nativeSharedUrl = await ShareIntentModule.getSharedUrl();
             if (nativeSharedUrl) {
+              console.log('[App] 📱 Found shared URL in NativeModule:', nativeSharedUrl);
               ShareIntentModule.clearSharedUrl();
               handleIncomingUrl(nativeSharedUrl, 'NativeModule');
               return;
@@ -181,6 +189,15 @@ export default function App() {
     if (isReady && isAuthenticated) {
       handleShareIntent();
     }
+
+    // Add AppState listener to check for share intent when app returns to foreground
+    const appStateSubscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active' && isReady && isAuthenticated) {
+        handleShareIntent();
+      }
+    });
+
+    return () => appStateSubscription.remove();
   }, [isReady, isAuthenticated, handleIncomingUrl]);
 
   // Listen for incoming shared links while app is running (Expo Linking)
@@ -215,6 +232,7 @@ export default function App() {
       navigationRef.current.navigate('CountryBubbles', { 
         tripId: result.tripId,
         countryName: result.destinationCountry || result.destination || 'Unknown',
+        discoveryIntent: result.discovery_intent,
       });
     }
   };
@@ -248,12 +266,28 @@ export default function App() {
           pushNotificationService.setupListeners(
             // When notification received while app is open
             (notification) => {
-              console.log('[App] Notification received:', notification.request.content.title);
+              const data = notification.request.content.data as any;
+              console.log('[App] Notification received:', notification.request.content.title, data);
+              
+              // Handle Native Share Intent captured by expo-notifications on Android (Foreground)
+              if (data && (data['android.intent.extra.TEXT'] || data['android.intent.extra.SUBJECT'])) {
+                const sharedUrl = data['android.intent.extra.TEXT'] || data['android.intent.extra.SUBJECT'];
+                console.log('[App] 📱 Captured native share via foreground notification:', sharedUrl);
+                handleIncomingUrl(sharedUrl, 'NotificationForeground');
+              }
             },
             // When user taps on notification
             (response) => {
-              const data = response.notification.request.content.data;
+              const data = response.notification.request.content.data as any;
               console.log('[App] Notification tapped:', data);
+              
+              // Handle Native Share Intent captured by expo-notifications on Android
+              if (data && (data['android.intent.extra.TEXT'] || data['android.intent.extra.SUBJECT'])) {
+                const sharedUrl = data['android.intent.extra.TEXT'] || data['android.intent.extra.SUBJECT'];
+                console.log('[App] 📱 Captured native share via notification:', sharedUrl);
+                handleIncomingUrl(sharedUrl, 'NotificationIntent');
+                return;
+              }
               
               // Navigate based on notification type and data
               if (data && navigationRef.current) {

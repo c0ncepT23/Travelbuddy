@@ -326,6 +326,8 @@ type FilterMode = 'all' | 'nearMe' | 'area';
 interface RouteParams {
   tripId: string;
   countryName: string;
+  discoveryIntent?: any;
+  scoutResults?: any[];
 }
 
 interface BubbleData {
@@ -350,10 +352,21 @@ interface ChatMessage {
 // ============================================================
 
 /**
+ * Get canonical country key for CITY_COORDS
+ */
+function getCountryKey(countryName: string): string {
+  const name = countryName.toLowerCase();
+  if (name === 'united states' || name === 'usa' || name === 'us') return 'usa';
+  if (name === 'united kingdom' || name === 'uk' || name === 'gb') return 'uk';
+  if (name === 'south korea' || name === 'korea') return 'korea';
+  return name.replace(/\s+/g, '');
+}
+
+/**
  * Check if GPS coordinates are within a country's bounds
  */
 function isInCountry(lat: number, lng: number, countryName: string): boolean {
-  const bounds = COUNTRY_BOUNDS[countryName.toLowerCase()];
+  const bounds = COUNTRY_BOUNDS[getCountryKey(countryName)];
   if (!bounds) return false;
   return lat >= bounds.minLat && lat <= bounds.maxLat && lng >= bounds.minLng && lng <= bounds.maxLng;
 }
@@ -391,8 +404,40 @@ function filterItemsByRadius(items: SavedItem[], lat: number, lng: number, radiu
 }
 
 /**
+ * Filter items to keep only unique places
+ * Logic: Match by google_place_id OR (name AND coordinate match)
+ */
+function filterUniqueItems(items: SavedItem[]): SavedItem[] {
+  const seen = new Set<string>();
+  const uniqueItems: SavedItem[] = [];
+
+  items.forEach(item => {
+    // Priority 1: Google Place ID
+    if (item.google_place_id) {
+      if (!seen.has(item.google_place_id)) {
+        seen.add(item.google_place_id);
+        uniqueItems.push(item);
+      }
+      return;
+    }
+
+    // Priority 2: Name + Approx Coordinate (to catch duplicates without Google IDs)
+    const nameKey = item.name?.toLowerCase().trim() || 'unknown';
+    const lat = item.location_lat ? Number(item.location_lat).toFixed(4) : '0';
+    const lng = item.location_lng ? Number(item.location_lng).toFixed(4) : '0';
+    const geoKey = `${nameKey}_${lat}_${lng}`;
+
+    if (!seen.has(geoKey)) {
+      seen.add(geoKey);
+      uniqueItems.push(item);
+    }
+  });
+
+  return uniqueItems;
+}
+
+/**
  * Filter items within visible map bounds
- * Mapbox bounds format: [[neLng, neLat], [swLng, swLat]]
  */
 function filterItemsByMapBounds(items: SavedItem[], bounds: number[][]): SavedItem[] {
   if (!bounds || bounds.length !== 2) return items;
@@ -506,7 +551,7 @@ function filterItemsByLocation(items: SavedItem[], location: string, coords: Cit
  */
 function detectLocationQuery(message: string, countryName: string): { isLocationQuery: boolean; location: string | null; coords: CityCoords | null; radiusKm?: number } {
   const lowerMessage = message.toLowerCase().trim();
-  const lowerCountry = countryName.toLowerCase();
+  const countryKey = getCountryKey(countryName);
   
   // Check for reset commands
   const resetPhrases = ['show everything', 'show all', 'all places', 'entire country', 'whole country', 'reset', 'zoom out', 'back to all'];
@@ -537,7 +582,7 @@ function detectLocationQuery(message: string, countryName: string): { isLocation
   const hasLocationTrigger = locationTriggers.some(trigger => lowerMessage.includes(trigger));
   
   // Try to match a city/area
-  const countryCities = CITY_COORDS[lowerCountry] || {};
+  const countryCities = CITY_COORDS[countryKey] || {};
   for (const [cityKey, cityData] of Object.entries(countryCities)) {
     const searchTerms = [cityKey, ...(cityData.aliases || [])];
     for (const term of searchTerms) {
@@ -585,6 +630,10 @@ export default function CountryBubbleScreen() {
   const [userInCountry, setUserInCountry] = useState<boolean>(false);
   const [hasAutoFocused, setHasAutoFocused] = useState<boolean>(false);
   
+  // NEW: Discovery Intent (Scout Mode)
+  const [discoveryIntent, setDiscoveryIntent] = useState<any>((params as any).discoveryIntent || null);
+  const [scoutResults, setScoutResults] = useState<any[]>((params as any).scoutResults || []);
+  
   // Category filter state (for chip filtering)
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilterType>('all');
   
@@ -623,9 +672,10 @@ export default function CountryBubbleScreen() {
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
   const { location, startTracking } = useLocationStore();
 
-  const countryCoords = COUNTRY_COORDS[countryName.toLowerCase()] || COUNTRY_COORDS.default;
-  const countryFlag = COUNTRY_FLAGS[countryName.toLowerCase()] || '🌍';
-  const countryBounds = COUNTRY_BOUNDS[countryName.toLowerCase()];
+  const countryKey = getCountryKey(countryName);
+  const countryCoords = COUNTRY_COORDS[countryKey] || COUNTRY_COORDS.default;
+  const countryFlag = COUNTRY_FLAGS[countryKey] || '🌍';
+  const countryBounds = COUNTRY_BOUNDS[countryKey];
   
   // Calculate category counts for chips (based on drawerItems = visible in map view)
   const categoryCounts = useMemo(() => {
@@ -756,13 +806,18 @@ export default function CountryBubbleScreen() {
     try {
       const itemsResponse = await api.get(`/trips/${tripId}/items`);
       const fetchedItems: SavedItem[] = itemsResponse.data.data || itemsResponse.data || [];
-      setAllItems(fetchedItems);
-      setFilteredItems(fetchedItems);
+      
+      // Filter for unique items before setting state
+      const uniqueItems = filterUniqueItems(fetchedItems);
+      console.log(`📦 Fetched ${fetchedItems.length} items, filtered to ${uniqueItems.length} unique places`);
+      
+      setAllItems(uniqueItems);
+      setFilteredItems(uniqueItems);
 
       // FIX: Center camera on actual places, not default country coords
-      if (fetchedItems.length > 0) {
-        const { center, zoomLevel } = calculateBoundsFromItems(fetchedItems);
-        console.log(`📍 Centering on ${fetchedItems.length} places: [${center[0].toFixed(2)}, ${center[1].toFixed(2)}] zoom ${zoomLevel.toFixed(1)}`);
+      if (uniqueItems.length > 0) {
+        const { center, zoomLevel } = calculateBoundsFromItems(uniqueItems);
+        console.log(`📍 Centering on ${uniqueItems.length} places: [${center[0].toFixed(2)}, ${center[1].toFixed(2)}] zoom ${zoomLevel.toFixed(1)}`);
         // Use timeout to ensure camera ref is ready after initial render
         setTimeout(() => {
           flyToCamera({
@@ -911,6 +966,34 @@ export default function CountryBubbleScreen() {
       setShowRecenter(false);
     }
   }, [bottomSheetVisible, getDistanceMeters]);
+
+  // Generate GeoJSON for Discovery Intent (Ghost Pin)
+  const discoveryGeoJSON = useMemo(() => {
+    if (!discoveryIntent?.city) return null;
+    
+    // Find city coordinates
+    const cityKey = discoveryIntent.city.toLowerCase().replace(/\s+/g, '');
+    const countryKey = getCountryKey(countryName);
+    const cityData = CITY_COORDS[countryKey]?.[cityKey];
+    
+    if (!cityData) return null;
+    
+    return {
+      type: 'FeatureCollection' as const,
+      features: [{
+        type: 'Feature' as const,
+        id: 'ghost-pin',
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [cityData.longitude, cityData.latitude],
+        },
+        properties: {
+          name: discoveryIntent.item,
+          type: 'ghost',
+        }
+      }]
+    };
+  }, [discoveryIntent, countryName]);
 
   // Handle map idle (when user stops panning/zooming)
   // Updates drawer items based on what's visible on screen
@@ -1883,6 +1966,52 @@ export default function CountryBubbleScreen() {
             />
           </ShapeSource>
         )}
+
+        {/* GHOST PIN (Discovery Intent) - Pulsing city center match */}
+        {discoveryGeoJSON && (
+          <ShapeSource
+            id="discovery-intent-source"
+            shape={discoveryGeoJSON}
+          >
+            <CircleLayer
+              id="ghost-pin-outer"
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 40,
+                  12, 60,
+                  16, 80
+                ],
+                circleColor: '#06B6D4',
+                circleOpacity: 0.2,
+                circleBlur: 0.8,
+              }}
+            />
+            <CircleLayer
+              id="ghost-pin-inner"
+              style={{
+                circleRadius: 12,
+                circleColor: '#06B6D4',
+                circleStrokeWidth: 3,
+                circleStrokeColor: '#FFFFFF',
+              }}
+            />
+            <SymbolLayer
+              id="ghost-pin-label"
+              style={{
+                textField: ['get', 'name'],
+                textSize: 14,
+                textColor: '#FFFFFF',
+                textHaloColor: 'rgba(10, 10, 26, 0.9)',
+                textHaloWidth: 2,
+                textOffset: [0, 2],
+                textAnchor: 'top',
+              }}
+            />
+          </ShapeSource>
+        )}
         
         {/* HERO BEACON REMOVED - Category icons on pins are enough visual feedback */}
         
@@ -1910,7 +2039,8 @@ export default function CountryBubbleScreen() {
               <View style={styles.countryInfo}>
                 <Text style={styles.countryTitle}>{countryFlag} {countryName}</Text>
                 <Text style={styles.placeCount}>
-                  {filterMode !== 'all' ? `${items.length} spots nearby` : `${items.length} saved`}
+                  {discoveryIntent ? `🔍 Scouting ${discoveryIntent.item}...` : 
+                   filterMode !== 'all' ? `${items.length} spots nearby` : `${items.length} saved`}
                 </Text>
               </View>
             </TouchableOpacity>

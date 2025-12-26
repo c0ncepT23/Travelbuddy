@@ -166,6 +166,17 @@ export interface AuthRequest extends Request {
 }
 
 // Content Processing Types
+export type DiscoveryIntentType = 'CULINARY_GOAL' | 'ACTIVITY_GOAL' | 'SIGHTSEEING_GOAL';
+
+export interface DiscoveryIntent {
+  type: DiscoveryIntentType;
+  item: string;           // "Cheesecake", "Tacos", "Surfing"
+  city: string;           // "New York", "Bangkok"
+  vibe: string;           // "legendary", "hidden gem", "traditional"
+  scout_query: string;    // "best legendary cheesecake in New York City"
+  confidence_score: number;
+}
+
 export interface ProcessedContent {
   name: string;
   category: ItemCategory;
@@ -190,6 +201,8 @@ export interface ProcessedContent {
   tags?: string[];              // ["michelin", "hidden gem", "local favorite"]
   destination?: string;         // Auto-detected: "Tokyo", "Japan"
   destination_country?: string; // Country name: "Japan"
+  // Discovery intent (for "Scouting" mode)
+  discovery_intent?: DiscoveryIntent;
 }
 
 export interface YouTubeVideoData {

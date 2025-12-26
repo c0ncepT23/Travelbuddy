@@ -17,12 +17,13 @@ import { TripGroup } from '../types';
 import { SavedItemModel } from '../models/savedItem.model';
 import { ContentProcessorService } from '../services/contentProcessor.service';
 import { TravelAgent } from '../agents/travelAgent';
+import { ScoutService, ScoutResult } from '../services/scout.service';
 import logger from '../config/logger';
 
 interface ProcessResult {
   success: boolean;
-  tripId: string;
-  tripName: string;
+  tripId: string | null;
+  tripName?: string;
   destination: string;
   destinationCountry: string;
   isNewTrip: boolean;
@@ -38,6 +39,8 @@ interface ProcessResult {
     location_lng?: number;
     rating?: number;
   }>;
+  discovery_intent?: any;
+  scout_results?: ScoutResult[];
 }
 
 export class SmartShareController {
@@ -86,6 +89,38 @@ export class SmartShareController {
           extractionResult = await ContentProcessorService.extractMultiplePlacesFromVideo(url);
       }
 
+      // Step 2: Determine destination
+      const destination = extractionResult.destination || extractionResult.places[0]?.location_name || 'Unknown';
+      const destinationCountry = extractionResult.destination_country || inferCountryFromDestination(destination);
+      
+      logger.info(`🌍 [SmartShare] Destination: ${destination}, Country: ${destinationCountry}`);
+
+      // NEW: Handle Discovery Intent (Scout Mode)
+      // If no specific places found, but we have a culinary/activity goal
+      if ((!extractionResult.places || extractionResult.places.length === 0) && extractionResult.discovery_intent) {
+        logger.info(`🔍 [SmartShare] Entering Scout Mode for: ${extractionResult.discovery_intent.item} in ${extractionResult.discovery_intent.city}`);
+        
+        // Find or create trip for this country (so the intent has a home)
+        const { trip, isNewTrip } = await findOrCreateTripForCountry(userId, destinationCountry);
+        
+        // Trigger Scout Service
+        const scoutResults = await ScoutService.scout(extractionResult.discovery_intent);
+        
+        res.status(200).json({
+          success: true,
+          tripId: trip.id,
+          tripName: trip.name,
+          destination,
+          destinationCountry,
+          isNewTrip,
+          placesExtracted: 0,
+          places: [],
+          discovery_intent: extractionResult.discovery_intent,
+          scout_results: scoutResults
+        });
+        return;
+      }
+
       if (!extractionResult?.places?.length) {
         res.status(200).json({
           success: true,
@@ -96,12 +131,6 @@ export class SmartShareController {
         });
         return;
       }
-
-      // Step 2: Determine destination
-      const destination = extractionResult.destination || extractionResult.places[0]?.location_name || 'Unknown';
-      const destinationCountry = extractionResult.destination_country || inferCountryFromDestination(destination);
-      
-      logger.info(`🌍 [SmartShare] Destination: ${destination}, Country: ${destinationCountry}`);
 
       // Step 3: Find or create trip for this country
       const { trip, isNewTrip } = await findOrCreateTripForCountry(userId, destinationCountry);
@@ -117,11 +146,33 @@ export class SmartShareController {
           const duplicates = await SavedItemModel.findDuplicates(
             trip.id,
             place.name,
-            place.location_name
+            place.location_name,
+            place.google_place_id
           );
 
           if (duplicates.length > 0) {
-            // Use AI to check if it's truly a duplicate
+            // First, check if we have an EXACT google_place_id match - that's a definite duplicate
+            const exactMatch = place.google_place_id 
+              ? duplicates.find(d => d.google_place_id === place.google_place_id)
+              : null;
+
+            if (exactMatch) {
+              logger.info(`⏭️ [SmartShare] Skipping exact duplicate (Google ID): ${place.name}`);
+              savedPlaces.push({
+                id: exactMatch.id,
+                name: exactMatch.name,
+                category: exactMatch.category,
+                description: exactMatch.description || '',
+                cuisine_type: (exactMatch as any).cuisine_type,
+                place_type: (exactMatch as any).place_type,
+                location_lat: exactMatch.location_lat,
+                location_lng: exactMatch.location_lng,
+                rating: exactMatch.rating,
+              });
+              continue;
+            }
+
+            // Otherwise, use AI to check if it's truly a duplicate
             const duplicateCheck = await TravelAgent.checkDuplicates(
               place.name,
               duplicates.map((d) => ({ name: d.name, id: d.id }))

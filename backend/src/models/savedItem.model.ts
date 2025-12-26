@@ -381,21 +381,37 @@ export class SavedItemModel {
   static async findDuplicates(
     tripGroupId: string,
     name: string,
-    locationName?: string
+    locationName?: string,
+    googlePlaceId?: string
   ): Promise<SavedItem[]> {
+    const params: any[] = [tripGroupId];
+    let paramCount = 2;
+    
     let queryText = `
       SELECT * FROM saved_items
       WHERE trip_group_id = $1
-      AND (name ILIKE $2`;
+      AND (
+    `;
 
-    const params: any[] = [tripGroupId, `%${name}%`];
+    const conditions: string[] = [];
+    
+    // Condition 1: Name match (ILIKE)
+    conditions.push(`name ILIKE $${paramCount++}`);
+    params.push(`%${name}%`);
 
+    // Condition 2: Location name match
     if (locationName) {
-      queryText += ` OR location_name ILIKE $3`;
+      conditions.push(`location_name ILIKE $${paramCount++}`);
       params.push(`%${locationName}%`);
     }
 
-    queryText += ') ORDER BY created_at DESC LIMIT 5';
+    // Condition 3: Google Place ID match (Strongest signal)
+    if (googlePlaceId) {
+      conditions.push(`google_place_id = $${paramCount++}`);
+      params.push(googlePlaceId);
+    }
+
+    queryText += conditions.join(' OR ') + ') ORDER BY created_at DESC LIMIT 5';
 
     const result = await query(queryText, params);
     return result.rows;

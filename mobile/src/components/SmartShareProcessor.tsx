@@ -17,13 +17,16 @@ import {
   Animated,
   Easing as RNEasing,
   TouchableOpacity,
+  FlatList,
 } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { Easing } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import FastImage from 'react-native-fast-image';
 import { HapticFeedback } from '../utils/haptics';
 import api from '../config/api';
+import { getPlacePhotoUrl } from '../config/maps';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -39,6 +42,22 @@ interface ProcessedPlace {
   rating?: number;
 }
 
+interface ScoutResult {
+  place_id: string;
+  name: string;
+  address: string;
+  rating?: number;
+  user_rating_count?: number;
+  generative_summary?: string;
+  vibe_match_score: number;
+  social_label: string;
+  photos?: any[];
+  location: {
+    lat: number;
+    lng: number;
+  };
+}
+
 interface ProcessResult {
   success: boolean;
   tripId: string;
@@ -48,6 +67,14 @@ interface ProcessResult {
   isNewTrip: boolean;
   placesExtracted: number;
   places: ProcessedPlace[];
+  discovery_intent?: {
+    type: string;
+    item: string;
+    city: string;
+    vibe: string;
+    scout_query: string;
+  };
+  scout_results?: ScoutResult[];
 }
 
 interface SmartShareProcessorProps {
@@ -112,6 +139,55 @@ const Confetti: React.FC<{ delay: number; x: number }> = ({ delay, x }) => (
   />
 );
 
+// Scout Result Card
+const ScoutCard: React.FC<{ result: ScoutResult; onSelect: (result: ScoutResult) => void }> = ({ result, onSelect }) => {
+  const photoUrl = useMemo(() => getPlacePhotoUrl(result.photos, 400), [result.photos]);
+  
+  return (
+    <TouchableOpacity 
+      style={styles.scoutCard} 
+      activeOpacity={0.9}
+      onPress={() => onSelect(result)}
+    >
+      <View style={styles.scoutImageContainer}>
+        {photoUrl ? (
+          <FastImage source={{ uri: photoUrl }} style={styles.scoutImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.scoutPlaceholder}>
+            <Ionicons name="restaurant" size={32} color="rgba(255,255,255,0.3)" />
+          </View>
+        )}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.8)']}
+          style={styles.scoutImageOverlay}
+        />
+        <View style={styles.scoutLabelBadge}>
+          <Text style={styles.scoutLabelText}>{result.social_label}</Text>
+        </View>
+      </View>
+      
+      <View style={styles.scoutInfo}>
+        <Text style={styles.scoutName} numberOfLines={1}>{result.name}</Text>
+        <View style={styles.scoutMeta}>
+          <View style={styles.scoutRating}>
+            <Ionicons name="star" size={12} color="#FFD700" />
+            <Text style={styles.scoutRatingText}>{result.rating?.toFixed(1) || 'N/A'}</Text>
+          </View>
+          <Text style={styles.scoutMatchScore}>{Math.round(result.vibe_match_score * 10)}% Vibe Match</Text>
+        </View>
+        <Text style={styles.scoutSummary} numberOfLines={2}>
+          {result.generative_summary || "Checking details..."}
+        </Text>
+      </View>
+      
+      <View style={styles.scoutButton}>
+        <Text style={styles.scoutButtonText}>Add to Trip</Text>
+        <Ionicons name="add-circle" size={20} color="#FFFFFF" />
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   url,
   onComplete,
@@ -120,9 +196,59 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
 }) => {
   const [stage, setStage] = useState<ProcessingStage>('detecting');
   const [result, setResult] = useState<ProcessResult | null>(null);
+  const [selectedScoutMatch, setSelectedScoutMatch] = useState<ScoutResult | null>(null);
+  const [isSavingScout, setIsSavingScout] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+
+  // ... (rest of the refs)
+
+  const handleScoutSelect = async (scoutMatch: ScoutResult) => {
+    if (!result?.tripId) return;
+    
+    HapticFeedback.medium();
+    setSelectedScoutMatch(scoutMatch);
+    setIsSavingScout(true);
+    
+    try {
+      // Create a real place from the scouted match
+      const response = await api.post(`/api/trips/${result.tripId}/items`, {
+        name: scoutMatch.name,
+        category: 'food', // Assuming food for culinary goals
+        location_name: scoutMatch.address,
+        location_lat: scoutMatch.location.lat,
+        location_lng: scoutMatch.location.lng,
+        google_place_id: scoutMatch.place_id,
+        description: scoutMatch.generative_summary,
+        source_url: url,
+        rating: scoutMatch.rating,
+      });
+      
+      HapticFeedback.success();
+      setShowConfetti(true);
+      
+      // Complete the process with the new place
+      setTimeout(() => {
+        onComplete({
+          ...result,
+          placesExtracted: 1,
+          places: [{
+            id: response.data.id,
+            name: scoutMatch.name,
+            category: 'food',
+            description: scoutMatch.generative_summary || '',
+            location_lat: scoutMatch.location.lat,
+            location_lng: scoutMatch.location.lng,
+            rating: scoutMatch.rating
+          }]
+        });
+      }, 2000);
+    } catch (error) {
+      console.error('[SmartShare] Scout save error:', error);
+      setIsSavingScout(false);
+    }
+  };
   
   // Animation values
   const orbScale = useRef(new Animated.Value(1)).current;
@@ -279,8 +405,16 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       // Stage 4: Complete!
       setStage('complete');
       setResult(response.data);
-      setShowConfetti(true);
       HapticFeedback.success();
+
+      // If we have scout results but no specific places, don't auto-complete
+      // Let the user pick a match first
+      if (response.data.scout_results?.length > 0 && (!response.data.places || response.data.places.length === 0)) {
+        console.log('[SmartShare] Scout results found, waiting for user selection');
+        return;
+      }
+
+      setShowConfetti(true);
 
       // Wait for confetti animation to complete (2000ms animation + 500ms delay + 1000ms to enjoy)
       setTimeout(() => {
@@ -533,69 +667,66 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
         {/* Text content */}
         <View style={styles.textContent}>
           <MotiView
-            key={stage}
+            key={stage + (isSavingScout ? '-saving' : '')}
             from={{ opacity: 0, translateY: 10 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 300 }}
           >
-            <Text style={styles.stageMessage}>{STAGE_MESSAGES[stage]}</Text>
+            <Text style={styles.stageMessage}>
+              {isSavingScout ? 'Saving your choice...' : STAGE_MESSAGES[stage]}
+            </Text>
           </MotiView>
 
-          {/* Animated dots */}
-          {stage !== 'complete' && stage !== 'error' && (
-            <View style={styles.dotsContainer}>
-              {[0, 1, 2, 3, 4].map((index) => (
-                <MotiView
-                  key={index}
-                  from={{ scale: 1, opacity: 0.3 }}
-                  animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }}
-                  transition={{
-                    type: 'timing',
-                    duration: 1500,
-                    delay: index * 150,
-                    loop: true,
-                  }}
-                  style={styles.dot}
-                />
-              ))}
-            </View>
-          )}
-
-          {/* Processing text - cycles through fun messages */}
-          {stage !== 'complete' && stage !== 'error' && (
-            <MotiView
-              from={{ opacity: 0.4 }}
-              animate={{ opacity: [0.4, 0.8, 0.4] }}
-              transition={{ type: 'timing', duration: 2000, loop: true }}
-            >
-              <Text style={styles.subText}>
-                {SUB_MESSAGES[['detecting', 'extracting', 'enriching'].indexOf(stage)] || SUB_MESSAGES[0]}
-              </Text>
-            </MotiView>
-          )}
+          {/* ... (dots and sub-messages) */}
         </View>
 
-        {/* Result preview */}
+        {/* Result preview / Scout Carousel */}
         {stage === 'complete' && result && (
-          <MotiView
-            from={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', delay: 200 }}
-            style={styles.resultContainer}
-          >
-            <Text style={styles.resultEmoji}>🗺️</Text>
-            <Text style={styles.resultCountry}>
-              {result.destinationCountry || result.destination || 'Adventure'}
-            </Text>
-            <Text style={styles.resultPlaces}>
-              {result.placesExtracted ?? 0} place{(result.placesExtracted ?? 0) !== 1 ? 's' : ''} discovered!
-            </Text>
-            {result.isNewTrip && (
-              <View style={styles.newTripBadge}>
-                <Text style={styles.newTripText}>✨ New adventure created</Text>
-              </View>
+          <View style={styles.resultContainerWrapper}>
+            {(result.scout_results?.length ?? 0) > 0 && result.placesExtracted === 0 && !selectedScoutMatch ? (
+              <MotiView 
+                from={{ opacity: 0, scale: 0.9, translateY: 20 }}
+                animate={{ opacity: 1, scale: 1, translateY: 0 }}
+                style={styles.scoutSection}
+              >
+                <Text style={styles.scoutTitle}>
+                  Matched {result.discovery_intent?.item || 'places'} in {result.discovery_intent?.city}! 🗺️
+                </Text>
+                <Text style={styles.scoutSubtitle}>Tap a spot to add it to your trip:</Text>
+                
+                <FlatList
+                  data={result.scout_results}
+                  keyExtractor={(item) => item.place_id}
+                  renderItem={({ item }) => <ScoutCard result={item} onSelect={handleScoutSelect} />}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.scoutList}
+                  snapToInterval={260}
+                  decelerationRate="fast"
+                />
+              </MotiView>
+            ) : (
+              <MotiView
+                from={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', delay: 200 }}
+                style={styles.resultContainer}
+              >
+                <Text style={styles.resultEmoji}>{selectedScoutMatch ? '🍰' : '🗺️'}</Text>
+                <Text style={styles.resultCountry}>
+                  {selectedScoutMatch ? selectedScoutMatch.name : (result.destinationCountry || result.destination || 'Adventure')}
+                </Text>
+                <Text style={styles.resultPlaces}>
+                  {selectedScoutMatch ? 'Added to your NYC trip!' : `${result.placesExtracted ?? 0} place${(result.placesExtracted ?? 0) !== 1 ? 's' : ''} discovered!`}
+                </Text>
+                {result.isNewTrip && !selectedScoutMatch && (
+                  <View style={styles.newTripBadge}>
+                    <Text style={styles.newTripText}>✨ New adventure created</Text>
+                  </View>
+                )}
+              </MotiView>
             )}
-          </MotiView>
+          </View>
         )}
 
         {/* Error message */}
@@ -872,6 +1003,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     marginTop: 8,
   },
+  resultContainerWrapper: {
+    width: '100%',
+    alignItems: 'center',
+  },
   resultContainer: {
     alignItems: 'center',
     marginTop: 24,
@@ -942,6 +1077,118 @@ const styles = StyleSheet.create({
     height: 300,
     borderRadius: 200,
     backgroundColor: 'rgba(168, 85, 247, 0.2)',
+  },
+  // Scout Styles
+  scoutSection: {
+    width: SCREEN_WIDTH,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  scoutTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  scoutSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 20,
+  },
+  scoutList: {
+    paddingHorizontal: 10,
+    paddingBottom: 20,
+  },
+  scoutCard: {
+    width: 240,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    marginHorizontal: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  scoutImageContainer: {
+    width: '100%',
+    height: 120,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  scoutImage: {
+    width: '100%',
+    height: '100%',
+  },
+  scoutImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  scoutPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scoutLabelBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: '#06B6D4',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  scoutLabelText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+  },
+  scoutInfo: {
+    padding: 12,
+  },
+  scoutName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  scoutMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  scoutRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  scoutRatingText: {
+    fontSize: 12,
+    color: '#FFD700',
+    fontWeight: '600',
+  },
+  scoutMatchScore: {
+    fontSize: 11,
+    color: '#22D3EE',
+    fontWeight: '600',
+  },
+  scoutSummary: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 16,
+  },
+  scoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 10,
+    gap: 8,
+  },
+  scoutButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   cornerGlowTopRight: {
     position: 'absolute',
