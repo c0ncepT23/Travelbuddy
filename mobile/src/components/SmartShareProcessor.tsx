@@ -18,7 +18,7 @@ import {
   Easing,
   TouchableOpacity,
 } from 'react-native';
-import { MotiView } from 'moti';
+import { MotiView, AnimatePresence } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { HapticFeedback } from '../utils/haptics';
@@ -239,6 +239,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
     processUrl();
   }, []);
 
+  // Stop rotation on complete/error
+  useEffect(() => {
+    if (stage === 'complete' || stage === 'error') {
+      orbRotate.stopAnimation();
+    }
+  }, [stage]);
+
   const processUrl = async () => {
     try {
       // Stage 1: Detecting
@@ -284,13 +291,14 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       }, 3500);
 
     } catch (error: any) {
+      const msg = error.response?.data?.error || error.message || 'Failed to process';
       console.error('[SmartShare] Error:', error);
       setStage('error');
-      setErrorMessage(error.response?.data?.error || error.message || 'Failed to process');
+      setErrorMessage(msg);
       HapticFeedback.error();
       
       setTimeout(() => {
-        onError(errorMessage || 'Failed to process');
+        onError(msg);
       }, 2500);
     }
   };
@@ -456,31 +464,50 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
               {
                 transform: [
                   { scale: orbScale },
-                  { rotate: orbRotation },
                 ],
               }
             ]}
           >
-            <LinearGradient
-              colors={['#22D3EE', '#A78BFA', '#F472B6']}
-              style={styles.orbGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+            {/* Rotating background gradient */}
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  transform: [{ rotate: orbRotation }],
+                }
+              ]}
             >
-              {/* Inner glow */}
-              <Animated.View style={[styles.innerGlow, { opacity: glowOpacity }]} />
-              
-              {/* Stage indicator */}
-              <View style={styles.stageIconContainer}>
-                {stage === 'complete' ? (
-                  <Ionicons name="checkmark" size={48} color="#FFFFFF" />
-                ) : stage === 'error' ? (
-                  <Ionicons name="close" size={48} color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="sparkles" size={48} color="#FFFFFF" />
-                )}
-              </View>
-            </LinearGradient>
+              <LinearGradient
+                colors={['#22D3EE', '#A78BFA', '#F472B6']}
+                style={styles.orbGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              />
+            </Animated.View>
+
+            {/* Inner glow */}
+            <Animated.View style={[styles.innerGlow, { opacity: glowOpacity }]} />
+            
+            {/* Stage indicator - STABLE (Doesn't rotate) */}
+            <View style={styles.stageIconContainer}>
+              <AnimatePresence exitBeforeEnter>
+                <MotiView
+                  key={stage}
+                  from={{ opacity: 0, scale: 0.5, rotate: '-45deg' }}
+                  animate={{ opacity: 1, scale: 1, rotate: '0deg' }}
+                  transition={{ type: 'spring', damping: 15 }}
+                  style={styles.stageIconMoti}
+                >
+                  {stage === 'complete' ? (
+                    <Ionicons name="checkmark" size={54} color="#FFFFFF" />
+                  ) : stage === 'error' ? (
+                    <Ionicons name="close" size={54} color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="sparkles" size={48} color="#FFFFFF" />
+                  )}
+                </MotiView>
+              </AnimatePresence>
+            </View>
           </Animated.View>
 
           {/* Orbiting particles */}
@@ -787,6 +814,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.4)',
   },
   stageIconContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  stageIconMoti: {
     justifyContent: 'center',
     alignItems: 'center',
   },
