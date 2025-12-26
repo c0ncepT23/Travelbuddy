@@ -37,27 +37,27 @@ const MAPBOX_TOKEN = Constants.expoConfig?.extra?.mapboxAccessToken ||
 // Set access token
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
-// VIBRANT COLOR PALETTE - Matching app style
+// VIBRANT COLOR PALETTE - Matching Midnight Discovery theme
 const COLORS = {
   // Base colors
-  background: '#0a0a1a',        // Deep space blue
-  oceanDark: '#0d1b2a',         // Dark ocean
-  oceanLight: '#1b263b',        // Lighter ocean
+  background: '#0F1115',        // Deep Midnight Slate
+  oceanDark: '#0B0D11',         // Darker Ocean
+  oceanLight: '#17191F',        // Lighter Ocean / Surface
   
   // Land colors
-  landBase: '#1e293b',          // Muted land
+  landBase: '#1E293B',          // Muted land
   landHighlight: '#334155',     // Lighter land on hover
   
-  // Accent colors (matching app purple/pink theme)
-  primaryGlow: '#8B5CF6',       // Purple (main app color)
-  secondaryGlow: '#06b6d4',     // Cyan accent
+  // Accent colors (Matching Cyan/Discovery theme)
+  primaryGlow: '#06B6D4',       // Electric Cyan
+  secondaryGlow: '#22D3EE',     // Lighter Cyan
   accentPink: '#ec4899',        // Hot pink
   accentGreen: '#22c55e',       // Neon green
   
   // Saved country colors
-  savedFill: '#8B5CF6',         // Purple fill for saved
-  savedBorder: '#a78bfa',       // Lighter purple border
-  savedGlow: '#c4b5fd',         // Glow color
+  savedFill: '#06B6D4',         // Cyan fill for saved
+  savedBorder: '#22D3EE',       // Lighter Cyan border
+  savedGlow: '#06B6D4',         // Cyan Glow
   
   // Selected state
   selectedFill: '#ec4899',      // Pink when selected
@@ -195,6 +195,50 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
   const [showHint, setShowHint] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [pulseOpacity, setPulseOpacity] = useState(0.6);
+  const [hasInitialCentered, setHasInitialCentered] = useState(false);
+
+  // Smart Initial Centering
+  useEffect(() => {
+    if (mapReady && countries.length > 0 && !hasInitialCentered && cameraRef.current) {
+      // Calculate weighted average center (where MOST places are)
+      let totalLng = 0;
+      let totalLat = 0;
+      let count = 0;
+      const uniqueCountryNames = new Set<string>();
+
+      countries.forEach(c => {
+        const destination = c.destination.toLowerCase();
+        const coords = COUNTRY_CENTERS[destination];
+        if (coords) {
+          totalLng += coords[0];
+          totalLat += coords[1];
+          count++;
+          uniqueCountryNames.add(destination);
+        }
+      });
+
+      if (count > 0) {
+        const center: [number, number] = [totalLng / count, totalLat / count];
+        
+        // Determine zoom: 
+        // - If only 1 unique country: Zoom in quite a bit (zoom 4)
+        // - If 2-3 unique countries: Zoom in moderately (zoom 2.5)
+        // - If many unique countries: Keep it wide (zoom 1.5)
+        let targetZoom = 1.5;
+        if (uniqueCountryNames.size === 1) targetZoom = 4;
+        else if (uniqueCountryNames.size <= 3) targetZoom = 2.5;
+
+        // Fly to the weighted center
+        cameraRef.current.setCamera({
+          centerCoordinate: center,
+          zoomLevel: targetZoom,
+          animationDuration: 2000, // Smooth 2s fly-in for "Premium" feel
+        });
+        
+        setHasInitialCentered(true);
+      }
+    }
+  }, [mapReady, countries, hasInitialCentered]);
 
   // Hide hint after 5 seconds
   useEffect(() => {
@@ -291,7 +335,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
     <View style={[styles.container, style]}>
       {/* Gradient overlay at top for depth */}
       <LinearGradient
-        colors={['rgba(139, 92, 246, 0.15)', 'transparent']}
+        colors={['rgba(6, 182, 212, 0.15)', 'transparent']}
         style={styles.topGradient}
         pointerEvents="none"
       />
@@ -309,8 +353,8 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
         <Camera
           ref={cameraRef}
           defaultSettings={{
-            centerCoordinate: [0, 20],
-            zoomLevel: 1.5,
+            centerCoordinate: [0, 0],
+            zoomLevel: 1,
           }}
           minZoomLevel={1}
           maxZoomLevel={15}
@@ -382,7 +426,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
       
       {/* Bottom gradient for depth */}
       <LinearGradient
-        colors={['transparent', 'rgba(10, 10, 26, 0.8)']}
+        colors={['transparent', 'rgba(15, 17, 21, 0.8)']}
         style={styles.bottomGradient}
         pointerEvents="none"
       />

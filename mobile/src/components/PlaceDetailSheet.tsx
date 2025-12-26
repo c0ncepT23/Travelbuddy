@@ -16,7 +16,6 @@ import {
 import BottomSheet, { 
   BottomSheetScrollView, 
   BottomSheetFooter, 
-  BottomSheetBackdrop,
   BottomSheetFooterProps
 } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,20 +24,22 @@ import { getGooglePhotoUrl } from '../config/maps';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Dark theme colors (matching Google Maps dark mode)
+// Dark theme colors (matching Midnight Discovery palette)
 const COLORS = {
-  background: '#0F172A',
-  surface: '#1E293B',
+  background: '#0F1115',
+  surface: '#17191F',
   text: '#F8FAFC',
   textSecondary: '#94A3B8',
-  accent: '#8B5CF6',
-  border: 'rgba(148, 163, 184, 0.2)',
+  accent: '#06B6D4',
+  border: 'rgba(148, 163, 184, 0.1)',
 };
 
 export interface PlaceDetailSheetRef {
   expand: () => void;
   collapse: () => void;
   close: () => void;
+  peek: () => void;
+  snapToIndex: (index: number) => void;
 }
 
 interface PlaceDetailSheetProps {
@@ -58,31 +59,48 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 }, ref) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // Snap points for v4
-  const snapPoints = useMemo(() => ['40%', '70%', '90%'], []);
+  // Snap points: Peek (18%) and Default (55%)
+  // Peek: shows handle + place name + buttons
+  // Default: shows everything (name, rating, photos, insights, buttons)
+  const snapPoints = useMemo(() => ['25%', '55%'], []);
 
-  // Handle sheet changes
-  const handleSheetChanges = useCallback((index: number) => {
-    if (index === -1) {
-      onClose();
-    }
-  }, [onClose]);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
     expand: () => bottomSheetRef.current?.expand(),
     collapse: () => bottomSheetRef.current?.collapse(),
     close: () => bottomSheetRef.current?.close(),
+    peek: () => bottomSheetRef.current?.snapToIndex(0), // Snap to 25% (peek)
+    snapToIndex: (index: number) => bottomSheetRef.current?.snapToIndex(index),
   }), []);
 
-  // Open/close based on visibility
+  // Track if sheet is ready (mounted with snap points)
+  const isSheetReady = useRef(false);
+
+  // Open/close based on visibility - with safety check
   useEffect(() => {
     if (isVisible && place) {
-      bottomSheetRef.current?.snapToIndex(1); // Start at 70%
+      // Only snap if sheet is ready, otherwise wait for it to mount
+      if (isSheetReady.current) {
+        bottomSheetRef.current?.snapToIndex(1); // Start at 50% (default view)
+      } else {
+        // Sheet not ready yet, will be opened via initial index
+        setTimeout(() => {
+          bottomSheetRef.current?.snapToIndex(1);
+        }, 100);
+      }
     } else {
       bottomSheetRef.current?.close();
     }
   }, [isVisible, place]);
+
+  // Mark sheet as ready when it changes
+  const handleSheetChange = useCallback((index: number) => {
+    isSheetReady.current = true;
+    if (index === -1) {
+      onClose();
+    }
+  }, [onClose]);
 
   // Parse photos
   const photoUrls = useMemo(() => {
@@ -103,10 +121,10 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
     return [];
   }, [place?.photos_json]);
 
-  // FIXED FOOTER with action buttons
+  // FIXED FOOTER with action buttons - no bottom inset for flush appearance
   const renderFooter = useCallback(
     (props: BottomSheetFooterProps) => (
-      <BottomSheetFooter {...props} bottomInset={24}>
+      <BottomSheetFooter {...props} bottomInset={0}>
         <View style={styles.footerContainer}>
           <TouchableOpacity 
             style={styles.actionButton}
@@ -147,110 +165,109 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
     [place, onDirections, onCheckIn]
   );
 
-  // Backdrop
-  const renderBackdrop = useCallback(
-    (props: any) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={0.5}
-      />
-    ),
-    []
-  );
+  // NO BACKDROP - Google Maps style: map stays interactive while drawer is open
+  // Removing backdrop allows users to pan/zoom map and tap other pins
 
-  if (!place) return null;
-
+  // Always render BottomSheet but hide content when no place
   return (
     <BottomSheet
       ref={bottomSheetRef}
       index={-1}
       snapPoints={snapPoints}
-      onChange={handleSheetChanges}
-      footerComponent={renderFooter}
-      backdropComponent={renderBackdrop}
+      onChange={handleSheetChange}
+      footerComponent={place ? renderFooter : undefined}
+      backdropComponent={null}
       enablePanDownToClose={true}
       backgroundStyle={styles.sheetBackground}
       handleIndicatorStyle={styles.handleIndicator}
+      handleStyle={styles.handleStyle}
     >
-      <BottomSheetScrollView style={styles.scrollContent}>
-        {/* Header: Name + Close */}
-        <View style={styles.headerRow}>
-          <Text style={styles.placeName}>{place.name}</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Meta: Rating · Category · Cuisine */}
-        <View style={styles.metaRow}>
-          {place.rating && (
-            <>
-              <Text style={styles.rating}>
-                {typeof place.rating === 'number' ? place.rating.toFixed(1) : place.rating}
-              </Text>
-              <Ionicons name="star" size={14} color="#FBBF24" />
-              <Text style={styles.metaDot}>·</Text>
-            </>
-          )}
-          {place.category && (
-            <>
-              <Text style={styles.metaText}>{place.category}</Text>
-              {place.cuisine_type && <Text style={styles.metaDot}>·</Text>}
-            </>
-          )}
-          {place.cuisine_type && (
-            <Text style={styles.metaText}>{place.cuisine_type}</Text>
-          )}
-        </View>
-
-        {/* Location */}
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.locationText}>
-            {place.area_name || place.location_name || 'Unknown location'}
-          </Text>
-        </View>
-
-        {/* Photo Carousel */}
-        <RNScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          style={styles.photoCarousel}
-          contentContainerStyle={styles.photoCarouselContent}
-        >
-          {photoUrls.length > 0 ? (
-            photoUrls.map((url, i) => (
-              <Image
-                key={i}
-                source={{ uri: url }}
-                style={[styles.photo, i === 0 && styles.photoFirst]}
-                resizeMode="cover"
-              />
-            ))
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
-            </View>
-          )}
-        </RNScrollView>
-
-        {/* Creator Insights */}
-        {place.description && (
-          <View style={styles.insights}>
-            <View style={styles.insightsHeader}>
-              <Ionicons name="bookmark" size={16} color={COLORS.accent} />
-              <Text style={styles.insightsLabel}>
-                {place.source_title ? `Saved from ${place.source_title}` : 'Why you saved this'}
-              </Text>
-            </View>
-            <Text style={styles.insightsQuote}>"{place.description}"</Text>
+      {/* FIXED HEADER - Always visible even in peek state */}
+      {place && (
+        <View style={styles.fixedHeader}>
+          <View style={styles.headerRow}>
+            <Text style={styles.placeName} numberOfLines={1}>{place.name}</Text>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
+      )}
 
-        {/* Extra bottom padding for footer */}
-        <View style={{ height: 140 }} />
+      {/* SCROLLABLE CONTENT - Hidden in peek, visible in default */}
+      <BottomSheetScrollView style={styles.scrollContent}>
+        {place ? (
+          <>
+            {/* Meta: Rating · Category · Cuisine */}
+            <View style={styles.metaRow}>
+              {place.rating && (
+                <>
+                  <Text style={styles.rating}>
+                    {typeof place.rating === 'number' ? place.rating.toFixed(1) : place.rating}
+                  </Text>
+                  <Ionicons name="star" size={14} color="#FBBF24" />
+                  <Text style={styles.metaDot}>·</Text>
+                </>
+              )}
+              {place.category && (
+                <>
+                  <Text style={styles.metaText}>{place.category}</Text>
+                  {place.cuisine_type && <Text style={styles.metaDot}>·</Text>}
+                </>
+              )}
+              {place.cuisine_type && (
+                <Text style={styles.metaText}>{place.cuisine_type}</Text>
+              )}
+            </View>
+
+            {/* Location */}
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.locationText}>
+                {place.area_name || place.location_name || 'Unknown location'}
+              </Text>
+            </View>
+
+            {/* Photo Carousel */}
+            <RNScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.photoCarousel}
+              contentContainerStyle={styles.photoCarouselContent}
+            >
+              {photoUrls.length > 0 ? (
+                photoUrls.map((url, i) => (
+                  <Image
+                    key={i}
+                    source={{ uri: url }}
+                    style={[styles.photo, i === 0 && styles.photoFirst]}
+                    resizeMode="cover"
+                  />
+                ))
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
+                </View>
+              )}
+            </RNScrollView>
+
+            {/* Creator Insights */}
+            {place.description && (
+              <View style={styles.insights}>
+                <View style={styles.insightsHeader}>
+                  <Ionicons name="bookmark" size={16} color={COLORS.accent} />
+                  <Text style={styles.insightsLabel}>
+                    {place.source_title ? `Saved from ${place.source_title}` : 'Why you saved this'}
+                  </Text>
+                </View>
+                <Text style={styles.insightsQuote}>"{place.description}"</Text>
+              </View>
+            )}
+
+            {/* Extra bottom padding for footer */}
+            <View style={{ height: 100 }} />
+          </>
+        ) : null}
       </BottomSheetScrollView>
     </BottomSheet>
   );
@@ -263,6 +280,19 @@ const styles = StyleSheet.create({
   handleIndicator: {
     backgroundColor: '#5F6368',
     width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  handleStyle: {
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  fixedHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+    backgroundColor: COLORS.background,
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -368,8 +398,9 @@ const styles = StyleSheet.create({
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 8,
+    paddingBottom: 12, // Small safe area padding
     backgroundColor: COLORS.background,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,

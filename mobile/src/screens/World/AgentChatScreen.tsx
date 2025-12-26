@@ -11,18 +11,22 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  Platform,
-  ActivityIndicator,
-  Dimensions,
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  FlatList, 
+  StyleSheet, 
+  Platform, 
+  ActivityIndicator, 
+  Dimensions, 
   StatusBar,
+  ScrollView,
+  Pressable,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
+import { getPlacePhotoUrl } from '../../config/maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -32,47 +36,49 @@ import { useCompanionStore, CompanionMessage, PlaceResult } from '../../stores/c
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripStore } from '../../stores/tripStore';
 
+import { BlurView } from 'expo-blur';
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Zenly-inspired color palette
+// Midnight Discovery palette
 const colors = {
   // Gradients
-  purpleGradientStart: '#A78BFA', // purple-400
-  purpleGradientEnd: '#6366F1',   // indigo-500
+  primaryGradientStart: '#22D3EE', // cyan-400
+  primaryGradientEnd: '#06B6D4',   // cyan-500
   
   // Glassmorphic backgrounds
-  panelBg: 'rgba(255, 255, 255, 0.95)',
-  panelBgSecondary: 'rgba(255, 255, 255, 0.90)',
+  panelBg: 'rgba(15, 17, 21, 0.98)',
+  panelBgSecondary: 'rgba(23, 25, 31, 0.95)',
   
   // Text
-  textPrimary: '#1F2937',    // gray-800
-  textSecondary: '#6B7280',  // gray-500
+  textPrimary: '#F8FAFC',    // slate-50
+  textSecondary: '#94A3B8',  // slate-400
   textWhite: '#FFFFFF',
   
   // UI Elements
-  borderLight: 'rgba(255, 255, 255, 0.4)',
-  purpleBorder: 'rgba(139, 92, 246, 0.5)', // purple-100/50
-  closeButtonBg: '#F3F4F6',        // gray-100
-  closeButtonHover: '#E5E7EB',     // gray-200
+  borderLight: 'rgba(255, 255, 255, 0.1)',
+  primaryBorder: 'rgba(6, 182, 212, 0.2)', // cyan-500/20
+  closeButtonBg: '#1E293B',        // slate-800
+  closeButtonHover: '#334155',     // slate-700
   
   // Messages
-  aiBubbleBg: 'rgba(255, 255, 255, 0.8)',
-  userBubbleStart: '#8B5CF6',  // purple-500
-  userBubbleEnd: '#6366F1',    // indigo-500
+  aiBubbleBg: '#1E293B',
+  userBubbleStart: '#06B6D4',  // cyan-500
+  userBubbleEnd: '#0891B2',    // cyan-600
   
   // Dots
-  typingDot: '#A78BFA', // purple-400
+  typingDot: '#22D3EE', // cyan-400
   onlineDot: '#10B981', // green-500
   
   // Places
-  categoryFood: '#EF4444',
-  categoryPlace: '#3B82F6',
-  categoryShopping: '#F59E0B',
-  categoryActivity: '#10B981',
+  categoryFood: '#22C55E',
+  categoryPlace: '#6366F1',
+  categoryShopping: '#EAB308',
+  categoryActivity: '#06B6D4',
   
   // Suggestions
-  suggestionBg: 'rgba(139, 92, 246, 0.1)',
-  suggestionBorder: '#8B5CF6',
+  suggestionBg: 'rgba(6, 182, 212, 0.1)',
+  suggestionBorder: '#06B6D4',
 };
 
 export default function AgentChatScreen() {
@@ -186,6 +192,51 @@ export default function AgentChatScreen() {
     return icons[category] || '📌';
   };
 
+  const renderPlaceCard = (place: PlaceResult) => {
+    const photoUrl = getPlacePhotoUrl(place.photos_json, 300);
+    
+    return (
+      <TouchableOpacity
+        key={place.id}
+        style={styles.miniPlaceCard}
+        onPress={() => handlePlacePress(place.id)}
+        activeOpacity={0.9}
+      >
+        <View style={styles.miniCardImageContainer}>
+          {photoUrl ? (
+            <FastImage
+              source={{ uri: photoUrl }}
+              style={styles.miniCardImage}
+              resizeMode={FastImage.resizeMode.cover}
+            />
+          ) : (
+            <View style={[styles.miniCardPlaceholder, { backgroundColor: getCategoryColor(place.category) + '20' }]}>
+              <Text style={styles.miniCardPlaceholderEmoji}>{getCategoryIcon(place.category)}</Text>
+            </View>
+          )}
+          
+          <View style={styles.miniCardCategory}>
+            <Text style={styles.miniCardCategoryEmoji}>{getCategoryIcon(place.category)}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.miniCardInfo}>
+          <Text style={styles.miniCardName} numberOfLines={1}>{place.name}</Text>
+          <View style={styles.miniCardFooter}>
+            <View style={styles.miniCardRating}>
+              <Ionicons name="star" size={10} color="#FFD700" />
+              <Text style={styles.miniCardRatingText}>{place.rating || '4.0'}</Text>
+            </View>
+            <View style={styles.miniCardGo}>
+              <Ionicons name="navigate" size={12} color="#06B6D4" />
+              <Text style={styles.miniCardGoText}>GO</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderPlace = (place: PlaceResult) => (
     <TouchableOpacity
       key={place.id}
@@ -277,9 +328,14 @@ export default function AgentChatScreen() {
               <Text style={styles.aiMessageText}>{item.content}</Text>
 
               {item.places && item.places.length > 0 && (
-                <View style={styles.placesContainer}>
-                  {item.places.map((place) => renderPlace(place))}
-                </View>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalPlacesScroll}
+                  style={styles.horizontalPlacesContainer}
+                >
+                  {item.places.map((place) => renderPlaceCard(place))}
+                </ScrollView>
               )}
 
               {item.suggestions && item.suggestions.length > 0 && (
@@ -313,7 +369,7 @@ export default function AgentChatScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <LinearGradient
-              colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
+              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
               style={styles.aiIconBox}
             >
               <Ionicons name="sparkles" size={20} color={colors.textWhite} />
@@ -341,89 +397,100 @@ export default function AgentChatScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleClose} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <LinearGradient
-            colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
-            style={styles.aiIconBox}
-          >
-            <Ionicons name="sparkles" size={20} color={colors.textWhite} />
-          </LinearGradient>
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>AI Travel Agent</Text>
-            <View style={styles.statusRow}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.statusText}>Online & Ready</Text>
+      {/* Dimmed backdrop for the top 20% area */}
+      <Pressable style={styles.backdrop} onPress={handleClose} />
+      
+      {/* Main Content Area (80% Height) */}
+      <MotiView 
+        from={{ translateY: SCREEN_HEIGHT }}
+        animate={{ translateY: 0 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 150 }}
+        style={styles.contentContainer}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleClose} activeOpacity={0.7}>
+            <Ionicons name="close" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <LinearGradient
+              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+              style={styles.aiIconBox}
+            >
+              <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+            </LinearGradient>
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>AI Travel Agent</Text>
+              <View style={styles.statusRow}>
+                <View style={styles.onlineDot} />
+                <Text style={styles.statusText}>Online & Ready</Text>
+              </View>
             </View>
           </View>
-        </View>
-        
-        <View style={styles.headerRight} />
-      </View>
-
-      {/* Messages Area */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={isTyping ? <TypingIndicator /> : null}
-        keyboardShouldPersistTaps="handled"
-        style={styles.messagesArea}
-      />
-
-      {/* Input Area */}
-      <View style={styles.inputArea}>
-        <View style={styles.inputContainer}>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder="Ask me anything..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              maxLength={500}
-              editable={!isLoading}
-            />
-          </View>
           
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!inputText.trim() || isLoading) && styles.sendButtonDisabled
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={colors.textWhite} size="small" />
-            ) : (
-              <LinearGradient
-                colors={[colors.purpleGradientStart, colors.purpleGradientEnd]}
-                style={styles.sendButtonGradient}
-              >
-                <Ionicons name="send" size={18} color={colors.textWhite} />
-              </LinearGradient>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRight} />
         </View>
 
-        {/* Footer text */}
-        <Text style={styles.footerText}>
-          Powered by AI · Always learning 🧠 ✨
-        </Text>
-      </View>
+        {/* Messages Area */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.messagesList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+          keyboardShouldPersistTaps="handled"
+          style={styles.messagesArea}
+        />
+
+        {/* Input Area */}
+        <View style={styles.inputArea}>
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder="Ask me anything..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                maxLength={500}
+                editable={!isLoading}
+              />
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!inputText.trim() || isLoading) && styles.sendButtonDisabled
+              ]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color={colors.textWhite} size="small" />
+              ) : (
+                <LinearGradient
+                  colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                  style={styles.sendButtonGradient}
+                >
+                  <Ionicons name="send" size={18} color={colors.textWhite} />
+                </LinearGradient>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Footer text */}
+          <Text style={styles.footerText}>
+            Powered by AI · Always learning 🧠 ✨
+          </Text>
+        </View>
+      </MotiView>
     </View>
   );
 }
@@ -432,7 +499,24 @@ const styles = StyleSheet.create({
   // Container
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  contentContainer: {
+    height: '80%',
+    backgroundColor: '#0F1115',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
   },
 
   // Header
@@ -440,17 +524,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#17191F',
     borderBottomWidth: 1,
-    borderBottomColor: colors.purpleBorder,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.closeButtonBg,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -519,7 +603,7 @@ const styles = StyleSheet.create({
   aiBubble: {
     backgroundColor: colors.aiBubbleBg,
     borderWidth: 1,
-    borderColor: colors.purpleBorder,
+    borderColor: colors.primaryBorder,
     padding: 12,
     paddingHorizontal: 16,
     // Medium drop shadow
@@ -562,7 +646,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.aiBubbleBg,
     borderWidth: 1,
-    borderColor: colors.purpleBorder,
+    borderColor: colors.primaryBorder,
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -575,7 +659,97 @@ const styles = StyleSheet.create({
     backgroundColor: colors.typingDot,
   },
 
-  // Places
+  // Places (New Horizontal Style)
+  horizontalPlacesContainer: {
+    marginTop: 12,
+    marginLeft: -16, // Bleed out of bubble
+    marginRight: -16,
+  },
+  horizontalPlacesScroll: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  miniPlaceCard: {
+    width: 160,
+    backgroundColor: 'rgba(15, 17, 21, 0.95)',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  miniCardImageContainer: {
+    height: 100,
+    width: '100%',
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+  },
+  miniCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  miniCardPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniCardPlaceholderEmoji: {
+    fontSize: 32,
+  },
+  miniCardCategory: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniCardCategoryEmoji: {
+    fontSize: 12,
+  },
+  miniCardInfo: {
+    padding: 10,
+  },
+  miniCardName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  miniCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  miniCardRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  miniCardRatingText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  miniCardGo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  miniCardGoText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#06B6D4',
+  },
+
+  // Legacy Places style
   placesContainer: {
     marginTop: 12,
     gap: 8,
@@ -583,11 +757,11 @@ const styles = StyleSheet.create({
   placeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: colors.purpleBorder,
+    borderColor: colors.primaryBorder,
   },
   placeCategoryDot: {
     width: 36,
@@ -648,9 +822,9 @@ const styles = StyleSheet.create({
 
   // Input
   inputArea: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#17191F',
     borderTopWidth: 1,
-    borderTopColor: colors.purpleBorder,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
     paddingBottom: Platform.OS === 'ios' ? 28 : 12,
   },
   inputContainer: {
@@ -661,10 +835,10 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: '#1E293B',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: colors.purpleBorder,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     marginRight: 8,
   },
   input: {

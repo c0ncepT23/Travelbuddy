@@ -49,6 +49,11 @@ export class TripGroupController {
       }
 
       const trips = await TripGroupService.getUserTrips(req.user.id);
+      
+      // DEBUG: Log first trip to check places_count
+      if (trips.length > 0) {
+        logger.info(`[TripGroupController] User ${req.user.id} has ${trips.length} trips. First trip places_count: ${trips[0].places_count}`);
+      }
 
       res.status(200).json({
         success: true,

@@ -7,7 +7,7 @@
  * - Clean, minimal design
  */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,15 +23,15 @@ import MapboxFlatMap from '../../components/MapboxFlatMap';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
+import { SkeletonLoader } from '../../components/SkeletonLoader';
 
 // COLOR PALETTE - Lighter for visibility
 const COLORS = {
-  background: '#0f172a',      // Dark blue (not pure black)
-  primaryGlow: '#8B5CF6',     // Electric purple
+  background: '#0F1115',      // Deep Slate
+  primaryGlow: '#06B6D4',     // Electric Cyan
   zenlyGreen: '#22C55E',      // Success/Nature
-  surfaceCard: '#1E293B',     // Card background
-  neonPink: '#ff0080',
-  electricBlue: '#00d4ff',
+  surfaceCard: '#17191F',     // Card background
+  electricBlue: '#06B6D4',
   neonGreen: '#00ff88',
   white: '#ffffff',
 };
@@ -189,6 +189,15 @@ export default function WorldMapScreen() {
     tripId: trip.id,
   }));
 
+  // Calculate total places saved
+  const totalPlacesSaved = useMemo(() => {
+    return trips.reduce((sum, trip) => {
+      // Ensure we have a number (handle potential string from DB)
+      const count = Number(trip.places_count) || 0;
+      return sum + count;
+    }, 0);
+  }, [trips]);
+
   return (
     <View style={styles.container}>
       <StatusBar 
@@ -287,19 +296,39 @@ export default function WorldMapScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>
-              {trips.length}
+              {totalPlacesSaved}
             </Text>
             <Text style={styles.statLabel}>
-              Collections
+              Places Saved
             </Text>
           </View>
         </MotiView>
       )}
 
-      {/* Loading overlay */}
+      {/* Skeleton Loading State */}
       {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={COLORS.primaryGlow} />
+        <View style={styles.skeletonOverlay}>
+          {/* Header Skeleton */}
+          <View style={styles.header}>
+            <View>
+              <SkeletonLoader width={80} height={32} borderRadius={8} />
+              <SkeletonLoader width={160} height={16} borderRadius={4} style={{ marginTop: 8 }} />
+            </View>
+            <SkeletonLoader width={44} height={44} borderRadius={22} />
+          </View>
+
+          {/* Stats Bar Skeleton */}
+          <View style={styles.statsBarSkeleton}>
+            <View style={styles.statItemSkeleton}>
+              <SkeletonLoader width={40} height={24} borderRadius={6} />
+              <SkeletonLoader width={60} height={12} borderRadius={4} style={{ marginTop: 6 }} />
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItemSkeleton}>
+              <SkeletonLoader width={40} height={24} borderRadius={6} />
+              <SkeletonLoader width={80} height={12} borderRadius={4} style={{ marginTop: 6 }} />
+            </View>
+          </View>
         </View>
       )}
     </View>
@@ -357,7 +386,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: COLORS.neonPink,
+    backgroundColor: COLORS.primaryGlow,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -376,13 +405,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 28,
     alignItems: 'center',
-    shadowColor: COLORS.primaryGlow,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 5,
     borderWidth: 1,
-    borderColor: COLORS.primaryGlow + '40',
+    borderColor: COLORS.primaryGlow + '30',
   },
   emptyEmoji: {
     fontSize: 48,
@@ -422,16 +451,16 @@ const styles = StyleSheet.create({
     bottom: 40,
     left: 20,
     right: 20,
-    backgroundColor: COLORS.surfaceCard + 'E0',
+    backgroundColor: COLORS.surfaceCard + 'F0',
     borderRadius: 16,
     padding: 16,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.primaryGlow + '40',
-    shadowColor: COLORS.primaryGlow,
-    shadowOpacity: 0.3,
+    borderWidth: 1,
+    borderColor: COLORS.primaryGlow + '30',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
     shadowRadius: 20,
     elevation: 5,
   },
@@ -442,22 +471,45 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: '800',
-    color: COLORS.primaryGlow,
+    color: COLORS.white,
   },
   statLabel: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
   },
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: COLORS.primaryGlow + '40',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    backgroundColor: 'rgba(15, 17, 21, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0F1115',
+    zIndex: 100,
+  },
+  statsBarSkeleton: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: '#17191F',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.1)',
+  },
+  statItemSkeleton: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
   },
 });

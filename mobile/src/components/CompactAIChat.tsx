@@ -17,6 +17,7 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +42,7 @@ interface CompactAIChatProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   isTyping: boolean;
+  suggestions?: string[];
 }
 
 export const CompactAIChat: React.FC<CompactAIChatProps> = ({
@@ -50,6 +52,7 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
   messages,
   onSendMessage,
   isTyping,
+  suggestions = [],
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showResponse, setShowResponse] = useState(false);
@@ -115,6 +118,33 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
       transition={{ type: 'spring', damping: 20 }}
       style={styles.container}
     >
+      {/* Map-Aware Suggestions */}
+      {suggestions.length > 0 && !isTyping && (
+        <MotiView
+          from={{ opacity: 0, translateY: 10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          exit={{ opacity: 0, translateY: 10 }}
+          style={styles.suggestionsContainer}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.suggestionsScroll}
+          >
+            {suggestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.suggestionChip}
+                onPress={() => onSendMessage(suggestion)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.suggestionText}>{suggestion}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </MotiView>
+      )}
+
       {/* Latest AI Response Bubble (auto-hides after 10s) */}
       {showResponse && latestAIMessage && hasUserSentMessage && !isTyping && (
         <MotiView
@@ -251,6 +281,33 @@ const styles = StyleSheet.create({
     zIndex: 200,
   },
 
+  // Suggestions
+  suggestionsContainer: {
+    marginBottom: 12,
+  },
+  suggestionsScroll: {
+    gap: 8,
+    paddingRight: 16,
+  },
+  suggestionChip: {
+    backgroundColor: 'rgba(15, 17, 21, 0.9)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  suggestionText: {
+    color: '#06B6D4',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
   // Response Bubble
   responseBubbleContainer: {
     marginBottom: 12,
@@ -262,7 +319,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    shadowColor: '#8B5CF6',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -295,7 +352,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 6,
     paddingHorizontal: 20,
     paddingVertical: 14,
-    shadowColor: '#8B5CF6',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -326,7 +383,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.15)',
+    borderColor: 'rgba(6, 182, 212, 0.15)',
   },
   minimizeButton: {
     width: 40,
@@ -348,7 +405,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    backgroundColor: 'rgba(6, 182, 212, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,

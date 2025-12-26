@@ -513,7 +513,12 @@ export default function App() {
                 <Stack.Screen
                   name="AgentChat"
                   component={AgentChatScreen}
-                  options={{ headerShown: false }}
+                  options={{ 
+                    headerShown: false,
+                    presentation: 'transparentModal',
+                    cardStyle: { backgroundColor: 'transparent' },
+                    animationEnabled: true,
+                  }}
                 />
                 
                 {/* Utility Screens */}

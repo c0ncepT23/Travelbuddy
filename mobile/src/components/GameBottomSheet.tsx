@@ -50,18 +50,18 @@ const SNAP_POINTS = {
   EXPANDED: SCREEN_HEIGHT * 0.85,   // 85% - Full screen
 };
 
-// Zenly-style colors
+// Midnight Discovery palette
 const COLORS = {
-  background: 'rgba(15, 23, 42, 0.95)',
-  surface: 'rgba(30, 41, 59, 0.9)',
-  surfaceLight: 'rgba(51, 65, 85, 0.8)',
-  primaryGlow: '#8B5CF6',
-  secondaryGlow: '#06B6D4',
+  background: 'rgba(15, 17, 21, 0.95)',
+  surface: 'rgba(23, 25, 31, 0.9)',
+  surfaceLight: 'rgba(39, 41, 47, 0.8)',
+  primaryGlow: '#06B6D4', // Electric Cyan
+  secondaryGlow: '#22D3EE',
   accent: '#22C55E',
   text: '#FFFFFF',
   textSecondary: '#94A3B8',
-  border: 'rgba(139, 92, 246, 0.3)',
-  cardGlow: 'rgba(139, 92, 246, 0.2)',
+  border: 'rgba(6, 182, 212, 0.2)',
+  cardGlow: 'rgba(6, 182, 212, 0.1)',
 };
 
 interface PlaceCardProps {

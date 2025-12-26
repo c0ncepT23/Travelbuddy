@@ -41,22 +41,22 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Snap points as percentages of screen height
 const SNAP_POINTS = {
-  PEEK: SCREEN_HEIGHT * 0.12,       // 12% - Just the header + horizontal scroll
+  PEEK: SCREEN_HEIGHT * 0.22,       // 22% - Ensures full card (image + name + rating) is visible
   HALF: SCREEN_HEIGHT * 0.45,       // 45% - Browse mode
   FULL: SCREEN_HEIGHT * 0.85,       // 85% - Full list
 };
 
-// Colors matching the app theme
+// Colors matching the Midnight Discovery palette
 const COLORS = {
-  background: 'rgba(15, 23, 42, 0.98)',
-  surface: 'rgba(30, 41, 59, 0.95)',
-  surfaceLight: 'rgba(51, 65, 85, 0.8)',
-  primaryGlow: '#8B5CF6',
-  secondaryGlow: '#06B6D4',
+  background: 'rgba(15, 17, 21, 0.98)',
+  surface: 'rgba(23, 25, 31, 0.95)',
+  surfaceLight: 'rgba(39, 41, 47, 0.8)',
+  primaryGlow: '#06B6D4', // Electric Cyan
+  secondaryGlow: '#22D3EE',
   accent: '#22C55E',
   text: '#FFFFFF',
   textSecondary: '#94A3B8',
-  border: 'rgba(139, 92, 246, 0.3)',
+  border: 'rgba(6, 182, 212, 0.2)',
 };
 
 // Compact horizontal card for peek mode
@@ -521,25 +521,25 @@ const styles = StyleSheet.create({
     top: 70,
     left: 0,
     right: 0,
-    height: 110,
+    height: 140,
   },
   peekList: {
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 16,
+    gap: 12,
   },
   
   // Compact card (peek mode)
   compactCard: {
-    width: 80,
-    marginRight: 8,
+    width: 110,
+    marginRight: 12,
   },
   compactCardSelected: {
     transform: [{ scale: 1.05 }],
   },
   compactImageContainer: {
-    width: 80,
-    height: 60,
-    borderRadius: 12,
+    width: 110,
+    height: 80,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: COLORS.surface,
   },

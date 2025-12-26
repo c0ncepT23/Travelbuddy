@@ -10,18 +10,19 @@
  */
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Dimensions,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-  StatusBar,
-  Keyboard,
-  Linking,
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Dimensions, 
+  TouchableOpacity, 
+  ActivityIndicator, 
+  Platform, 
+  StatusBar, 
+  Keyboard, 
+  Linking, 
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +46,8 @@ import { PersistentPlacesDrawer, PersistentPlacesDrawerRef } from '../../compone
 // Removed: FloatingCloud, GlowingBubble, OrbitalBubbles - replaced with Mapbox clusters
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
+
+import { SkeletonLoader } from '../../components/SkeletonLoader';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -280,14 +283,14 @@ const COUNTRY_FLAGS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  food: '#22C55E',        // green
-  activity: '#3B82F6',    // blue  
-  shopping: '#EAB308',    // yellow
-  accommodation: '#8B5CF6', // purple
-  place: '#3B82F6',       // blue
-  tip: '#EC4899',         // pink
-  nightlife: '#F97316',   // orange
-  default: '#8B5CF6',     // purple
+  food: '#22C55E',        // Emerald Green
+  activity: '#06B6D4',    // Electric Cyan
+  shopping: '#EAB308',    // Golden Yellow
+  accommodation: '#F43F5E', // Rose Red
+  place: '#6366F1',       // Indigo
+  tip: '#EC4899',         // Pink
+  nightlife: '#F97316',   // Orange
+  default: '#06B6D4',     // Cyan
 };
 
 const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'orange')[] = [
@@ -305,13 +308,13 @@ interface CategoryFilterConfig {
 }
 
 const CATEGORY_FILTERS: CategoryFilterConfig[] = [
-  { key: 'all', label: 'All', icon: '🌍', color: '#8B5CF6' },
+  { key: 'all', label: 'All', icon: '🌍', color: '#06B6D4' },
   { key: 'food', label: 'Food', icon: '🍔', color: '#22C55E' },
-  { key: 'activity', label: 'Activity', icon: '🎯', color: '#3B82F6' },
+  { key: 'activity', label: 'Activity', icon: '🎯', color: '#06B6D4' },
   { key: 'place', label: 'Place', icon: '📍', color: '#6366F1' },
   { key: 'shopping', label: 'Shopping', icon: '🛍️', color: '#EAB308' },
   { key: 'nightlife', label: 'Nightlife', icon: '🎉', color: '#EC4899' },
-  { key: 'accommodation', label: 'Stay', icon: '🏨', color: '#A855F7' },
+  { key: 'accommodation', label: 'Stay', icon: '🏨', color: '#F43F5E' },
 ];
 
 // Mapbox style - navigation night for dark Zenly aesthetic
@@ -587,7 +590,6 @@ export default function CountryBubbleScreen() {
   
   // Map bounds filtering state
   const [currentZoom, setCurrentZoom] = useState<number>(0);
-  const [isMapFilterActive, setIsMapFilterActive] = useState<boolean>(false);
   const mapFilterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Visible items for drawer (filtered by map bounds) - "Mini-map inventory"
@@ -608,6 +610,9 @@ export default function CountryBubbleScreen() {
   const bottomSheetRef = useRef<GameBottomSheetRef>(null);
   const placeDetailSheetRef = useRef<PlaceDetailSheetRef>(null);
   const placesDrawerRef = useRef<PersistentPlacesDrawerRef>(null);
+
+  // Check if single place detail sheet is open (used to hide persistent drawer)
+  const isSinglePlaceDetailOpen = bottomSheetVisible && bottomSheetItems.length === 1;
   
   // Refs for checking state in callbacks (avoids stale closure issue)
   // These are updated IMMEDIATELY in handlers, not via useEffect (which is async)
@@ -660,6 +665,12 @@ export default function CountryBubbleScreen() {
   
   // Use category-filtered items for map display
   const items = categoryFilteredItems;
+
+  // Keep a ref of items for the map sync callback to avoid staleness/re-renders
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   
   // Get current category color for clusters (when filtered)
   const currentCategoryColor = useMemo(() => {
@@ -867,115 +878,98 @@ export default function CountryBubbleScreen() {
     setFilteredItems(allItems);
     setViewMode('macro');
     // setSelectedCategory REMOVED - no longer using orbital bubbles
-    setIsMapFilterActive(false);
     
     animateToRegion(countryCoords.latitude, countryCoords.longitude, countryCoords.latDelta, countryCoords.lngDelta);
   }, [allItems, countryCoords, animateToRegion]);
 
+  // Calculate distance between two coordinates in meters (Haversine formula)
+  const getDistanceMeters = useCallback((coord1: [number, number], coord2: [number, number]): number => {
+    const [lng1, lat1] = coord1;
+    const [lng2, lat2] = coord2;
+    
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    
+    const a = Math.sin(dLat / 2) ** 2 + 
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+              Math.sin(dLng / 2) ** 2;
+    
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }, []);
+
+  // Check if camera has moved away from hero (called on region change)
+  const checkIfPannedAway = useCallback((centerCoords: [number, number]) => {
+    if (!heroCoordinatesRef.current || !bottomSheetVisible) return;
+    
+    const distance = getDistanceMeters(centerCoords, heroCoordinatesRef.current);
+    
+    // Show re-center button if more than 300m away
+    if (distance > 300) {
+      setShowRecenter(true);
+    } else {
+      setShowRecenter(false);
+    }
+  }, [bottomSheetVisible, getDistanceMeters]);
+
   // Handle map idle (when user stops panning/zooming)
   // Updates drawer items based on what's visible on screen
-  const handleMapIdle = useCallback(async (feature: any) => {
-    // Clear any pending timeout
-    if (mapFilterTimeoutRef.current) {
-      clearTimeout(mapFilterTimeoutRef.current);
-    }
+  const handleMapIdle = useCallback((event: any) => {
+    // 1. Extract zoom and bounds from the event (Push model)
+    const zoom = event.properties?.zoomLevel 
+      || event.properties?.zoom 
+      || event?.zoomLevel 
+      || event?.zoom 
+      || 10;
     
-    // Extract zoom - try multiple property names (varies by rnmapbox version)
-    const zoom = feature.properties?.zoomLevel 
-      || feature.properties?.zoom 
-      || feature?.zoomLevel 
-      || feature?.zoom 
-      || 10; // fallback to reasonable default
+    const eventBounds = event.properties?.visibleBounds;
     
-    console.log('🗺️ Map idle - zoom:', zoom);
+    console.log('🗺️ Map idle - zoom:', zoom.toFixed(2));
     setCurrentZoom(zoom);
-    currentZoomRef.current = zoom; // Keep ref in sync for callbacks
+    currentZoomRef.current = zoom;
     
     // Unlock cluster animation when map settles
     if (isClusterAnimatingRef.current) {
-      console.log('🔓 Map settled, unlocking cluster animation');
       isClusterAnimatingRef.current = false;
     }
-    
-    // Check if user has panned away from hero building (for re-center button)
-    if (heroCoordinatesRef.current && feature.geometry?.coordinates) {
-      const centerCoords = feature.geometry.coordinates as [number, number];
+
+    // 2. Sync drawer with bounds using a small delay (let JS breathe)
+    // This prevents the "racing" effect during fast pans/zooms
+    if (mapFilterTimeoutRef.current) {
+      clearTimeout(mapFilterTimeoutRef.current);
+    }
+
+    mapFilterTimeoutRef.current = setTimeout(async () => {
+      let visibleBounds = eventBounds;
+
+      // Fallback to imperative call if bounds not in event
+      if (!visibleBounds && mapViewRef.current) {
+        try {
+          visibleBounds = await mapViewRef.current.getVisibleBounds();
+        } catch (error) {
+          console.log('⚠️ getVisibleBounds failed:', error);
+        }
+      }
+
+      // Update drawer items based on what's actually visible
+      if (visibleBounds && Array.isArray(visibleBounds) && visibleBounds.length === 2) {
+        // Filter against itemsRef to ensure we have the latest category-filtered list
+        const boundsFiltered = filterItemsByMapBounds(itemsRef.current, visibleBounds);
+        
+        // Only update if the result is actually different (visual stability)
+        setDrawerItems(boundsFiltered);
+        console.log(`📋 Drawer sync: ${boundsFiltered.length}/${itemsRef.current.length} places in view`);
+      } else {
+        setDrawerItems(itemsRef.current);
+      }
+    }, 50);
+
+    // 3. Check if user has panned away from hero building (for re-center button)
+    if (heroCoordinatesRef.current && event.geometry?.coordinates) {
+      const centerCoords = event.geometry.coordinates as [number, number];
       checkIfPannedAway(centerCoords);
     }
-    
-    // ============================================================
-    // DRAWER SYNC: Get visible bounds and filter items
-    // ============================================================
-    // Use getVisibleBounds() - more reliable than callback properties
-    if (mapViewRef.current) {
-      try {
-        // Get current visible bounds directly from MapView
-        const visibleBounds = await mapViewRef.current.getVisibleBounds();
-        
-        if (visibleBounds && Array.isArray(visibleBounds) && visibleBounds.length === 2) {
-          // visibleBounds format: [[ne_lng, ne_lat], [sw_lng, sw_lat]]
-          const boundsFiltered = filterItemsByMapBounds(items, visibleBounds);
-          setDrawerItems(boundsFiltered);
-          console.log(`📋 Drawer sync: ${boundsFiltered.length}/${items.length} places in view`);
-        } else {
-          // Bounds not available - show all
-          setDrawerItems(items);
-          console.log(`📋 Drawer sync: bounds unavailable, showing all ${items.length}`);
-        }
-      } catch (error) {
-        console.log('⚠️ getVisibleBounds failed:', error);
-        setDrawerItems(items);
-      }
-    } else {
-      // No mapRef - just use all items
-      setDrawerItems(items);
-    }
-    
-    // ============================================================
-    // ORIGINAL FILTER LOGIC (for other UI elements)
-    // ============================================================
-    
-    // Skip map filtering when in RPG interaction flow
-    if (isInRPGFlowRef.current) {
-      return;
-    }
-    
-    // Skip if in a specific filter mode (AI or nearMe controls these)
-    if (filterMode === 'nearMe' || filterMode === 'area') {
-      return;
-    }
-    
-    // If zoomed out, show all places
-    if (zoom < MIN_ZOOM_FOR_FILTERING) {
-      if (isMapFilterActive) {
-        setFilteredItems(allItems);
-        setIsMapFilterActive(false);
-        setActiveAreaFilter(null);
-      }
-      return;
-    }
-    
-    // Debounce: wait 300ms after user stops moving for main filter update
-    mapFilterTimeoutRef.current = setTimeout(() => {
-      const bounds = feature.properties?.visibleBounds;
-      
-      if (bounds && Array.isArray(bounds) && bounds.length === 2) {
-        const visibleItems = filterItemsByMapBounds(allItems, bounds);
-        
-        // Update filter state based on visible items
-        if (visibleItems.length > 0) {
-          setFilteredItems(visibleItems);
-          setIsMapFilterActive(true);
-          setActiveAreaFilter(`${visibleItems.length} in view`);
-        } else {
-          // No places in view - keep showing but indicate empty
-          setFilteredItems([]);
-          setIsMapFilterActive(true);
-          setActiveAreaFilter('0 in view');
-        }
-      }
-    }, 300);
-  }, [allItems, items, filterMode, isMapFilterActive]); // Using refs for bottomSheetVisible to avoid stale closures
+  }, [checkIfPannedAway]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -1067,24 +1061,32 @@ export default function CountryBubbleScreen() {
   const placesGeoJSON = useMemo(() => {
     const features = items
       .filter(item => item.location_lat && item.location_lng)
-      .map(item => ({
-        type: 'Feature' as const,
-        id: item.id,
-        geometry: {
-          type: 'Point' as const,
-          coordinates: [item.location_lng!, item.location_lat!],
-        },
-        properties: {
+      .map(item => {
+        const rating = parseFloat(String(item.rating)) || 0;
+        // Priority Score (Rank): (Rating * 10)
+        // This ensures the "best" places stay visible when zoomed out
+        const rank = Math.round(rating * 10);
+
+        return {
+          type: 'Feature' as const,
           id: item.id,
-          name: item.name || 'Unknown Place',
-          category: item.category || 'place',
-          subcategory: item.cuisine_type || item.place_type || 'other',
-          rating: parseFloat(String(item.rating)) || 0,  // Ensure number for Mapbox filter
-          icon: CATEGORY_ICONS[item.category || 'place'] || CATEGORY_ICONS.default,
-          iconName: ICON_NAMES[item.category || 'place'] || ICON_NAMES.default,
-          color: CATEGORY_COLORS[item.category || 'place'] || CATEGORY_COLORS.default,
-        },
-      }));
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [item.location_lng!, item.location_lat!],
+          },
+          properties: {
+            id: item.id,
+            name: item.name || 'Unknown Place',
+            category: item.category || 'place',
+            subcategory: item.cuisine_type || item.place_type || 'other',
+            rating: rating,
+            icon: CATEGORY_ICONS[item.category || 'place'] || CATEGORY_ICONS.default,
+            iconName: ICON_NAMES[item.category || 'place'] || ICON_NAMES.default,
+            color: CATEGORY_COLORS[item.category || 'place'] || CATEGORY_COLORS.default,
+            rank: rank,
+          },
+        };
+      });
 
     return {
       type: 'FeatureCollection' as const,
@@ -1177,8 +1179,7 @@ export default function CountryBubbleScreen() {
   // Ref to track if we're in fly-to animation (prevent scroll sync from interfering)
   const isAnimatingRef = useRef(false);
   
-  // State for beacon/hero building highlight
-  const [heroCoordinates, setHeroCoordinates] = useState<[number, number] | null>(null);
+  // heroCoordinatesRef is used for orbit functionality (no visible beacon anymore)
   
   // State for selected place (full object for HUD display)
   const [selectedPlace, setSelectedPlace] = useState<SavedItem | null>(null);
@@ -1290,41 +1291,36 @@ export default function CountryBubbleScreen() {
     return baseBearing;
   }, []);
 
-  // Calculate distance between two coordinates in meters (Haversine formula)
-  const getDistanceMeters = useCallback((coord1: [number, number], coord2: [number, number]): number => {
-    const [lng1, lat1] = coord1;
-    const [lng2, lat2] = coord2;
-    
-    const R = 6371000; // Earth radius in meters
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    
-    const a = Math.sin(dLat / 2) ** 2 + 
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-              Math.sin(dLng / 2) ** 2;
-    
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }, []);
-
-  // Handle map tap - trigger orbit if tapped near hero building (NATIVE TAP DETECTION!)
+  // Handle map tap - Google Maps style: minimize drawer or trigger orbit
   const handleMapPress = useCallback((event: any) => {
-    // Only process if we have a selected building
-    if (!heroCoordinatesRef.current || isOrbitingRef.current) return;
-    
     const tapCoords = event.geometry?.coordinates as [number, number];
     if (!tapCoords) return;
     
-    const distance = getDistanceMeters(tapCoords, heroCoordinatesRef.current);
-    
-    console.log('🗺️ Map tapped at:', tapCoords, 'Distance to hero:', distance.toFixed(0) + 'm');
-    
-    // If tapped within 150 meters of the hero building, trigger orbit!
-    if (distance < 150) {
-      console.log('🏢 BUILDING AREA TAPPED! Triggering 360° orbit...');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      triggerOrbit();
+    // If PlaceDetailSheet is open (single place selected)
+    if (bottomSheetVisible && bottomSheetItems.length === 1) {
+      // Check if tapped near the selected place (for orbit)
+      if (heroCoordinatesRef.current && !isOrbitingRef.current) {
+        const distance = getDistanceMeters(tapCoords, heroCoordinatesRef.current);
+        console.log('🗺️ Map tapped at:', tapCoords, 'Distance to selected:', distance.toFixed(0) + 'm');
+        
+        // If tapped within 150m of selected place, trigger orbit
+        if (distance < 150) {
+          console.log('🏢 BUILDING AREA TAPPED! Triggering 360° orbit...');
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          triggerOrbit();
+          return;
+        }
+      }
+      
+      // Tapped elsewhere on map - minimize drawer to peek (Google Maps behavior)
+      console.log('🗺️ Map tapped - minimizing drawer to peek');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      placeDetailSheetRef.current?.peek();
+      return;
     }
-  }, [getDistanceMeters, triggerOrbit]);
+    
+    // No drawer open - normal behavior (could add other interactions here)
+  }, [getDistanceMeters, triggerOrbit, bottomSheetVisible, bottomSheetItems.length]);
 
   // Re-center camera on hero building
   const handleRecenter = useCallback(() => {
@@ -1349,21 +1345,7 @@ export default function CountryBubbleScreen() {
     setShowRecenter(false);
   }, [flyToCamera]);
 
-  // Check if camera has moved away from hero (called on region change)
-  const checkIfPannedAway = useCallback((centerCoords: [number, number]) => {
-    if (!heroCoordinatesRef.current || !bottomSheetVisible) return;
-    
-    const distance = getDistanceMeters(centerCoords, heroCoordinatesRef.current);
-    
-    // Show re-center button if more than 300m away
-    if (distance > 300) {
-      setShowRecenter(true);
-    } else {
-      setShowRecenter(false);
-    }
-  }, [bottomSheetVisible, getDistanceMeters]);
-
-  // Handle place selection from bottom sheet - CINEMATIC "LOCK-ON" fly-to!
+  // Handle place selection - CINEMATIC "LOCK-ON" fly-to + show PlaceDetailSheet
   const handlePlaceSelect = useCallback((place: SavedItem) => {
     // 1. HAPTIC FEEDBACK - Physical "lock-on" feel
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1372,6 +1354,12 @@ export default function CountryBubbleScreen() {
     selectedPlaceIdRef.current = place.id;
     setSelectedPlace(place); // Store full place for HUD
     
+    // 2. SET UP BOTTOM SHEET for single place view (PlaceDetailSheet)
+    setBottomSheetItems([place]);
+    setBottomSheetLabel(place.name || 'Place');
+    setBottomSheetEmoji(CATEGORY_ICONS[place.category || 'place'] || '📍');
+    setBottomSheetVisible(true);
+    
     // Mark as animating
     isAnimatingRef.current = true;
     
@@ -1379,10 +1367,9 @@ export default function CountryBubbleScreen() {
       const lng = place.location_lng;
       const lat = place.location_lat;
       
-      // 2. SET HERO BEACON - Pillar of light at this location
+      // Store coords for orbit (no glowing beacon - icons are enough!)
       const coords: [number, number] = [lng, lat];
-      setHeroCoordinates(coords);
-      heroCoordinatesRef.current = coords; // Update ref for orbit
+      heroCoordinatesRef.current = coords; // Keep ref for orbit functionality
       
       // 3. Calculate best viewing angle
       const bestBearing = calculateBestBearing(lng, lat);
@@ -1419,28 +1406,19 @@ export default function CountryBubbleScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }, 1200);
     }
-  }, [calculateBestBearing, flyToCamera]);
+  }, [calculateBestBearing, flyToCamera, CATEGORY_ICONS]);
 
-  // Handle individual pin tap - show HUD with place details (defined after handlePlaceSelect)
+  // Handle individual pin tap - find place and call handlePlaceSelect
   const handlePinPress = useCallback((feature: any) => {
     const placeId = feature.properties?.id;
     if (!placeId) return;
     
-    // Find the place in our items
+    // Find the place in our items and select it
     const place = items.find(item => item.id === placeId);
     if (place) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
-      // Set up bottom sheet with single item
-      setBottomSheetItems([place]);
-      setBottomSheetLabel(place.name || 'Place');
-      setBottomSheetEmoji(CATEGORY_ICONS[place.category || 'place'] || '📍');
-      setBottomSheetVisible(true);
-      
-      // Trigger cinematic fly-to
       handlePlaceSelect(place);
     }
-  }, [items, handlePlaceSelect, CATEGORY_ICONS]);
+  }, [items, handlePlaceSelect]);
 
   // Handle scroll sync - pan camera to visible place (disabled during fly-to animation)
   const handlePlaceScroll = useCallback((place: SavedItem) => {
@@ -1473,8 +1451,7 @@ export default function CountryBubbleScreen() {
     setSelectedPlace(null);
     setShowRecenter(false);
     
-    // Clear the hero beacon
-    setHeroCoordinates(null);
+    // Clear hero coordinates ref (used for orbit)
     heroCoordinatesRef.current = null;
     
     // Exit RPG flow IMMEDIATELY
@@ -1496,6 +1473,32 @@ export default function CountryBubbleScreen() {
   }, []);
 
   // Legacy handleMicroBubblePress REMOVED - no longer using bubbles
+
+  // Handle native back gesture/button - ensures drawer closes before screen exits
+  useEffect(() => {
+    // 1. DYNAMIC GESTURE CONTROL (iOS/Android Gestures)
+    // Disable native swipe-back while drawer is open so user doesn't accidentally exit
+    navigation.setOptions({
+      gestureEnabled: !bottomSheetVisible,
+    });
+
+    // 2. HARDWARE BACK BUTTON (Android)
+    const onBackPress = () => {
+      if (bottomSheetVisible) {
+        handleBottomSheetClose();
+        return true; // Stop propagation (don't exit screen)
+      }
+      return false; // Exit screen normally
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    return () => {
+      backHandler.remove();
+      // Ensure gesture is re-enabled on unmount
+      navigation.setOptions({ gestureEnabled: true });
+    };
+  }, [bottomSheetVisible, handleBottomSheetClose, navigation]);
 
   const handleBack = () => {
     // Close any open UI elements first
@@ -1619,6 +1622,27 @@ export default function CountryBubbleScreen() {
   // RENDER
   // ============================================================
 
+  // Dynamic suggestions based on map context
+  const dynamicSuggestions = useMemo(() => {
+    const suggestions = [];
+    
+    // 1. If we have active area filter (e.g. "Shibuya")
+    if (activeAreaFilter && activeAreaFilter !== 'Near You' && activeAreaFilter !== '0 in view') {
+      suggestions.push(`☕ Hidden cafes in ${activeAreaFilter}`);
+      suggestions.push(`🍔 Best food in ${activeAreaFilter}`);
+    } else if (drawerItems.length > 0) {
+      // 2. If we have items in view
+      suggestions.push(`🎯 What's nearby?`);
+      suggestions.push(`🍹 Nightlife around here`);
+    } else {
+      // 3. Default suggestions for the country
+      suggestions.push(`🏞️ Top things to do in ${countryName}`);
+      suggestions.push(`🏨 Best places to stay`);
+    }
+    
+    return suggestions;
+  }, [activeAreaFilter, drawerItems.length, countryName]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -1656,163 +1680,211 @@ export default function CountryBubbleScreen() {
           } : undefined}
         />
 
-        {/* PLACES CLUSTERS AND PINS - Replaces bubbles */}
-        {!bottomSheetVisible && placesGeoJSON.features.length > 0 && (
+        {/* PLACES HOTSPOTS (CLUSTERS) - Purple density glow */}
+        {placesGeoJSON.features.length > 0 && (
           <ShapeSource
-            ref={shapeSourceRef}
-            id="places-source"
+            id="places-hotspots-source"
             shape={placesGeoJSON}
             cluster={true}
-            clusterRadius={30}
-            clusterMaxZoomLevel={16}
+            clusterRadius={60}
+            clusterMaxZoomLevel={14}
             onPress={(e) => {
               const feature = e.features?.[0];
               if (feature?.properties?.cluster) {
                 handleClusterPress(feature);
-              } else if (feature?.properties?.id) {
+              }
+            }}
+          >
+            {/* DENSITY GLOW - Hotspots at low zoom levels (Digital "Radar" Hotspots) */}
+            <CircleLayer
+              id="density-glow"
+              filter={['has', 'point_count']}
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'point_count'],
+                  2, 30,
+                  10, 55,
+                  50, 85
+                ],
+                circleColor: '#06B6D4', // Electric Cyan
+                circleBlur: 0.8,
+                circleOpacity: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 0.6,
+                  13, 0.3,
+                  15, 0 // Fade out as we zoom in
+                ],
+              }}
+            />
+          </ShapeSource>
+        )}
+
+        {/* INDIVIDUAL PINS - Always visible, Google Maps / Airbnb style */}
+        {placesGeoJSON.features.length > 0 && (
+          <ShapeSource
+            ref={shapeSourceRef}
+            id="places-pins-source"
+            shape={placesGeoJSON}
+            cluster={false}
+            onPress={(e) => {
+              const feature = e.features?.[0];
+              if (feature?.properties?.id) {
                 handlePinPress(feature);
               }
             }}
           >
-            {/* CLUSTER CIRCLES - Category color when filtered, RPG Rarity when "All" */}
+            {/* PIN SHADOW - For "Premium" feel */}
             <CircleLayer
-              id="clusters"
-              filter={['has', 'point_count']}
+              id="pin-shadow"
               style={{
-                // Scale size based on density (bigger = more loot!)
                 circleRadius: [
-                  'step',
-                  ['get', 'point_count'],
-                  22, // 1-4 places (Common)
-                  5, 28, // 5-9 places (Rare)
-                  10, 34, // 10-14 places (Epic)
-                  15, 42, // 15+ places (Legendary)
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 8,
+                  12, 12,
+                  16, 16
                 ],
-                // Use category color when filtered, otherwise RPG rarity colors
-                circleColor: currentCategoryColor || [
-                  'step',
-                  ['get', 'point_count'],
-                  '#51bbd6', // Common - Cyan
-                  5, '#f1f075', // Rare - Gold
-                  10, '#ec8b4e', // Epic - Orange
-                  15, '#f28cb1', // Legendary - Pink/Magenta
-                ],
-                circleOpacity: 0.88,
-                circleStrokeWidth: 3,
-                circleStrokeColor: '#FFFFFF',
+                circleColor: '#000000',
+                circleOpacity: 0.4,
+                circleBlur: 0.5,
+                circleTranslate: [0, 2],
+                circleSortKey: ['get', 'rank'],
               }}
             />
 
-            {/* CLUSTER COUNT TEXT */}
-            <SymbolLayer
-              id="cluster-count"
-              filter={['has', 'point_count']}
+            {/* SELECTED PIN HIGHLIGHT - Glow ring behind selected pin */}
+            <CircleLayer
+              id="selected-pin-glow"
+              filter={['==', ['get', 'id'], selectedPlaceId || '__none__']}
               style={{
-                textField: ['get', 'point_count_abbreviated'],
-                textSize: 14,
-                textColor: '#FFFFFF',
-                textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
-                textAllowOverlap: true,
+                circleRadius: 32,
+                circleColor: '#06B6D4',
+                circleOpacity: 0.5,
+                circleBlur: 0.8,
+                circleSortKey: ['+', ['get', 'rank'], 100], // Always on top of other pins
               }}
             />
 
-            {/* INDIVIDUAL PINS - Category-colored circles with icons */}
+            {/* INTELLIGENT PINS - Solid circles with colored stroke */}
             <CircleLayer
               id="unclustered-pins"
-              filter={['!', ['has', 'point_count']]}
               style={{
-                circleRadius: 14,
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 8,
+                  12, 12,
+                  16, 16
+                ],
                 circleColor: ['get', 'color'],
-                circleOpacity: 0.9,
-                circleStrokeWidth: 2,
-                circleStrokeColor: '#FFFFFF',
+                circleOpacity: 1.0,
+                circleStrokeWidth: [
+                  'case',
+                  ['==', ['get', 'id'], selectedPlaceId || '__none__'],
+                  4,
+                  2
+                ],
+                circleStrokeColor: [
+                  'case',
+                  ['==', ['get', 'id'], selectedPlaceId || '__none__'],
+                  '#06B6D4',
+                  '#FFFFFF'
+                ],
+                circleSortKey: ['get', 'rank'], // Higher rank = on top
               }}
             />
 
-            {/* PIN ICONS - Category icons loaded from CDN */}
+            {/* PIN ICONS - Category icons on top of circles */}
             <SymbolLayer
               id="pin-icons"
-              filter={['!', ['has', 'point_count']]}
               style={{
                 iconImage: ['get', 'iconName'],
-                iconSize: 0.4,
+                iconSize: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 0.25,
+                  12, 0.35,
+                  16, 0.45
+                ],
                 iconAllowOverlap: true,
                 iconIgnorePlacement: true,
                 iconAnchor: 'center',
+                symbolSortKey: ['get', 'rank'],
               }}
             />
 
-            {/* RATING BADGE BACKGROUND - Small circle offset to bottom-right */}
+            {/* PIN LABELS - Names only at high zoom (zoom 15+) */}
+            <SymbolLayer
+              id="pin-labels"
+              style={{
+                textField: [
+                  'step',
+                  ['zoom'],
+                  '',
+                  15, ['get', 'name']
+                ],
+                textSize: 12,
+                textColor: '#FFFFFF',
+                textHaloColor: 'rgba(10, 10, 26, 0.95)',
+                textHaloWidth: 2,
+                textOffset: [0, 2.4],
+                textAnchor: 'top',
+                textAllowOverlap: false,
+                textIgnorePlacement: false,
+                symbolSortKey: ['get', 'rank'],
+              }}
+            />
+
+            {/* RATING BADGE - Small badge for quality places (zoom 13+) */}
             <CircleLayer
               id="rating-badge-bg"
-              filter={['all', 
-                ['!', ['has', 'point_count']],
-                ['>', ['get', 'rating'], 0]
-              ]}
+              filter={['>', ['get', 'rating'], 0]}
               style={{
-                circleRadius: 10,
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  12, 0,
+                  13, 8,
+                  16, 10
+                ],
                 circleColor: '#FFFFFF',
                 circleStrokeWidth: 1.5,
                 circleStrokeColor: '#FFD700',
-                circleTranslate: [12, 12],
+                circleTranslate: [10, 10],
+                circleSortKey: ['+', ['get', 'rank'], 1], // On top of the pin it belongs to
               }}
             />
 
-            {/* RATING BADGE TEXT - Rating number */}
             <SymbolLayer
               id="rating-badge-text"
-              filter={['all', 
-                ['!', ['has', 'point_count']],
-                ['>', ['get', 'rating'], 0]
-              ]}
+              filter={['>', ['get', 'rating'], 0]}
               style={{
-                textField: ['number-format', ['get', 'rating'], { 'max-fraction-digits': 1 }],
-                textSize: 10,
+                textField: [
+                  'step',
+                  ['zoom'],
+                  '',
+                  13, ['number-format', ['get', 'rating'], { 'max-fraction-digits': 1 }]
+                ],
+                textSize: 9,
                 textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
                 textColor: '#1a1a1a',
                 textAllowOverlap: true,
-                textOffset: [1.2, 1.2],
+                textOffset: [1.1, 1.1],
+                symbolSortKey: ['+', ['get', 'rank'], 2],
               }}
             />
           </ShapeSource>
         )}
         
-        {/* HERO BEACON - Pillar of Light at selected location */}
-        {heroCoordinates && (
-          <ShapeSource
-            id="hero-beacon-source"
-            shape={{
-              type: 'Feature',
-              geometry: {
-                type: 'Point',
-                coordinates: heroCoordinates,
-              },
-              properties: {},
-            }}
-          >
-            {/* Outer glow ring */}
-            <CircleLayer
-              id="hero-beacon-glow"
-              style={{
-                circleRadius: 40,
-                circleColor: '#FF9900',
-                circleOpacity: 0.3,
-                circleBlur: 1,
-              }}
-            />
-            {/* Inner bright core */}
-            <CircleLayer
-              id="hero-beacon-core"
-              style={{
-                circleRadius: 12,
-                circleColor: '#FFCC00',
-                circleOpacity: 0.9,
-                circleStrokeWidth: 3,
-                circleStrokeColor: '#FF9900',
-              }}
-            />
-          </ShapeSource>
-        )}
+        {/* HERO BEACON REMOVED - Category icons on pins are enough visual feedback */}
         
         {/* GO and ORBIT buttons are in the HUD (GameBottomSheet) - more reliable than MarkerView */}
       </MapView>
@@ -1829,38 +1901,53 @@ export default function CountryBubbleScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
-            <View style={styles.countryFlagContainer}>
-              <Text style={styles.countryFlag}>{countryFlag}</Text>
-            </View>
-            <View>
-              <Text style={styles.countryTitle}>{countryName}</Text>
-              <Text style={styles.placeCount}>
-                {filterMode !== 'all' ? `${items.length} places ${activeAreaFilter ? `in ${activeAreaFilter}` : `(${currentRadiusKm}km)`}` : `${items.length} places saved`}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </MotiView>
+        <View style={styles.headerTopRow}>
+          <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }}>
+            <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
+              <View style={styles.backButtonInner}>
+                <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.countryInfo}>
+                <Text style={styles.countryTitle}>{countryFlag} {countryName}</Text>
+                <Text style={styles.placeCount}>
+                  {filterMode !== 'all' ? `${items.length} spots nearby` : `${items.length} saved`}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </MotiView>
 
-        {/* Filter Chip - shows for explicit filters OR map-based filtering */}
-        {(filterMode !== 'all' || isMapFilterActive) && (
+          {/* Near Me Button - Top Right */}
+          <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+            <TouchableOpacity
+              style={[styles.headerActionButton, filterMode === 'nearMe' && styles.headerActionButtonActive]}
+              onPress={handleNearMePress}
+              activeOpacity={0.8}
+            >
+              <Ionicons 
+                name="locate" 
+                size={22} 
+                color={filterMode === 'nearMe' ? '#FFFFFF' : '#06B6D4'} 
+              />
+            </TouchableOpacity>
+          </MotiView>
+        </View>
+
+        {/* Filter Chip - shows for explicit filters */}
+        {filterMode !== 'all' && (
           <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.filterChipContainer}>
             <TouchableOpacity style={styles.filterChip} onPress={resetToCountryView} activeOpacity={0.8}>
               <Ionicons 
-                name={isMapFilterActive ? "map" : "location"} 
+                name="location" 
                 size={14} 
-                color="#c4b5fd" 
+                color="#06B6D4" 
               />
               <Text style={styles.filterChipText}>
                 {activeAreaFilter || `${currentRadiusKm}km`}
               </Text>
-              <Ionicons name="close-circle" size={16} color="#c4b5fd" />
+              <Ionicons name="close-circle" size={16} color="#06B6D4" />
             </TouchableOpacity>
           </MotiView>
         )}
-
-        {/* Category indicator - REMOVED (no longer using orbital expansion) */}
       </View>
 
       {/* Category Filter Chips - Horizontal Scrollable */}
@@ -1910,41 +1997,22 @@ export default function CountryBubbleScreen() {
         </ScrollView>
       </View>
 
-      {/* Navigation Buttons (Near Me / All Places) */}
-      <View style={styles.navButtonsContainer}>
-        <TouchableOpacity
-          style={[styles.navButton, filterMode === 'nearMe' && styles.navButtonActive]}
-          onPress={handleNearMePress}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="locate" size={18} color={filterMode === 'nearMe' ? '#FFFFFF' : '#8B5CF6'} />
-          <Text style={[styles.navButtonText, filterMode === 'nearMe' && styles.navButtonTextActive]}>Near Me</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.navButton, filterMode === 'all' && styles.navButtonActive]}
-          onPress={resetToCountryView}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="globe-outline" size={18} color={filterMode === 'all' ? '#FFFFFF' : '#8B5CF6'} />
-          <Text style={[styles.navButtonText, filterMode === 'all' && styles.navButtonTextActive]}>All Places</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* CLUSTERS AND PINS are now rendered inside MapView - see ShapeSource "places-source" */}
 
-      {/* Persistent Places Drawer - Always visible, Airbnb style */}
       {/* Persistent Places Drawer - Shows places visible in current map view */}
-      <PersistentPlacesDrawer
-        ref={placesDrawerRef}
-        items={drawerItems}
-        selectedCategory={selectedCategory}
-        categoryLabel={currentCategoryConfig.label}
-        categoryEmoji={currentCategoryConfig.icon}
-        categoryColor={currentCategoryConfig.color}
-        onPlaceSelect={handlePlaceSelect}
-        selectedPlaceId={selectedPlaceId}
-      />
+      {/* Hide when single place detail sheet is open to avoid overlap */}
+      {!isSinglePlaceDetailOpen && (
+        <PersistentPlacesDrawer
+          ref={placesDrawerRef}
+          items={drawerItems}
+          selectedCategory={selectedCategory}
+          categoryLabel={currentCategoryConfig.label}
+          categoryEmoji={currentCategoryConfig.icon}
+          categoryColor={currentCategoryConfig.color}
+          onPlaceSelect={handlePlaceSelect}
+          selectedPlaceId={selectedPlaceId}
+        />
+      )}
 
       {/* Game Bottom Sheet - For MULTIPLE places (clusters) */}
       {bottomSheetItems.length > 1 && (
@@ -2025,14 +2093,44 @@ export default function CountryBubbleScreen() {
         messages={chatMessages}
         onSendMessage={handleSendMessage}
         isTyping={isAITyping || companionLoading}
+        suggestions={dynamicSuggestions}
       />
 
-      {/* Loading */}
+      {/* Skeleton Loading State */}
       {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <View style={styles.loadingCard}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
-          <Text style={styles.loadingText}>Loading places...</Text>
+        <View style={styles.skeletonOverlay}>
+          {/* Header Skeleton */}
+          <View style={styles.header}>
+            <View style={styles.headerTopRow}>
+              <SkeletonLoader width={180} height={48} borderRadius={24} />
+              <SkeletonLoader width={44} height={44} borderRadius={22} />
+            </View>
+          </View>
+
+          {/* Chips Skeleton */}
+          <View style={[styles.categoryChipsContainer, { marginTop: 10 }]}>
+            <View style={styles.categoryChipsScroll}>
+              {[1, 2, 3, 4].map((i) => (
+                <SkeletonLoader key={i} width={80} height={36} borderRadius={18} style={{ marginRight: 8 }} />
+              ))}
+            </View>
+          </View>
+
+          {/* Bottom Drawer Skeleton */}
+          <View style={styles.drawerSkeleton}>
+            <View style={styles.drawerSkeletonHeader}>
+              <SkeletonLoader width={120} height={20} borderRadius={10} />
+              <SkeletonLoader width={40} height={24} borderRadius={12} />
+            </View>
+            <View style={styles.drawerSkeletonContent}>
+              {[1, 2, 3].map((i) => (
+                <View key={i} style={styles.drawerSkeletonCard}>
+                  <SkeletonLoader width={110} height={80} borderRadius={14} />
+                  <SkeletonLoader width={80} height={12} borderRadius={6} style={{ marginTop: 8 }} />
+                  <SkeletonLoader width={40} height={10} borderRadius={5} style={{ marginTop: 4 }} />
+                </View>
+              ))}
+            </View>
           </View>
         </View>
       )}
@@ -2045,7 +2143,7 @@ export default function CountryBubbleScreen() {
 // ============================================================
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a1a' },
+  container: { flex: 1, backgroundColor: '#0F1115' },
   map: { ...StyleSheet.absoluteFillObject },
   gradientOverlay: { ...StyleSheet.absoluteFillObject },
   
@@ -2055,47 +2153,77 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     zIndex: 10,
   },
-  backButton: {
-    width: 48, height: 48, borderRadius: 16,
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 5,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(15, 17, 21, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  headerActionButtonActive: {
+    backgroundColor: '#06B6D4',
+    borderColor: '#22D3EE',
   },
   countryHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
-    paddingVertical: 12, paddingHorizontal: 16, borderRadius: 20,
-    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 17, 21, 0.85)',
+    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: 16,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.2)',
     alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  countryFlagContainer: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  backButtonInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
-  countryFlag: { fontSize: 24 },
-  countryTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
-  placeCount: { fontSize: 13, color: 'rgba(255, 255, 255, 0.7)', marginTop: 2 },
+  countryInfo: {
+    justifyContent: 'center',
+  },
+  countryTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  placeCount: { fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', marginTop: 1 },
   
-  filterChipContainer: { marginTop: 12 },
+  filterChipContainer: { marginTop: 10, marginLeft: 10 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.25)',
+    backgroundColor: 'rgba(6, 182, 212, 0.15)',
     paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20,
     alignSelf: 'flex-start', gap: 8,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.5)',
+    borderWidth: 1, borderColor: 'rgba(6, 182, 212, 0.3)',
   },
-  filterChipText: { fontSize: 14, fontWeight: '600', color: '#c4b5fd' },
+  filterChipText: { fontSize: 14, fontWeight: '600', color: '#06B6D4' },
   
   viewModeLabel: {
-    marginTop: 12, backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    marginTop: 12, backgroundColor: 'rgba(6, 182, 212, 0.1)',
     paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'flex-start',
   },
-  viewModeLabelText: { fontSize: 12, fontWeight: '600', color: '#c4b5fd' },
+  viewModeLabelText: { fontSize: 12, fontWeight: '600', color: '#06B6D4' },
   
   // Category Filter Chips
   categoryChipsContainer: {
@@ -2113,17 +2241,16 @@ const styles = StyleSheet.create({
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    backgroundColor: 'rgba(15, 17, 21, 0.95)',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
+    borderColor: 'rgba(6, 182, 212, 0.1)',
     gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOpacity: 0.3, shadowRadius: 4,
     elevation: 4,
   },
   categoryChipIcon: {
@@ -2132,13 +2259,13 @@ const styles = StyleSheet.create({
   categoryChipLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#E2E8F0',
+    color: '#94A3B8',
   },
   categoryChipLabelActive: {
     color: '#FFFFFF',
   },
   categoryChipCount: {
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    backgroundColor: 'rgba(6, 182, 212, 0.1)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
@@ -2151,67 +2278,71 @@ const styles = StyleSheet.create({
   categoryChipCountText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#A78BFA',
+    color: '#64748B',
   },
   categoryChipCountTextActive: {
     color: '#FFFFFF',
   },
-  
-  navButtonsContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 185 : 170,
-    right: 16,
-    flexDirection: 'column',
-    gap: 8,
-    zIndex: 15,
-  },
-  navButton: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
-    paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20,
-    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 3,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.4)',
-  },
-  navButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#a78bfa',
-  },
-  navButtonText: { fontSize: 13, fontWeight: '600', color: '#c4b5fd' },
-  navButtonTextActive: { color: '#FFFFFF' },
-  
-  bubblesContainer: { flex: 1, zIndex: 5 },
   
   emptyState: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center', alignItems: 'center', padding: 40, zIndex: 10,
   },
   emptyCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    backgroundColor: 'rgba(15, 17, 21, 0.95)',
     borderRadius: 24, padding: 32, alignItems: 'center',
-    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderWidth: 1, borderColor: 'rgba(6, 182, 212, 0.1)',
   },
   emptyEmoji: { fontSize: 64, marginBottom: 16 },
   emptyTitle: { fontSize: 20, fontWeight: '600', color: '#FFFFFF', marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center' },
   resetButton: {
-    marginTop: 16, backgroundColor: '#8B5CF6',
+    marginTop: 16, backgroundColor: '#06B6D4',
     paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12,
   },
   resetButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
   
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10, 10, 26, 0.9)',
+    backgroundColor: 'rgba(15, 17, 21, 0.95)',
     justifyContent: 'center', alignItems: 'center', zIndex: 50,
   },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0F1115',
+    zIndex: 100,
+  },
+  drawerSkeleton: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN_HEIGHT * 0.22,
+    backgroundColor: '#17191F',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+  },
+  drawerSkeletonHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  drawerSkeletonContent: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  drawerSkeletonCard: {
+    width: 110,
+  },
   loadingCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.95)', borderRadius: 20, padding: 32, alignItems: 'center',
-    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 8 },
+    backgroundColor: 'rgba(15, 17, 21, 0.95)', borderRadius: 20, padding: 32, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
-    borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderWidth: 1, borderColor: 'rgba(6, 182, 212, 0.1)',
   },
   
   // Re-center button (appears when user pans away)
@@ -2222,7 +2353,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   recenterButton: {
-    shadowColor: '#8B5CF6',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -2235,7 +2366,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   recenterText: {
     color: 'white',

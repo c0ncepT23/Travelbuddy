@@ -38,7 +38,12 @@ export class TripGroupModel {
    * Find trip by ID
    */
   static async findById(id: string): Promise<TripGroup | null> {
-    const result = await query('SELECT * FROM trip_groups WHERE id = $1', [id]);
+    const result = await query(
+      `SELECT tg.*, (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id) as places_count 
+       FROM trip_groups tg 
+       WHERE tg.id = $1`, 
+      [id]
+    );
     return result.rows[0] || null;
   }
 
@@ -57,7 +62,9 @@ export class TripGroupModel {
    */
   static async findByUser(userId: string): Promise<TripGroup[]> {
     const result = await query(
-      `SELECT tg.* FROM trip_groups tg
+      `SELECT tg.id, tg.name, tg.destination, tg.start_date, tg.end_date, tg.invite_code, tg.created_by, tg.created_at, tg.updated_at,
+        (SELECT COUNT(*)::int FROM saved_items si WHERE si.trip_group_id = tg.id) as places_count
+       FROM trip_groups tg
        INNER JOIN trip_members tm ON tg.id = tm.trip_group_id
        WHERE tm.user_id = $1
        ORDER BY tg.created_at DESC`,
@@ -108,7 +115,7 @@ export class TripGroupModel {
       `UPDATE trip_groups
        SET ${fields.join(', ')}
        WHERE id = $${paramCount}
-       RETURNING *`,
+       RETURNING *, (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = id) as places_count`,
       values
     );
 

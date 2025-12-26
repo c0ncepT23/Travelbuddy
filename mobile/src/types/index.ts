@@ -22,6 +22,7 @@ export interface Trip {
   created_by: string;
   created_at: string;
   updated_at: string;
+  places_count?: number;
 }
 
 export interface TripMember {
