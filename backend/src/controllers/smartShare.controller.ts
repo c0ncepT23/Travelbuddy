@@ -11,7 +11,7 @@
  */
 
 import { Response } from 'express';
-import { AuthRequest } from '../types';
+import { AuthRequest, DiscoveryIntent } from '../types';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripGroup } from '../types';
 import { SavedItemModel } from '../models/savedItem.model';
@@ -39,7 +39,7 @@ interface ProcessResult {
     location_lng?: number;
     rating?: number;
   }>;
-  discovery_intent?: any;
+  discovery_intent?: DiscoveryIntent;
   scout_results?: ScoutResult[];
 }
 
