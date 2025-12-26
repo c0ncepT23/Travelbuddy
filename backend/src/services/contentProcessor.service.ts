@@ -19,6 +19,7 @@ import {
   InstagramPostData,
   RedditPostData,
   ProcessedContent,
+  DiscoveryIntent,
 } from '../types';
 import logger from '../config/logger';
 
@@ -476,6 +477,7 @@ export class ContentProcessorService {
       hasDayStructure: boolean;
       totalDays: number;
     };
+    discovery_intent?: DiscoveryIntent;
   }> {
     try {
       logger.info('Processing YouTube video metadata...');
@@ -592,6 +594,7 @@ export class ContentProcessorService {
           destination_country: analysis.destination_country,
           duration_days: analysis.duration_days,
           guideMetadata,
+          discovery_intent: analysis.discovery_intent,
         };
       }
 
@@ -621,12 +624,27 @@ export class ContentProcessorService {
             },
           ],
           guideMetadata,
+          discovery_intent: analysis.discovery_intent,
         };
       }
 
       // PLACES video handling
       if (analysis.places.length === 0) {
-        // No places found, save video as single item with summary
+        // If we have a discovery intent, return it instead of using TravelAgent fallback
+        if (analysis.discovery_intent) {
+          logger.info(`[YouTube] No places found, but found discovery intent: ${analysis.discovery_intent.item}`);
+          return {
+            summary: analysis.summary,
+            video_type: 'places',
+            destination: analysis.destination,
+            destination_country: analysis.destination_country,
+            places: [],
+            guideMetadata,
+            discovery_intent: analysis.discovery_intent,
+          };
+        }
+
+        // No places found and no intent, save video as single item with summary
         const processed = await TravelAgent.processContent(
           `${videoData.title}. ${analysis.summary}`,
           ItemSourceType.YOUTUBE
@@ -756,6 +774,7 @@ export class ContentProcessorService {
         destination_country: analysis.destination_country,
         places: enrichedPlaces,
         guideMetadata,
+        discovery_intent: analysis.discovery_intent,
       };
     } catch (error: any) {
       logger.error('Error extracting multiple places:', error);
