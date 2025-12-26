@@ -51,6 +51,24 @@ router.get(
   SavedItemController.getTripItems
 );
 
+// Create a new item for a trip (used by AI Scout, Share extension, etc.)
+router.post(
+  '/:tripId/items',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+    body('name').trim().notEmpty().withMessage('Item name is required'),
+    body('category').optional().isString(),
+    body('description').optional().trim(),
+    body('locationName').optional().trim(),
+    body('locationLat').optional().isFloat(),
+    body('locationLng').optional().isFloat(),
+    body('googlePlaceId').optional().isString(),
+    body('rating').optional().isFloat(),
+    body('userRatingsTotal').optional().isInt(),
+  ]),
+  SavedItemController.createForTrip
+);
+
 // Reorder items within a day (for drag-drop)
 router.patch(
   '/:tripId/items/reorder',

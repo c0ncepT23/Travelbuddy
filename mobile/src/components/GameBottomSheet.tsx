@@ -36,7 +36,12 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { 
+  GestureDetector, 
+  Gesture, 
+  GestureHandlerRootView,
+  FlatList as GestureFlatList
+} from 'react-native-gesture-handler';
 import { SavedItem } from '../types';
 import { getGooglePhotoUrl } from '../config/maps';
 

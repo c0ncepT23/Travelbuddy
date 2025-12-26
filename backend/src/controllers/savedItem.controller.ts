@@ -35,6 +35,35 @@ export class SavedItemController {
   }
 
   /**
+   * Create a new item for a specific trip (tripId from URL params)
+   */
+  static async createForTrip(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { tripId } = req.params;
+      const itemData = req.body;
+
+      const item = await SavedItemService.createItem(req.user.id, tripId, itemData);
+
+      res.status(201).json({
+        success: true,
+        data: item,
+        message: 'Item saved successfully',
+      });
+    } catch (error: any) {
+      logger.error('Create item for trip error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to create item',
+      });
+    }
+  }
+
+  /**
    * Get item details
    */
   static async getById(req: AuthRequest, res: Response): Promise<void> {

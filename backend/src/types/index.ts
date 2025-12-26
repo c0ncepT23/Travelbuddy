@@ -166,7 +166,7 @@ export interface AuthRequest extends Request {
 }
 
 // Content Processing Types
-export type DiscoveryIntentType = 'CULINARY_GOAL' | 'ACTIVITY_GOAL' | 'SIGHTSEEING_GOAL';
+export type DiscoveryIntentType = 'CULINARY_GOAL' | 'ACTIVITY_GOAL' | 'SIGHTSEEING_GOAL' | 'DISH_GOAL';
 
 export interface DiscoveryIntent {
   type: DiscoveryIntentType;

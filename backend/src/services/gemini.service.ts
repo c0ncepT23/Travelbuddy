@@ -517,15 +517,16 @@ RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
     }
   ],
   "discovery_intent": {
-    "type": "CULINARY_GOAL" or "ACTIVITY_GOAL" or "SIGHTSEEING_GOAL",
-    "item": "The specific food or activity mentioned (e.g., Cheesecake, Street Tacos, Surfing)",
+    "type": "DISH_GOAL" or "CULINARY_GOAL" or "ACTIVITY_GOAL" or "SIGHTSEEING_GOAL",
+    "item": "The specific food or activity mentioned (e.g., Pad Thai, Cheesecake, Street Tacos, Surfing)",
     "city": "The city or area targeted",
     "vibe": "The style (e.g., legendary, traditional, viral, hidden)",
-    "scout_query": "Best [vibe] [item] in [city]",
+    "scout_query": "Best [item] specialists in [city]",
     "confidence_score": 0.0 to 1.0
   }
 }
 
+NOTE on DISH_GOAL: Trigger this if a SPECIFIC dish name (like "Pad Thai", "Gelato", "Tonkotsu Ramen") is the focus, but NO specific restaurant names are extracted. 
 If specific places ARE found, set "discovery_intent" to null. If NEITHER places nor intent found, return empty array for places.`;
 
       const result = await model.generateContent(prompt);

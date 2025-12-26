@@ -1036,7 +1036,7 @@ export default function CountryBubbleScreen() {
     }
   }, [bottomSheetVisible, getDistanceMeters]);
 
-  // Generate GeoJSON for Discovery Intent (Ghost Pin)
+  // Generate GeoJSON for Discovery Intent (Ghost Pins + AI Radar)
   const discoveryGeoJSON = useMemo(() => {
     if (!discoveryIntent?.city) return null;
     
@@ -1065,29 +1065,63 @@ export default function CountryBubbleScreen() {
       }
     }
     
-    if (!cityData) {
-      console.warn(`⚠️ [Scout] Map couldn't find coordinates for city: "${discoveryIntent.city}" in ${countryName}`);
-      return null;
+    const features: any[] = [];
+
+    // 3. Add AI Radar (Center of search)
+    // If we have scout results, center the radar on the average of results
+    // Otherwise, center on the city itself
+    let radarLng = cityData?.longitude || 0;
+    let radarLat = cityData?.latitude || 0;
+
+    if (scoutResults && scoutResults.length > 0) {
+      const avgLng = scoutResults.reduce((sum, s) => sum + s.location.lng, 0) / scoutResults.length;
+      const avgLat = scoutResults.reduce((sum, s) => sum + s.location.lat, 0) / scoutResults.length;
+      radarLng = avgLng;
+      radarLat = avgLat;
     }
 
-    console.log(`📍 [Scout] Ghost Pin location found: ${discoveryIntent.city} at [${cityData.longitude}, ${cityData.latitude}]`);
-    
-    return {
-      type: 'FeatureCollection' as const,
-      features: [{
+    if (radarLng !== 0 && radarLat !== 0) {
+      features.push({
         type: 'Feature' as const,
-        id: 'ghost-pin',
+        id: 'radar-center',
         geometry: {
           type: 'Point' as const,
-          coordinates: [cityData.longitude, cityData.latitude],
+          coordinates: [radarLng, radarLat],
         },
         properties: {
           name: discoveryIntent.item,
-          type: 'ghost',
+          type: 'radar',
         }
-      }]
+      });
+    }
+
+    // 4. Add individual Ghost Pins for scout results
+    if (scoutResults && scoutResults.length > 0) {
+      scoutResults.forEach((scout, index) => {
+        features.push({
+          type: 'Feature' as const,
+          id: `ghost-pin-${index}`,
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [scout.location.lng, scout.location.lat],
+          },
+          properties: {
+            name: scout.name,
+            type: 'ghost-pin',
+            place_id: scout.place_id,
+            index: index,
+          }
+        });
+      });
+    }
+    
+    if (features.length === 0) return null;
+
+    return {
+      type: 'FeatureCollection' as const,
+      features,
     };
-  }, [discoveryIntent, countryName]);
+  }, [discoveryIntent, countryName, scoutResults]);
 
   // Handle map idle (when user stops panning/zooming)
   // Updates drawer items based on what's visible on screen
@@ -2051,7 +2085,6 @@ export default function CountryBubbleScreen() {
                   13, ['number-format', ['get', 'rating'], { 'max-fraction-digits': 1 }]
                 ],
                 textSize: 9,
-                textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
                 textColor: '#1a1a1a',
                 textAllowOverlap: true,
                 textOffset: [1.1, 1.1],
@@ -2061,19 +2094,25 @@ export default function CountryBubbleScreen() {
           </ShapeSource>
         )}
 
-        {/* GHOST PIN (Discovery Intent) - AI SONAR RADAR */}
+        {/* GHOST PIN (Discovery Intent) - AI SONAR RADAR & RESTAURANT PINS */}
         {discoveryGeoJSON && (
           <ShapeSource
             id="discovery-intent-source"
             shape={discoveryGeoJSON}
-            onPress={() => {
+            onPress={(e) => {
+              const feature = e.features?.[0];
+              if (feature?.properties?.type === 'ghost-pin') {
+                // Handle tapping a specific ghost pin - maybe scroll carousel?
+                console.log(`📍 Tapped ghost pin: ${feature.properties.name}`);
+              }
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               setIsScoutCarouselVisible(true);
             }}
           >
-            {/* Outer Sonar Ripple 1 (Electric Magenta Glow) */}
+            {/* 1. AI RADAR LAYERS (type: radar) - The city-level pulse */}
             <CircleLayer
-              id="ghost-pin-glow-outer"
+              id="ghost-radar-glow-outer"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 circleRadius: [
                   'interpolate',
@@ -2088,9 +2127,9 @@ export default function CountryBubbleScreen() {
                 circleBlur: 0.8,
               }}
             />
-            {/* Middle Glow (Electric Cyan) */}
             <CircleLayer
-              id="ghost-pin-glow-mid"
+              id="ghost-radar-glow-mid"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 circleRadius: [
                   'interpolate',
@@ -2100,14 +2139,14 @@ export default function CountryBubbleScreen() {
                   10, 70,
                   14, 110
                 ],
-                circleColor: '#00FFFF',
+                circleColor: '#00FFFF', // Electric Cyan
                 circleOpacity: 0.3,
                 circleBlur: 0.4,
               }}
             />
-            {/* Core Scanner Ring */}
             <CircleLayer
-              id="ghost-pin-ring"
+              id="ghost-radar-ring"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 circleRadius: [
                   'interpolate',
@@ -2123,10 +2162,9 @@ export default function CountryBubbleScreen() {
                 circleStrokeColor: '#00FFFF',
               }}
             />
-            {/* Solid Center */}
-            {/* Solid Center - White & Magenta */}
             <CircleLayer
-              id="ghost-pin-core"
+              id="ghost-radar-core"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 circleRadius: [
                   'interpolate',
@@ -2141,9 +2179,9 @@ export default function CountryBubbleScreen() {
                 circleStrokeColor: '#FF00FF',
               }}
             />
-            {/* AI Radar Icon */}
             <SymbolLayer
-              id="ghost-pin-icon"
+              id="ghost-radar-icon"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 textField: '🛰️',
                 textSize: [
@@ -2157,9 +2195,9 @@ export default function CountryBubbleScreen() {
                 textAllowOverlap: true,
               }}
             />
-            {/* Animated-looking Scanner Line (Horizontal Symbol) */}
             <SymbolLayer
-              id="ghost-pin-scanner"
+              id="ghost-radar-scanner"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 textField: '───',
                 textSize: [
@@ -2176,9 +2214,9 @@ export default function CountryBubbleScreen() {
                 textOffset: [0, 0],
               }}
             />
-            {/* Label below */}
             <SymbolLayer
-              id="ghost-pin-label"
+              id="ghost-radar-label"
+              filter={['==', ['get', 'type'], 'radar']}
               style={{
                 textField: ['get', 'name'],
                 textSize: 14,
@@ -2188,8 +2226,83 @@ export default function CountryBubbleScreen() {
                 textOffset: [0, 3.2],
                 textAnchor: 'top',
                 textAllowOverlap: true,
-                textTransform: 'uppercase',
-                textLetterSpacing: 1,
+              }}
+            />
+
+            {/* 2. GHOST PIN LAYERS (type: ghost-pin) - The individual restaurants */}
+            <CircleLayer
+              id="ghost-pin-restaurant-glow"
+              filter={['==', ['get', 'type'], 'ghost-pin']}
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 15,
+                  12, 20,
+                  16, 25
+                ],
+                circleColor: '#06B6D4',
+                circleOpacity: 0.4,
+                circleBlur: 0.6,
+              }}
+            />
+            <CircleLayer
+              id="ghost-pin-restaurant-core"
+              filter={['==', ['get', 'type'], 'ghost-pin']}
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 8,
+                  12, 12,
+                  16, 16
+                ],
+                circleColor: '#06B6D4',
+                circleOpacity: 0.6,
+                circleStrokeWidth: 2,
+                circleStrokeColor: '#FFFFFF',
+              }}
+            />
+            <SymbolLayer
+              id="ghost-pin-restaurant-icon"
+              filter={['==', ['get', 'type'], 'ghost-pin']}
+              style={{
+                iconImage: 'icon-food', // Unified food iconography for DISH_GOAL
+                iconSize: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 0.25,
+                  12, 0.35,
+                  16, 0.45
+                ],
+                iconOpacity: 0.8,
+                iconAllowOverlap: true,
+                iconIgnorePlacement: true,
+                iconAnchor: 'center',
+              }}
+            />
+            <SymbolLayer
+              id="ghost-pin-restaurant-label"
+              filter={['==', ['get', 'type'], 'ghost-pin']}
+              style={{
+                textField: ['get', 'name'],
+                textSize: 11,
+                textColor: '#FFFFFF',
+                textHaloColor: 'rgba(10, 10, 26, 0.8)',
+                textHaloWidth: 1.5,
+                textOffset: [0, 1.8],
+                textAnchor: 'top',
+                textOpacity: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  12, 0,
+                  13, 1
+                ],
+                textAllowOverlap: false,
               }}
             />
           </ShapeSource>
