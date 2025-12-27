@@ -18,7 +18,7 @@ import { SavedItemModel } from '../models/savedItem.model';
 import { ScoutIntentModel } from '../models/scoutIntent.model';
 import { ContentProcessorService } from '../services/contentProcessor.service';
 import { TravelAgent } from '../agents/travelAgent';
-import { ScoutService, ScoutResult } from '../services/scout.service';
+import { ScoutResult } from '../services/scout.service';
 import logger from '../config/logger';
 
 interface ProcessResult {

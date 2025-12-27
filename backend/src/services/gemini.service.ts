@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { config } from '../config/env';
-import { ItemCategory, AgentContext, DiscoveryIntent, GroundedSuggestion } from '../types';
+import { ItemCategory, AgentContext, DiscoveryIntent } from '../types';
 import logger from '../config/logger';
 import axios from 'axios';
 import * as fs from 'fs';
