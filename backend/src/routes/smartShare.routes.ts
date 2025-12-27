@@ -22,6 +22,7 @@ router.use(authenticate);
  * - Extracts destination from content
  * - Auto-creates/finds trip for that country
  * - Saves all extracted places
+ * - If no places found but food/activity intent detected, queues for AI Chat
  * - Returns instant results
  */
 router.post(
@@ -41,24 +42,39 @@ router.post(
 router.get('/trips', SmartShareController.getCountryTrips);
 
 /**
- * GET /api/share/scouts/:tripId
+ * GET /api/share/discovery-queue
  * 
- * Get active scouts for a trip
+ * Get all pending discovery queue items for the user
+ * Optional query param: ?country=Thailand
  */
-router.get('/scouts/:tripId', SmartShareController.getActiveScouts);
+router.get('/discovery-queue', SmartShareController.getDiscoveryQueue);
 
 /**
- * PATCH /api/share/scouts/:scoutId/status
+ * GET /api/share/discovery-queue/:tripId
  * 
- * Update scout status (resolve/dismiss)
+ * Get discovery queue items for a specific trip
  */
-router.patch(
-  '/scouts/:scoutId/status',
-  validate([
-    body('status').isIn(['active', 'resolved', 'dismissed']).withMessage('Invalid status'),
-  ]),
-  SmartShareController.updateScoutStatus
-);
+router.get('/discovery-queue/:tripId', SmartShareController.getDiscoveryQueue);
+
+/**
+ * POST /api/share/discovery-queue/:itemId/explore
+ * 
+ * Mark a discovery queue item as explored (user tapped on it)
+ */
+router.post('/discovery-queue/:itemId/explore', SmartShareController.exploreQueueItem);
+
+/**
+ * POST /api/share/discovery-queue/:itemId/dismiss
+ * 
+ * Dismiss a discovery queue item (user not interested)
+ */
+router.post('/discovery-queue/:itemId/dismiss', SmartShareController.dismissQueueItem);
+
+/**
+ * POST /api/share/discovery-queue/:itemId/saved
+ * 
+ * Mark a discovery queue item as saved (user saved a place from suggestions)
+ */
+router.post('/discovery-queue/:itemId/saved', SmartShareController.markQueueItemSaved);
 
 export default router;
-

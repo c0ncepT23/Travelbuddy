@@ -18,17 +18,21 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export interface ScoutResult {
   place_id: string;
   name: string;
-  address: string;
+  address?: string;
+  location_name?: string;
+  description?: string;
   rating?: number;
   user_rating_count?: number;
   generative_summary?: string;
   vibe_match_score: number;
   social_label: string;
   photos?: any[];
-  location: {
+  location?: {
     lat: number;
     lng: number;
   };
+  location_lat?: number;
+  location_lng?: number;
 }
 
 interface ScoutCarouselProps {

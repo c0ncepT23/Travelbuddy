@@ -15,10 +15,9 @@ import { AuthRequest, DiscoveryIntent } from '../types';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripGroup } from '../types';
 import { SavedItemModel } from '../models/savedItem.model';
-import { ScoutIntentModel } from '../models/scoutIntent.model';
+import { DiscoveryQueueModel } from '../models/discoveryQueue.model';
 import { ContentProcessorService } from '../services/contentProcessor.service';
 import { TravelAgent } from '../agents/travelAgent';
-import { ScoutResult } from '../services/scout.service';
 import logger from '../config/logger';
 
 interface ProcessResult {
@@ -40,9 +39,15 @@ interface ProcessResult {
     location_lng?: number;
     rating?: number;
   }>;
-  discovery_intent?: DiscoveryIntent;
-  scout_results?: ScoutResult[];
-  scout_id?: string;
+  // Discovery Queue: When no places found but food/activity intent detected
+  discovery_queued?: boolean;
+  queued_item?: {
+    id: string;
+    item: string;
+    city: string;
+    vibe?: string;
+  };
+  message?: string;
 }
 
 export class SmartShareController {
@@ -92,39 +97,83 @@ export class SmartShareController {
       }
 
       // Step 2: Determine destination
-      const destination = extractionResult.destination || extractionResult.places[0]?.location_name || 'Unknown';
+      const destination = extractionResult.destination || extractionResult.places[0]?.location_name || extractionResult.discovery_intent?.city || 'Unknown';
       const destinationCountry = extractionResult.destination_country || inferCountryFromDestination(destination);
       
       logger.info(`🌍 [SmartShare] Destination: ${destination}, Country: ${destinationCountry}`);
 
+      // Step 3: Find or create trip for this country (we need a tripId even for scouts/grounding)
+      const { trip, isNewTrip } = await findOrCreateTripForCountry(userId, destinationCountry);
+      
+      logger.info(`✈️ [SmartShare] Using trip: ${trip.name} (${trip.id}), isNew: ${isNewTrip}`);
+
       // FALLBACK logic: If no specific places found
       if (!extractionResult?.places?.length) {
-        let reason = 'I couldn\'t find any specific restaurant or place names in this content.';
-        
-        // If the AI actually saw a food item but no place name, be specific!
+        // Check if we have a discovery intent (food/activity interest without specific places)
         if (extractionResult.discovery_intent) {
-          reason = `I see you're interested in ${extractionResult.discovery_intent.item} in ${extractionResult.discovery_intent.city}, but this video didn't mention any specific restaurant names to save!`;
+          const intent = extractionResult.discovery_intent;
+          logger.info(`🔍 [SmartShare] No places, but found discovery intent: ${intent.item} in ${intent.city}`);
+          
+          // Save to discovery queue for AI Chat
+          const queuedItem = await DiscoveryQueueModel.add(
+            userId,
+            trip.id,
+            {
+              item: intent.item,
+              city: intent.city,
+              country: destinationCountry,
+              vibe: intent.vibe,
+              source_url: url,
+              source_title: extractionResult.source_title,
+              source_platform: contentType,
+            }
+          );
+
+          logger.info(`📝 [SmartShare] Added to discovery queue: ${queuedItem.id}`);
+
+          res.status(200).json({
+            success: true,
+            message: `No specific places found, but I'll remember your interest in ${intent.item}!`,
+            tripId: trip.id,
+            tripName: trip.name,
+            destination: destination,
+            destinationCountry: destinationCountry,
+            isNewTrip: isNewTrip,
+            placesExtracted: 0,
+            places: [],
+            discovery_queued: true,
+            queued_item: {
+              id: queuedItem.id,
+              item: intent.item,
+              city: intent.city,
+              vibe: intent.vibe,
+            },
+          });
+          return;
         }
 
+        // No intent either - just couldn't extract anything
         res.status(200).json({
           success: true,
-          message: reason,
-          tripId: null,
+          message: 'I couldn\'t find any specific restaurant or place names in this content.',
+          tripId: trip.id,
+          tripName: trip.name,
+          destination: destination,
+          destinationCountry: destinationCountry,
+          isNewTrip: isNewTrip,
           placesExtracted: 0,
           places: [],
         });
         return;
       }
 
-      // Step 3: Find or create trip for this country
-      const { trip, isNewTrip } = await findOrCreateTripForCountry(userId, destinationCountry);
-      
-      logger.info(`✈️ [SmartShare] Using trip: ${trip.name} (${trip.id}), isNew: ${isNewTrip}`);
+      // Filter out grounded suggestions - we don't save those anymore
+      const placesToSave = extractionResult.places.filter((p: any) => !p.is_grounded_suggestion);
 
       // Step 4: Save all extracted places to the trip
       const savedPlaces: ProcessResult['places'] = [];
       
-      for (const place of extractionResult.places) {
+      for (const place of placesToSave) {
         try {
           // Check for existing duplicates in this trip
           const duplicates = await SavedItemModel.findDuplicates(
@@ -227,7 +276,7 @@ export class SmartShareController {
         }
       }
 
-      logger.info(`🎉 [SmartShare] Saved ${savedPlaces.length}/${extractionResult.places.length} places`);
+      logger.info(`🎉 [SmartShare] Saved ${savedPlaces.length}/${placesToSave.length} places`);
 
       // Step 5: Return result
       const result: ProcessResult = {
@@ -289,63 +338,104 @@ export class SmartShareController {
   }
 
   /**
-   * Get active scouts for a trip
+   * Get discovery queue items for a trip (or user's country)
    */
-  static async getActiveScouts(req: AuthRequest, res: Response): Promise<void> {
+  static async getDiscoveryQueue(req: AuthRequest, res: Response): Promise<void> {
+    const userId = req.user?.id;
     const { tripId } = req.params;
+    const { country } = req.query;
 
-    if (!tripId) {
-      res.status(400).json({ success: false, error: 'Trip ID is required' });
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
       return;
     }
 
     try {
-      const scouts = await ScoutIntentModel.findActiveByTrip(tripId);
+      let items;
+      if (tripId) {
+        items = await DiscoveryQueueModel.getPendingByTrip(tripId);
+      } else if (country) {
+        items = await DiscoveryQueueModel.getPendingByUser(userId, country as string);
+      } else {
+        items = await DiscoveryQueueModel.getPendingByUser(userId);
+      }
+
       res.status(200).json({
         success: true,
-        scouts: scouts.map(s => ({
-          id: s.id,
-          intent: {
-            type: s.intent_type,
-            item: s.item,
-            city: s.city,
-            vibe: s.vibe,
-            scout_query: s.scout_query,
-          },
-          status: s.status,
-          results: s.scout_results,
-          created_at: s.created_at,
+        queue: items.map(item => ({
+          id: item.id,
+          item: item.item,
+          city: item.city,
+          country: item.country,
+          vibe: item.vibe,
+          source_title: item.source_title,
+          source_platform: item.source_platform,
+          created_at: item.created_at,
         }))
       });
     } catch (error: any) {
-      logger.error(`❌ [SmartShare] Error fetching active scouts:`, error);
-      res.status(500).json({ success: false, error: 'Failed to fetch scouts' });
+      logger.error(`❌ [SmartShare] Error fetching discovery queue:`, error);
+      res.status(500).json({ success: false, error: 'Failed to fetch discovery queue' });
     }
   }
 
   /**
-   * Update scout status (resolve/dismiss)
+   * Mark a discovery queue item as explored
    */
-  static async updateScoutStatus(req: AuthRequest, res: Response): Promise<void> {
-    const { scoutId } = req.params;
-    const { status } = req.body;
+  static async exploreQueueItem(req: AuthRequest, res: Response): Promise<void> {
+    const { itemId } = req.params;
 
-    if (!scoutId || !status) {
-      res.status(400).json({ success: false, error: 'Scout ID and status are required' });
-      return;
-    }
-
-    if (!['active', 'resolved', 'dismissed'].includes(status)) {
-      res.status(400).json({ success: false, error: 'Invalid status' });
+    if (!itemId) {
+      res.status(400).json({ success: false, error: 'Item ID is required' });
       return;
     }
 
     try {
-      await ScoutIntentModel.updateStatus(scoutId, status);
+      await DiscoveryQueueModel.markExplored(itemId);
       res.status(200).json({ success: true });
     } catch (error: any) {
-      logger.error(`❌ [SmartShare] Error updating scout status:`, error);
-      res.status(500).json({ success: false, error: 'Failed to update scout status' });
+      logger.error(`❌ [SmartShare] Error marking item explored:`, error);
+      res.status(500).json({ success: false, error: 'Failed to update item' });
+    }
+  }
+
+  /**
+   * Dismiss a discovery queue item
+   */
+  static async dismissQueueItem(req: AuthRequest, res: Response): Promise<void> {
+    const { itemId } = req.params;
+
+    if (!itemId) {
+      res.status(400).json({ success: false, error: 'Item ID is required' });
+      return;
+    }
+
+    try {
+      await DiscoveryQueueModel.dismiss(itemId);
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      logger.error(`❌ [SmartShare] Error dismissing item:`, error);
+      res.status(500).json({ success: false, error: 'Failed to dismiss item' });
+    }
+  }
+
+  /**
+   * Mark a discovery queue item as saved (user saved a place from suggestions)
+   */
+  static async markQueueItemSaved(req: AuthRequest, res: Response): Promise<void> {
+    const { itemId } = req.params;
+
+    if (!itemId) {
+      res.status(400).json({ success: false, error: 'Item ID is required' });
+      return;
+    }
+
+    try {
+      await DiscoveryQueueModel.markSaved(itemId);
+      res.status(200).json({ success: true });
+    } catch (error: any) {
+      logger.error(`❌ [SmartShare] Error marking item saved:`, error);
+      res.status(500).json({ success: false, error: 'Failed to update item' });
     }
   }
 }

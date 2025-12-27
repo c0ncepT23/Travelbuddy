@@ -810,15 +810,15 @@ export default function CountryBubbleScreen() {
       const response = await api.post(`/trips/${tripId}/items`, {
         name: scout.name,
         category: 'food', // Default to food for now, scout results usually have more detail
-        description: scout.generative_summary || `Found via AI scouting for ${discoveryIntent?.item}`,
-        locationName: scout.address,
-        locationLat: scout.location.lat,
-        locationLng: scout.location.lng,
+        description: scout.generative_summary || scout.description || `Found via AI scouting for ${discoveryIntent?.item}`,
+        locationName: scout.address || scout.location_name,
+        locationLat: scout.location?.lat ?? scout.location_lat,
+        locationLng: scout.location?.lng ?? scout.location_lng,
         googlePlaceId: scout.place_id,
         rating: scout.rating,
-        userRatingsTotal: scout.user_rating_count,
-        photosJson: scout.photos,
-        cuisineType: discoveryIntent?.type === 'CULINARY_GOAL' ? discoveryIntent.item : undefined,
+        userRatingsTotal: scout.user_rating_count || (scout as any).user_ratings_total,
+        photosJson: scout.photos || (scout as any).photos_json,
+        cuisineType: discoveryIntent?.type === 'CULINARY_GOAL' || discoveryIntent?.type === 'DISH_GOAL' ? (discoveryIntent.item || (scout as any).cuisine_type) : undefined,
         destination: discoveryIntent?.city,
         sourceTitle: `AI Scout: ${discoveryIntent?.item}`,
         originalSourceType: 'web',
@@ -1074,10 +1074,20 @@ export default function CountryBubbleScreen() {
     let radarLat = cityData?.latitude || 0;
 
     if (scoutResults && scoutResults.length > 0) {
-      const avgLng = scoutResults.reduce((sum, s) => sum + s.location.lng, 0) / scoutResults.length;
-      const avgLat = scoutResults.reduce((sum, s) => sum + s.location.lat, 0) / scoutResults.length;
-      radarLng = avgLng;
-      radarLat = avgLat;
+      const avgLng = scoutResults.reduce((sum, s) => {
+        const lng = s.location?.lng ?? s.location_lng ?? 0;
+        return sum + lng;
+      }, 0) / scoutResults.length;
+      
+      const avgLat = scoutResults.reduce((sum, s) => {
+        const lat = s.location?.lat ?? s.location_lat ?? 0;
+        return sum + lat;
+      }, 0) / scoutResults.length;
+      
+      if (avgLng !== 0 && avgLat !== 0) {
+        radarLng = avgLng;
+        radarLat = avgLat;
+      }
     }
 
     if (radarLng !== 0 && radarLat !== 0) {
@@ -1098,20 +1108,25 @@ export default function CountryBubbleScreen() {
     // 4. Add individual Ghost Pins for scout results
     if (scoutResults && scoutResults.length > 0) {
       scoutResults.forEach((scout, index) => {
-        features.push({
-          type: 'Feature' as const,
-          id: `ghost-pin-${index}`,
-          geometry: {
-            type: 'Point' as const,
-            coordinates: [scout.location.lng, scout.location.lat],
-          },
-          properties: {
-            name: scout.name,
-            type: 'ghost-pin',
-            place_id: scout.place_id,
-            index: index,
-          }
-        });
+        const lng = scout.location?.lng ?? scout.location_lng;
+        const lat = scout.location?.lat ?? scout.location_lat;
+        
+        if (lng !== undefined && lat !== undefined) {
+          features.push({
+            type: 'Feature' as const,
+            id: `ghost-pin-${index}`,
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [lng, lat],
+            },
+            properties: {
+              name: scout.name,
+              type: 'ghost-pin',
+              place_id: scout.place_id || `ghost_${index}`,
+              index: index,
+            }
+          });
+        }
       });
     }
     

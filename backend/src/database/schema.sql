@@ -281,6 +281,45 @@ DROP TRIGGER IF EXISTS update_destinations_updated_at ON destinations;
 CREATE TRIGGER update_destinations_updated_at BEFORE UPDATE ON destinations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Discovery Queue Table
+-- Stores food/activity intents from videos where no specific places were mentioned
+-- These appear as chips in AI Chat for the user to explore
+CREATE TABLE IF NOT EXISTS discovery_queue (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    trip_group_id UUID REFERENCES trip_groups(id) ON DELETE CASCADE,
+    
+    -- What the user is looking for
+    item VARCHAR(255) NOT NULL,
+    city VARCHAR(255) NOT NULL,
+    country VARCHAR(100),
+    vibe VARCHAR(100),
+    
+    -- Source information
+    source_url TEXT,
+    source_title VARCHAR(500),
+    source_platform VARCHAR(50),
+    
+    -- Status tracking
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' 
+        CHECK (status IN ('pending', 'explored', 'saved', 'dismissed')),
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    explored_at TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_discovery_queue_user ON discovery_queue(user_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_queue_trip ON discovery_queue(trip_group_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_queue_status ON discovery_queue(status);
+CREATE INDEX IF NOT EXISTS idx_discovery_queue_city ON discovery_queue(city);
+CREATE INDEX IF NOT EXISTS idx_discovery_queue_country ON discovery_queue(country);
+
+DROP TRIGGER IF EXISTS update_discovery_queue_updated_at ON discovery_queue;
+CREATE TRIGGER update_discovery_queue_updated_at BEFORE UPDATE ON discovery_queue
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Function to update destinations.total_places count
 CREATE OR REPLACE FUNCTION update_destination_place_count()
 RETURNS TRIGGER AS $$

@@ -226,6 +226,7 @@ export interface ProcessedContent {
   destination_country?: string; // Country name: "Japan"
   // Discovery intent (for "Scouting" mode)
   discovery_intent?: DiscoveryIntent;
+  is_grounded_suggestion?: boolean;
 }
 
 export interface YouTubeVideoData {

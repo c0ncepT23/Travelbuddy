@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from 'react-native';
 // import * as ImagePicker from 'expo-image-picker'; // TODO: Add back for image upload feature
 import { useChatStore } from '../../stores/chatStore';
@@ -16,6 +17,18 @@ import { useAuthStore } from '../../stores/authStore';
 import { format } from 'date-fns';
 import ImportLocationsModal from '../../components/ImportLocationsModal';
 import { ImportModalData } from '../../types';
+import api from '../../config/api';
+import { Ionicons } from '@expo/vector-icons';
+
+interface DiscoveryQueueItem {
+  id: string;
+  item: string;
+  city: string;
+  country?: string;
+  vibe?: string;
+  source_title?: string;
+  created_at: string;
+}
 
 const extractVideoId = (url: string): string | null => {
   const patterns = [
@@ -50,10 +63,60 @@ export default function ChatScreen({ route, navigation }: any) {
   const [inputText, setInputText] = useState('');
   const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  
+  // Discovery Queue state
+  const [discoveryQueue, setDiscoveryQueue] = useState<DiscoveryQueueItem[]>([]);
+  const [exploredItems, setExploredItems] = useState<Set<string>>(new Set());
+
+  // Fetch discovery queue items
+  const fetchDiscoveryQueue = useCallback(async () => {
+    try {
+      const response = await api.get(`/share/discovery-queue/${tripId}`);
+      if (response.data.success) {
+        setDiscoveryQueue(response.data.queue || []);
+      }
+    } catch (error) {
+      console.log('[ChatScreen] Failed to fetch discovery queue:', error);
+    }
+  }, [tripId]);
 
   useEffect(() => {
     fetchMessages(tripId);
-  }, [tripId]);
+    fetchDiscoveryQueue();
+  }, [tripId, fetchDiscoveryQueue]);
+
+  // Handle discovery chip tap - sends a user message
+  const handleDiscoveryChipTap = async (item: DiscoveryQueueItem) => {
+    // Mark as explored (visual feedback)
+    setExploredItems(prev => new Set(prev).add(item.id));
+    
+    // Mark as explored on backend
+    try {
+      await api.post(`/share/discovery-queue/${item.id}/explore`);
+    } catch (e) {
+      console.log('[ChatScreen] Failed to mark item explored:', e);
+    }
+    
+    // Send the user message
+    const message = `Show me ${item.item} places in ${item.city}`;
+    setInputText('');
+    
+    try {
+      await sendMessage(tripId, message);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  // Dismiss a discovery item
+  const handleDismissDiscoveryItem = async (itemId: string) => {
+    try {
+      await api.post(`/share/discovery-queue/${itemId}/dismiss`);
+      setDiscoveryQueue(prev => prev.filter(item => item.id !== itemId));
+    } catch (e) {
+      console.log('[ChatScreen] Failed to dismiss item:', e);
+    }
+  };
 
   useEffect(() => {
     // Scroll to bottom when new messages arrive
@@ -286,12 +349,98 @@ export default function ChatScreen({ route, navigation }: any) {
     );
   };
 
+  // Helper to get emoji for food/activity items
+  const getItemEmoji = (item: string): string => {
+    const lower = item.toLowerCase();
+    if (lower.includes('pad thai') || lower.includes('noodle')) return '🍜';
+    if (lower.includes('sushi') || lower.includes('ramen')) return '🍣';
+    if (lower.includes('pizza')) return '🍕';
+    if (lower.includes('taco') || lower.includes('burrito')) return '🌮';
+    if (lower.includes('curry')) return '🍛';
+    if (lower.includes('coffee') || lower.includes('cafe')) return '☕';
+    if (lower.includes('dessert') || lower.includes('cake') || lower.includes('ice cream')) return '🍰';
+    if (lower.includes('seafood') || lower.includes('fish')) return '🦐';
+    if (lower.includes('bbq') || lower.includes('grill')) return '🍖';
+    if (lower.includes('soup') || lower.includes('tom yum')) return '🥣';
+    if (lower.includes('breakfast') || lower.includes('brunch')) return '🥞';
+    if (lower.includes('street food')) return '🥡';
+    if (lower.includes('bar') || lower.includes('cocktail')) return '🍸';
+    if (lower.includes('beach') || lower.includes('surfing')) return '🏖️';
+    if (lower.includes('temple') || lower.includes('shrine')) return '🛕';
+    if (lower.includes('museum') || lower.includes('art')) return '🎨';
+    if (lower.includes('market') || lower.includes('shopping')) return '🛍️';
+    return '🍽️'; // Default food emoji
+  };
+
+  // Discovery Queue Chips Component
+  const renderDiscoveryQueue = () => {
+    if (discoveryQueue.length === 0) return null;
+    
+    return (
+      <View style={styles.discoveryQueueContainer}>
+        <View style={styles.discoveryQueueHeader}>
+          <Ionicons name="compass-outline" size={16} color="#A78BFA" />
+          <Text style={styles.discoveryQueueTitle}>From your saved videos</Text>
+        </View>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.discoveryChipsContainer}
+        >
+          {discoveryQueue.map((item) => {
+            const isExplored = exploredItems.has(item.id);
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.discoveryChip,
+                  isExplored && styles.discoveryChipExplored
+                ]}
+                onPress={() => handleDiscoveryChipTap(item)}
+                onLongPress={() => {
+                  Alert.alert(
+                    'Dismiss?',
+                    `Remove "${item.item}" from your discovery queue?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Dismiss', 
+                        style: 'destructive',
+                        onPress: () => handleDismissDiscoveryItem(item.id)
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.discoveryChipEmoji}>
+                  {getItemEmoji(item.item)}
+                </Text>
+                <Text style={[
+                  styles.discoveryChipText,
+                  isExplored && styles.discoveryChipTextExplored
+                ]}>
+                  {item.item}
+                </Text>
+                {isExplored && (
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
+      {/* Discovery Queue Chips */}
+      {renderDiscoveryQueue()}
+      
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -708,5 +857,56 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  // ========== DISCOVERY QUEUE STYLES ==========
+  discoveryQueueContainer: {
+    backgroundColor: '#FAFAFA',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  discoveryQueueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    gap: 6,
+  },
+  discoveryQueueTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  discoveryChipsContainer: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  discoveryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3E8FF',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    gap: 6,
+  },
+  discoveryChipExplored: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  discoveryChipEmoji: {
+    fontSize: 16,
+  },
+  discoveryChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  discoveryChipTextExplored: {
+    color: '#059669',
   },
 });

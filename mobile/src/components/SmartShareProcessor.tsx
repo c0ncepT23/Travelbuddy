@@ -17,17 +17,13 @@ import {
   Animated,
   Easing as RNEasing,
   TouchableOpacity,
-  FlatList,
 } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { Easing } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import FastImage from 'react-native-fast-image';
 import { HapticFeedback } from '../utils/haptics';
 import api from '../config/api';
-import { getPlacePhotoUrl } from '../config/maps';
-import { ScoutCarousel, ScoutResult } from './ScoutCarousel';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -43,12 +39,6 @@ interface ProcessedPlace {
   rating?: number;
 }
 
-interface GroundedSuggestion {
-  name: string;
-  street_hint: string;
-  why_famous: string;
-}
-
 interface ProcessResult {
   success: boolean;
   tripId: string;
@@ -59,16 +49,14 @@ interface ProcessResult {
   placesExtracted: number;
   places: ProcessedPlace[];
   message?: string;
-  discovery_intent?: {
-    type: string;
+  // Discovery Queue: When no places found but food/activity intent detected
+  discovery_queued?: boolean;
+  queued_item?: {
+    id: string;
     item: string;
     city: string;
-    vibe: string;
-    scout_query: string;
-    grounded_suggestions?: GroundedSuggestion[];
+    vibe?: string;
   };
-  scout_results?: ScoutResult[];
-  scout_id?: string;
 }
 
 interface SmartShareProcessorProps {
@@ -141,119 +129,10 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
 }) => {
   const [stage, setStage] = useState<ProcessingStage>('detecting');
   const [result, setResult] = useState<ProcessResult | null>(null);
-  const [selectedScoutMatch, setSelectedScoutMatch] = useState<ScoutResult | null>(null);
-  const [isSavingScout, setIsSavingScout] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isSavingGrounded, setIsSavingGrounded] = useState(false);
 
-  // Check if result contains grounded suggestions (AI-suggested Ghost Pins)
-  const hasGroundedSuggestions = useMemo(() => {
-    if (!result) return false;
-    // Check if places have the grounded suggestion tag
-    return result.places?.some(p => 
-      p.description?.includes('AI Suggested') || 
-      (result.discovery_intent?.grounded_suggestions && result.discovery_intent.grounded_suggestions.length > 0)
-    ) ?? false;
-  }, [result]);
-
-  // Handle "Save All" for grounded suggestions - saves as permanent places
-  const handleSaveAllGrounded = async () => {
-    if (!result?.tripId || !result.places?.length) return;
-    
-    HapticFeedback.medium();
-    setIsSavingGrounded(true);
-    
-    // Places are already saved by the backend in Grounding Lite mode
-    // Just show success and complete
-    setShowConfetti(true);
-    HapticFeedback.success();
-    
-    setTimeout(() => {
-      onComplete(result);
-    }, 2000);
-  };
-
-  // Handle "Dismiss" for grounded suggestions - keeps as Ghost Pins for later
-  const handleDismissGrounded = async () => {
-    if (!result?.tripId || !result.discovery_intent) return;
-    
-    HapticFeedback.light();
-    
-    // Save the intent with grounded suggestions to scout_intents table
-    // so Ghost Pins persist on the map for user to explore later
-    try {
-      await api.post(`/share/scouts`, {
-        tripId: result.tripId,
-        intent: result.discovery_intent,
-        grounded_places: result.places, // Save the geocoded suggestions
-      });
-    } catch (e) {
-      console.error('[SmartShare] Failed to save ghost pins:', e);
-    }
-    
-    // Close without celebration - user will find pins on map later
-    onClose();
-  };
-
-  // ... (rest of the refs)
-
-  const handleScoutSelect = async (scoutMatch: ScoutResult) => {
-    if (!result?.tripId) return;
-    
-    HapticFeedback.medium();
-    setSelectedScoutMatch(scoutMatch);
-    setIsSavingScout(true);
-    
-    try {
-      // Create a real place from the scouted match
-      const response = await api.post(`/trips/${result.tripId}/items`, {
-        name: scoutMatch.name,
-        category: 'food', // Assuming food for culinary goals
-        location_name: scoutMatch.address,
-        location_lat: scoutMatch.location.lat,
-        location_lng: scoutMatch.location.lng,
-        google_place_id: scoutMatch.place_id,
-        description: scoutMatch.generative_summary,
-        source_url: url,
-        rating: scoutMatch.rating,
-      });
-
-      // Mark the scout intent as resolved if we have an ID
-      if (result.scout_id) {
-        try {
-          await api.patch(`/share/scouts/${result.scout_id}/status`, { status: 'resolved' });
-        } catch (e) {
-          console.error('[SmartShare] Failed to resolve scout status:', e);
-        }
-      }
-      
-      HapticFeedback.success();
-      setShowConfetti(true);
-      
-      // Complete the process with the new place
-      setTimeout(() => {
-        onComplete({
-          ...result,
-          placesExtracted: 1,
-          places: [{
-            id: response.data.id,
-            name: scoutMatch.name,
-            category: 'food',
-            description: scoutMatch.generative_summary || '',
-            location_lat: scoutMatch.location.lat,
-            location_lng: scoutMatch.location.lng,
-            rating: scoutMatch.rating
-          }]
-        });
-      }, 2000);
-    } catch (error) {
-      console.error('[SmartShare] Scout save error:', error);
-      setIsSavingScout(false);
-    }
-  };
-  
   // Animation values
   const orbScale = useRef(new Animated.Value(1)).current;
   const orbRotate = useRef(new Animated.Value(0)).current;
@@ -277,9 +156,14 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   const platform = detectPlatform(url);
   const platformInfo = getPlatformInfo(platform);
 
-  // Start animations
+  // Handle "Got it!" for discovery queue - just close and navigate
+  const handleDiscoveryQueueAck = () => {
+    HapticFeedback.light();
+    onComplete(result!);
+  };
+
+  // Start animations on mount
   useEffect(() => {
-    
     // Orb pulse
     Animated.loop(
       Animated.sequence([
@@ -368,7 +252,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   // Process the URL
   useEffect(() => {
     processUrl();
-  }, []);
+  }, [url]); // Re-run if URL changes
 
   // Stop rotation on complete/error
   useEffect(() => {
@@ -377,19 +261,32 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
     }
   }, [stage]);
 
-  const processUrl = async () => {
+  const processUrl = async (retryCount = 0) => {
     try {
       // Stage 1: Detecting
-      HapticFeedback.light();
-      setStage('detecting');
-      await delay(800);
+      if (retryCount === 0) {
+        HapticFeedback.light();
+        setStage('detecting');
+      }
+      
+      // Wait a bit for network to stabilize, especially on cold boot
+      await delay(retryCount === 0 ? 1500 : 1000);
 
       // Stage 2: Extracting
       setStage('extracting');
-      HapticFeedback.light();
+      if (retryCount === 0) HapticFeedback.light();
 
       // Make API call
+      console.log(`[SmartShare] Calling /share/process (Attempt ${retryCount + 1}) for URL: ${url}`);
       const response = await api.post('/share/process', { url });
+      
+      console.log('[SmartShare] API Response:', JSON.stringify({
+        success: response.data.success,
+        tripId: response.data.tripId,
+        placesExtracted: response.data.places?.length || 0,
+        discoveryQueued: response.data.discovery_queued,
+        queuedItem: response.data.queued_item,
+      }));
       
       // Check for actual API failure
       if (!response.data.success) {
@@ -411,25 +308,37 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       setResult(response.data);
       HapticFeedback.success();
 
-      // If we have scout results but no specific places, don't auto-complete
-      // Let the user pick a match first
-      if (response.data.scout_results?.length > 0 && (!response.data.places || response.data.places.length === 0)) {
-        console.log('[SmartShare] Scout results found, waiting for user selection');
+      // If discovery was queued (food/activity intent but no places), 
+      // show the "I'll remember this!" UI and wait for user to acknowledge
+      if (response.data.discovery_queued) {
+        console.log('[SmartShare] Discovery queued for AI Chat:', response.data.queued_item);
         return;
       }
 
-      setShowConfetti(true);
+      // If places were extracted, show confetti and complete
+      if (response.data.placesExtracted > 0) {
+        setShowConfetti(true);
+        setTimeout(() => {
+          try {
+            onComplete(response.data);
+          } catch (navError) {
+            console.error('[SmartShare] Navigation error:', navError);
+          }
+        }, 3500);
+        return;
+      }
 
-      // Wait for confetti animation to complete (2000ms animation + 500ms delay + 1000ms to enjoy)
-      setTimeout(() => {
-        try {
-          onComplete(response.data);
-        } catch (navError) {
-          console.error('[SmartShare] Navigation error:', navError);
-        }
-      }, 3500);
+      // No places and no discovery - just show message and let user close
+      // Don't auto-close, let user read the message
 
     } catch (error: any) {
+      // Retry logic for Network Errors (common on cold boot)
+      if ((error.message === 'Network Error' || error.code === 'ECONNABORTED') && retryCount < 2) {
+        console.log(`[SmartShare] Network error, retrying (${retryCount + 1}/2)...`);
+        processUrl(retryCount + 1);
+        return;
+      }
+
       const msg = error.response?.data?.error || error.message || 'Failed to process';
       console.error('[SmartShare] Error:', error);
       setStage('error');
@@ -671,23 +580,56 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
         {/* Text content */}
         <View style={styles.textContent}>
           <MotiView
-            key={stage + (isSavingScout ? '-saving' : '')}
+            key={stage}
             from={{ opacity: 0, translateY: 10 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 300 }}
           >
             <Text style={styles.stageMessage}>
-              {isSavingScout ? 'Saving your choice...' : STAGE_MESSAGES[stage]}
+              {STAGE_MESSAGES[stage]}
             </Text>
           </MotiView>
-
-          {/* ... (dots and sub-messages) */}
         </View>
 
         {/* Result preview */}
         {stage === 'complete' && result && (
           <View style={styles.resultContainerWrapper}>
-            {result.placesExtracted === 0 ? (
+            {result.discovery_queued && result.queued_item ? (
+              /* Discovery Queue UI - "I'll remember this!" */
+              <MotiView
+                from={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', delay: 200 }}
+                style={styles.resultContainer}
+              >
+                <Text style={styles.resultEmoji}>💭</Text>
+                <Text style={styles.resultCountry}>
+                  {result.queued_item.item}
+                </Text>
+                <Text style={styles.discoverySubtext}>
+                  No specific places found in this video
+                </Text>
+                
+                <View style={styles.discoveryCard}>
+                  <Ionicons name="chatbubbles" size={24} color="#A78BFA" />
+                  <View style={styles.discoveryCardText}>
+                    <Text style={styles.discoveryCardTitle}>
+                      I'll remember this!
+                    </Text>
+                    <Text style={styles.discoveryCardDesc}>
+                      Ask me in AI Chat for {result.queued_item.item} recommendations in {result.queued_item.city}
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.gotItButton} 
+                  onPress={handleDiscoveryQueueAck}
+                >
+                  <Text style={styles.gotItText}>Got it! ✨</Text>
+                </TouchableOpacity>
+              </MotiView>
+            ) : result.placesExtracted === 0 ? (
               <MotiView
                 from={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -699,63 +641,6 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
                 <TouchableOpacity style={styles.retryButton} onPress={onClose}>
                   <Text style={styles.retryText}>Done</Text>
                 </TouchableOpacity>
-              </MotiView>
-            ) : hasGroundedSuggestions ? (
-              /* Grounding Lite UI - AI Suggested Ghost Pins */
-              <MotiView
-                from={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', delay: 200 }}
-                style={styles.resultContainer}
-              >
-                <Text style={styles.resultEmoji}>🛰️</Text>
-                <Text style={styles.resultCountry}>
-                  Looking for {result.discovery_intent?.item || 'something delicious'}?
-                </Text>
-                <Text style={styles.groundedSubtext}>
-                  I found {result.placesExtracted} legendary spots in {result.discovery_intent?.city || result.destination}!
-                </Text>
-                
-                {/* Show suggestion previews */}
-                <View style={styles.groundedList}>
-                  {result.places.slice(0, 3).map((place, idx) => (
-                    <View key={idx} style={styles.groundedItem}>
-                      <Text style={styles.groundedItemIcon}>🛰️</Text>
-                      <View style={styles.groundedItemText}>
-                        <Text style={styles.groundedItemName}>{place.name}</Text>
-                        <Text style={styles.groundedItemDesc} numberOfLines={1}>
-                          {place.description?.replace('🛰️ AI Suggested: ', '')}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Action buttons */}
-                <View style={styles.groundedButtons}>
-                  <TouchableOpacity 
-                    style={styles.saveAllButton} 
-                    onPress={handleSaveAllGrounded}
-                    disabled={isSavingGrounded}
-                  >
-                    <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                    <Text style={styles.saveAllText}>
-                      {isSavingGrounded ? 'Saving...' : 'Save All'}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={styles.dismissButton} 
-                    onPress={handleDismissGrounded}
-                    disabled={isSavingGrounded}
-                  >
-                    <Text style={styles.dismissText}>Explore Later</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                <Text style={styles.groundedHint}>
-                  👻 "Explore Later" saves as Ghost Pins on your map
-                </Text>
               </MotiView>
             ) : (
               <MotiView
@@ -1148,85 +1033,53 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     backgroundColor: 'rgba(244, 114, 182, 0.2)',
   },
-  // Grounding Lite styles
-  groundedSubtext: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.8)',
+  // Discovery Queue styles
+  discoverySubtext: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
-    marginBottom: 16,
-  },
-  groundedList: {
-    width: '100%',
-    gap: 8,
     marginBottom: 20,
   },
-  groundedItem: {
+  discoveryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.3)',
   },
-  groundedItemIcon: {
-    fontSize: 20,
-  },
-  groundedItemText: {
+  discoveryCardText: {
     flex: 1,
   },
-  groundedItemName: {
-    fontSize: 14,
-    fontWeight: '600',
+  discoveryCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#FFFFFF',
+    marginBottom: 4,
   },
-  groundedItemDesc: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 2,
+  discoveryCardDesc: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    lineHeight: 18,
   },
-  groundedButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  saveAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 24,
+  gotItButton: {
+    backgroundColor: '#A78BFA',
+    paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 24,
-    gap: 8,
-    shadowColor: '#10B981',
+    shadowColor: '#A78BFA',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
   },
-  saveAllText: {
+  gotItText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  dismissButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 24,
-  },
-  dismissText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  groundedHint: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    textAlign: 'center',
-    fontStyle: 'italic',
   },
 });
 

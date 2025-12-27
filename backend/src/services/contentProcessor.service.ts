@@ -659,6 +659,7 @@ export class ContentProcessorService {
                 tags: ['ai-suggested', 'grounded-lite', 'ghost-pin'],
                 destination: analysis.destination,
                 destination_country: analysis.destination_country,
+                is_grounded_suggestion: true, // Mark as grounded suggestion
                 originalContent: {
                   ...videoData,
                   video_type: 'places',
