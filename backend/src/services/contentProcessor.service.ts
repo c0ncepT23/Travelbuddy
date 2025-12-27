@@ -630,56 +630,11 @@ export class ContentProcessorService {
 
       // PLACES video handling
       if (analysis.places.length === 0) {
-        // If we have a discovery intent, check for grounded suggestions
+        // If we have a discovery intent, return it so SmartShare can save to discovery_queue
         if (analysis.discovery_intent) {
-          logger.info(`[YouTube] No places found, but found discovery intent: ${analysis.discovery_intent.item}`);
+          logger.info(`[YouTube] No places found, but found discovery intent: ${analysis.discovery_intent.item} in ${analysis.discovery_intent.city}`);
           
-          // GROUNDING LITE: If Gemini provided suggestions, geocode them!
-          if (analysis.discovery_intent.grounded_suggestions?.length) {
-            logger.info(`[Grounding Lite] Processing ${analysis.discovery_intent.grounded_suggestions.length} AI-suggested places...`);
-            
-            const geocodedSuggestions = await GooglePlacesService.geocodeGroundedSuggestions(
-              analysis.discovery_intent.grounded_suggestions,
-              analysis.discovery_intent.city
-            );
-            
-            if (geocodedSuggestions.length > 0) {
-              logger.info(`[Grounding Lite] Successfully geocoded ${geocodedSuggestions.length} suggestions - creating Ghost Pins!`);
-              
-              // Convert geocoded suggestions to ProcessedContent format
-              const groundedPlaces = geocodedSuggestions.map(suggestion => ({
-                name: suggestion.name,
-                category: ItemCategory.FOOD,  // Grounded suggestions are typically food
-                description: `🛰️ AI Suggested: ${suggestion.description}`,
-                location_name: suggestion.formatted_address,
-                location_lat: suggestion.location_lat,
-                location_lng: suggestion.location_lng,
-                source_title: videoData.title,
-                cuisine_type: analysis.discovery_intent?.item?.toLowerCase(), // e.g., "cheesecake"
-                tags: ['ai-suggested', 'grounded-lite', 'ghost-pin'],
-                destination: analysis.destination,
-                destination_country: analysis.destination_country,
-                is_grounded_suggestion: true, // Mark as grounded suggestion
-                originalContent: {
-                  ...videoData,
-                  video_type: 'places',
-                  is_grounded_suggestion: true,
-                },
-              }));
-              
-              return {
-                summary: analysis.summary,
-                video_type: 'places',
-                destination: analysis.destination,
-                destination_country: analysis.destination_country,
-                places: groundedPlaces,
-                guideMetadata,
-                discovery_intent: analysis.discovery_intent, // Still include intent for UI context
-              };
-            }
-          }
-          
-          // No grounded suggestions or geocoding failed - return empty with intent
+          // Return empty places with the intent - SmartShare controller will save to discovery_queue
           return {
             summary: analysis.summary,
             video_type: 'places',
@@ -688,6 +643,7 @@ export class ContentProcessorService {
             places: [],
             guideMetadata,
             discovery_intent: analysis.discovery_intent,
+            source_title: videoData.title,
           };
         }
 
