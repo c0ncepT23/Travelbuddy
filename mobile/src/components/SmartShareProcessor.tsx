@@ -43,6 +43,12 @@ interface ProcessedPlace {
   rating?: number;
 }
 
+interface GroundedSuggestion {
+  name: string;
+  street_hint: string;
+  why_famous: string;
+}
+
 interface ProcessResult {
   success: boolean;
   tripId: string;
@@ -52,12 +58,14 @@ interface ProcessResult {
   isNewTrip: boolean;
   placesExtracted: number;
   places: ProcessedPlace[];
+  message?: string;
   discovery_intent?: {
     type: string;
     item: string;
     city: string;
     vibe: string;
     scout_query: string;
+    grounded_suggestions?: GroundedSuggestion[];
   };
   scout_results?: ScoutResult[];
   scout_id?: string;
@@ -138,6 +146,56 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isSavingGrounded, setIsSavingGrounded] = useState(false);
+
+  // Check if result contains grounded suggestions (AI-suggested Ghost Pins)
+  const hasGroundedSuggestions = useMemo(() => {
+    if (!result) return false;
+    // Check if places have the grounded suggestion tag
+    return result.places?.some(p => 
+      p.description?.includes('AI Suggested') || 
+      (result.discovery_intent?.grounded_suggestions && result.discovery_intent.grounded_suggestions.length > 0)
+    ) ?? false;
+  }, [result]);
+
+  // Handle "Save All" for grounded suggestions - saves as permanent places
+  const handleSaveAllGrounded = async () => {
+    if (!result?.tripId || !result.places?.length) return;
+    
+    HapticFeedback.medium();
+    setIsSavingGrounded(true);
+    
+    // Places are already saved by the backend in Grounding Lite mode
+    // Just show success and complete
+    setShowConfetti(true);
+    HapticFeedback.success();
+    
+    setTimeout(() => {
+      onComplete(result);
+    }, 2000);
+  };
+
+  // Handle "Dismiss" for grounded suggestions - keeps as Ghost Pins for later
+  const handleDismissGrounded = async () => {
+    if (!result?.tripId || !result.discovery_intent) return;
+    
+    HapticFeedback.light();
+    
+    // Save the intent with grounded suggestions to scout_intents table
+    // so Ghost Pins persist on the map for user to explore later
+    try {
+      await api.post(`/share/scouts`, {
+        tripId: result.tripId,
+        intent: result.discovery_intent,
+        grounded_places: result.places, // Save the geocoded suggestions
+      });
+    } catch (e) {
+      console.error('[SmartShare] Failed to save ghost pins:', e);
+    }
+    
+    // Close without celebration - user will find pins on map later
+    onClose();
+  };
 
   // ... (rest of the refs)
 
@@ -626,31 +684,94 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
           {/* ... (dots and sub-messages) */}
         </View>
 
-        {/* Result preview / Scout Carousel */}
+        {/* Result preview */}
         {stage === 'complete' && result && (
           <View style={styles.resultContainerWrapper}>
-            {(result.scout_results?.length ?? 0) > 0 && result.placesExtracted === 0 && !selectedScoutMatch ? (
-              <ScoutCarousel
-                scouts={result.scout_results || []}
-                intentItem={result.discovery_intent?.item || ''}
-                intentCity={result.discovery_intent?.city || ''}
-                onSelect={handleScoutSelect}
-              />
-            ) : (
-              <MotiView 
+            {result.placesExtracted === 0 ? (
+              <MotiView
+                from={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={styles.resultContainer}
+              >
+                <Text style={styles.resultEmoji}>🔍</Text>
+                <Text style={styles.resultCountry}>No places found</Text>
+                <Text style={styles.resultPlaces}>{result.message}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={onClose}>
+                  <Text style={styles.retryText}>Done</Text>
+                </TouchableOpacity>
+              </MotiView>
+            ) : hasGroundedSuggestions ? (
+              /* Grounding Lite UI - AI Suggested Ghost Pins */
+              <MotiView
                 from={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'spring', delay: 200 }}
                 style={styles.resultContainer}
               >
-                <Text style={styles.resultEmoji}>{selectedScoutMatch ? '🍰' : '🗺️'}</Text>
+                <Text style={styles.resultEmoji}>🛰️</Text>
                 <Text style={styles.resultCountry}>
-                  {selectedScoutMatch ? selectedScoutMatch.name : (result.destinationCountry || result.destination || 'Adventure')}
+                  Looking for {result.discovery_intent?.item || 'something delicious'}?
+                </Text>
+                <Text style={styles.groundedSubtext}>
+                  I found {result.placesExtracted} legendary spots in {result.discovery_intent?.city || result.destination}!
+                </Text>
+                
+                {/* Show suggestion previews */}
+                <View style={styles.groundedList}>
+                  {result.places.slice(0, 3).map((place, idx) => (
+                    <View key={idx} style={styles.groundedItem}>
+                      <Text style={styles.groundedItemIcon}>🛰️</Text>
+                      <View style={styles.groundedItemText}>
+                        <Text style={styles.groundedItemName}>{place.name}</Text>
+                        <Text style={styles.groundedItemDesc} numberOfLines={1}>
+                          {place.description?.replace('🛰️ AI Suggested: ', '')}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Action buttons */}
+                <View style={styles.groundedButtons}>
+                  <TouchableOpacity 
+                    style={styles.saveAllButton} 
+                    onPress={handleSaveAllGrounded}
+                    disabled={isSavingGrounded}
+                  >
+                    <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                    <Text style={styles.saveAllText}>
+                      {isSavingGrounded ? 'Saving...' : 'Save All'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.dismissButton} 
+                    onPress={handleDismissGrounded}
+                    disabled={isSavingGrounded}
+                  >
+                    <Text style={styles.dismissText}>Explore Later</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={styles.groundedHint}>
+                  👻 "Explore Later" saves as Ghost Pins on your map
+                </Text>
+              </MotiView>
+            ) : (
+              <MotiView
+                from={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', delay: 200 }}
+                style={styles.resultContainer}
+              >
+                <Text style={styles.resultEmoji}>🗺️</Text>
+                <Text style={styles.resultCountry}>
+                  {result.destinationCountry || result.destination || 'Adventure'}
                 </Text>
                 <Text style={styles.resultPlaces}>
-                  {selectedScoutMatch ? 'Added to your NYC trip!' : `${result.placesExtracted ?? 0} place${(result.placesExtracted ?? 0) !== 1 ? 's' : ''} discovered!`}
+                  {result.placesExtracted ?? 0} place{(result.placesExtracted ?? 0) !== 1 ? 's' : ''} discovered!
                 </Text>
-                {result.isNewTrip && !selectedScoutMatch && (
+                {result.isNewTrip && (
                   <View style={styles.newTripBadge}>
                     <Text style={styles.newTripText}>✨ New adventure created</Text>
                   </View>
@@ -1026,6 +1147,86 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 100,
     backgroundColor: 'rgba(244, 114, 182, 0.2)',
+  },
+  // Grounding Lite styles
+  groundedSubtext: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  groundedList: {
+    width: '100%',
+    gap: 8,
+    marginBottom: 20,
+  },
+  groundedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
+  groundedItemIcon: {
+    fontSize: 20,
+  },
+  groundedItemText: {
+    flex: 1,
+  },
+  groundedItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  groundedItemDesc: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 2,
+  },
+  groundedButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  saveAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 24,
+    gap: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveAllText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  dismissButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 24,
+  },
+  dismissText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  groundedHint: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

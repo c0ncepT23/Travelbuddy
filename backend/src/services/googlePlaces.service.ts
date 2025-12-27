@@ -63,6 +63,117 @@ interface GooglePlaceDetails {
 export class GooglePlacesService {
   private static readonly API_KEY = config.googleMaps.apiKey;
   private static readonly BASE_URL = 'https://maps.googleapis.com/maps/api/place';
+  private static readonly GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode';
+
+  /**
+   * Geocode a place name + street hint into coordinates
+   * MUCH cheaper than Places Search: ~$5 per 1000 requests vs $32+
+   * 
+   * Used for "Grounding Lite" - turning Gemini's AI-suggested famous restaurants
+   * into map coordinates without expensive Places API calls.
+   * 
+   * Cost: $5 per 1,000 requests (Geocoding)
+   */
+  static async geocodePlace(
+    placeName: string, 
+    streetHint: string,
+    city: string
+  ): Promise<{
+    lat: number;
+    lng: number;
+    formatted_address: string;
+    place_id?: string;
+  } | null> {
+    try {
+      if (!this.API_KEY) {
+        logger.warn('[GooglePlaces] API Key missing, skipping geocode');
+        return null;
+      }
+
+      // Construct a search query: "Restaurant Name, Street, City"
+      const query = `${placeName}, ${streetHint}, ${city}`;
+      
+      logger.info(`[Geocode] Looking up: "${query}"`);
+
+      const response = await axios.get(`${this.GEOCODE_URL}/json`, {
+        params: {
+          address: query,
+          key: this.API_KEY,
+        },
+      });
+
+      if (response.data.status !== 'OK' || !response.data.results?.length) {
+        logger.warn(`[Geocode] No results for: "${query}" (status: ${response.data.status})`);
+        return null;
+      }
+
+      const result = response.data.results[0];
+      const location = result.geometry?.location;
+
+      if (!location) {
+        logger.warn(`[Geocode] No location in result for: "${query}"`);
+        return null;
+      }
+
+      logger.info(`[Geocode] Found: ${result.formatted_address} at (${location.lat}, ${location.lng})`);
+
+      return {
+        lat: location.lat,
+        lng: location.lng,
+        formatted_address: result.formatted_address,
+        place_id: result.place_id, // May be useful for future enrichment
+      };
+    } catch (error: any) {
+      logger.error(`[Geocode] Error for "${placeName}":`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Geocode multiple grounded suggestions in parallel
+   * Used for "Grounding Lite" to process Gemini's 3 famous restaurant suggestions
+   */
+  static async geocodeGroundedSuggestions(
+    suggestions: Array<{
+      name: string;
+      street_hint: string;
+      why_famous: string;
+    }>,
+    city: string
+  ): Promise<Array<{
+    name: string;
+    description: string;
+    location_lat: number;
+    location_lng: number;
+    formatted_address: string;
+    is_grounded_suggestion: boolean;
+  }>> {
+    const results = await Promise.all(
+      suggestions.map(async (suggestion) => {
+        const geocoded = await this.geocodePlace(suggestion.name, suggestion.street_hint, city);
+        
+        if (!geocoded) {
+          logger.warn(`[Grounding] Failed to geocode: "${suggestion.name}"`);
+          return null;
+        }
+
+        return {
+          name: suggestion.name,
+          description: suggestion.why_famous,
+          location_lat: geocoded.lat,
+          location_lng: geocoded.lng,
+          formatted_address: geocoded.formatted_address,
+          is_grounded_suggestion: true, // Flag to identify as AI-suggested "Ghost Pin"
+        };
+      })
+    );
+
+    // Filter out null results
+    const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null);
+    logger.info(`[Grounding] Geocoded ${validResults.length}/${suggestions.length} suggestions`);
+    
+    return validResults;
+  }
 
   /**
    * Search for nearby places by type/keyword

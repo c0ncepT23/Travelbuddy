@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { config } from '../config/env';
-import { ItemCategory, AgentContext, DiscoveryIntent } from '../types';
+import { ItemCategory, AgentContext, DiscoveryIntent, GroundedSuggestion } from '../types';
 import logger from '../config/logger';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -522,12 +522,34 @@ RESPOND ONLY WITH VALID JSON (no markdown, no extra text):
     "city": "The city or area targeted",
     "vibe": "The style (e.g., legendary, traditional, viral, hidden)",
     "scout_query": "Best [item] specialists in [city]",
-    "confidence_score": 0.0 to 1.0
+    "confidence_score": 0.0 to 1.0,
+    "grounded_suggestions": [
+      {
+        "name": "Famous Restaurant Name",
+        "street_hint": "Neighborhood or street (e.g., SoHo, 45th Street)",
+        "why_famous": "Brief reason why this is legendary for this dish"
+      }
+    ]
   }
 }
 
-NOTE on DISH_GOAL: Trigger this if a SPECIFIC dish name (like "Pad Thai", "Gelato", "Tonkotsu Ramen") is the focus, but NO specific restaurant names are extracted. 
-If specific places ARE found, set "discovery_intent" to null. If NEITHER places nor intent found, return empty array for places.`;
+**GROUNDING LITE RULE (IMPORTANT):**
+If NO specific restaurant names are mentioned, but the video is clearly about a specific DISH in a CITY:
+1. Return a "discovery_intent" object with type="DISH_GOAL"
+2. In the "grounded_suggestions" array, suggest exactly 3 WORLD-FAMOUS or HIGHLY-RATED restaurants for that dish in that city FROM YOUR OWN KNOWLEDGE
+3. These should be legendary, viral, or critically-acclaimed spots that are commonly featured in "Best of" lists
+4. Include the street/neighborhood hint for geocoding
+
+Example: Video about "Finding amazing cheesecake in NYC" with no specific restaurant names:
+- discovery_intent.item = "Cheesecake"
+- discovery_intent.city = "New York"  
+- grounded_suggestions = [
+    {"name": "Junior's Restaurant", "street_hint": "Flatbush Ave, Brooklyn", "why_famous": "Iconic NYC cheesecake since 1950"},
+    {"name": "Eileen's Special Cheesecake", "street_hint": "Cleveland Place, SoHo", "why_famous": "Famous mini cheesecakes in NoLita"},
+    {"name": "Veniero's Pasticceria", "street_hint": "East 11th Street", "why_famous": "Italian bakery with legendary cheesecake since 1894"}
+  ]
+
+If specific places ARE found, set "discovery_intent" to null.`;
 
       const result = await model.generateContent(prompt);
       const response = result.response;
@@ -963,8 +985,31 @@ RESPOND WITH VALID JSON:
   }
 }
 
-**INTENT FALLBACK RULE:**
-If you cannot identify specific restaurant/business names, but the video is clearly about a specific food/activity in a city (e.g. "Exploring NYC for the best cheesecake"), you MUST return a "discovery_intent" object. If specific places ARE found, set "discovery_intent" to null.`;
+**GROUNDING LITE RULE (IMPORTANT):**
+If NO specific restaurant names are identified, but the video is clearly about a specific DISH in a CITY:
+1. Return a "discovery_intent" object with type="DISH_GOAL" (or CULINARY_GOAL for general food exploration)
+2. In the "grounded_suggestions" array, suggest exactly 3 WORLD-FAMOUS restaurants for that dish in that city FROM YOUR OWN KNOWLEDGE
+3. These should be legendary, viral, or critically-acclaimed spots commonly featured in "Best of" lists
+4. Include the street/neighborhood hint for geocoding
+
+Example JSON for discovery_intent when grounding:
+{
+  "discovery_intent": {
+    "type": "DISH_GOAL",
+    "item": "Cheesecake",
+    "city": "New York",
+    "vibe": "legendary",
+    "scout_query": "Best legendary cheesecake in New York",
+    "confidence_score": 0.9,
+    "grounded_suggestions": [
+      {"name": "Junior's Restaurant", "street_hint": "Flatbush Ave, Brooklyn", "why_famous": "Iconic NYC cheesecake since 1950"},
+      {"name": "Eileen's Special Cheesecake", "street_hint": "Cleveland Place, SoHo", "why_famous": "Famous mini cheesecakes"},
+      {"name": "Veniero's Pasticceria", "street_hint": "East 11th Street", "why_famous": "Italian bakery legend since 1894"}
+    ]
+  }
+}
+
+If specific places ARE found, set "discovery_intent" to null.`;
 
       const result = await model.generateContent([
         {

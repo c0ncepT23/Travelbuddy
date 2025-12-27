@@ -632,10 +632,10 @@ export default function CountryBubbleScreen() {
   const [userInCountry, setUserInCountry] = useState<boolean>(false);
   const [hasAutoFocused, setHasAutoFocused] = useState<boolean>(false);
   
-  // NEW: Discovery Intent (Scout Mode)
-  const [discoveryIntent, setDiscoveryIntent] = useState<any>((params as any).discoveryIntent || null);
-  const [scoutResults, setScoutResults] = useState<any[]>((params as any).scoutResults || []);
-  const [scoutId, setScoutId] = useState<string | null>((params as any).scoutId || null);
+  // NEW: Discovery Intent (Scout Mode) - DEACTIVATED for cost optimization
+  const [discoveryIntent, setDiscoveryIntent] = useState<any>(null);
+  const [scoutResults, setScoutResults] = useState<any[]>([]);
+  const [scoutId, setScoutId] = useState<string | null>(null);
   const [isScoutCarouselVisible, setIsScoutCarouselVisible] = useState(false);
   
   // Category filter state (for chip filtering)

@@ -168,6 +168,12 @@ export interface AuthRequest extends Request {
 // Content Processing Types
 export type DiscoveryIntentType = 'CULINARY_GOAL' | 'ACTIVITY_GOAL' | 'SIGHTSEEING_GOAL' | 'DISH_GOAL';
 
+export interface GroundedSuggestion {
+  name: string;           // "Junior's Restaurant"
+  street_hint: string;    // "Flatbush Ave, Brooklyn" or "Times Square"
+  why_famous: string;     // "Iconic NYC cheesecake since 1950"
+}
+
 export interface DiscoveryIntent {
   type: DiscoveryIntentType;
   item: string;           // "Cheesecake", "Tacos", "Surfing"
@@ -175,6 +181,8 @@ export interface DiscoveryIntent {
   vibe: string;           // "legendary", "hidden gem", "traditional"
   scout_query: string;    // "best legendary cheesecake in New York City"
   confidence_score: number;
+  // Grounding Lite: Gemini suggests 3 famous spots from its knowledge (no API call needed)
+  grounded_suggestions?: GroundedSuggestion[];
 }
 
 export interface ScoutIntentRecord {

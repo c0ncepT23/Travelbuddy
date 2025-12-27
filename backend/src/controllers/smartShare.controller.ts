@@ -97,59 +97,18 @@ export class SmartShareController {
       
       logger.info(`🌍 [SmartShare] Destination: ${destination}, Country: ${destinationCountry}`);
 
-      // NEW: Handle Discovery Intent (Scout Mode)
-      // If no specific places found, but we have a culinary/activity goal
-      if ((!extractionResult.places || extractionResult.places.length === 0) && extractionResult.discovery_intent) {
-        logger.info(`🔍 [SmartShare] Entering Scout Mode for: ${extractionResult.discovery_intent.item} in ${extractionResult.discovery_intent.city}`);
-        
-        // Find or create trip for this country (so the intent has a home)
-        const { trip, isNewTrip } = await findOrCreateTripForCountry(userId, destinationCountry);
-        
-        // Trigger Scout Service
-        const scoutResults = await ScoutService.scout(extractionResult.discovery_intent);
-        
-        // PERSIST the scout intent so it's not lost
-        let scoutId: string | undefined;
-        try {
-          const scoutRecord = await ScoutIntentModel.create(
-            trip.id,
-            userId,
-            {
-              type: extractionResult.discovery_intent.type,
-              item: extractionResult.discovery_intent.item,
-              city: extractionResult.discovery_intent.city,
-              vibe: extractionResult.discovery_intent.vibe,
-              scout_query: extractionResult.discovery_intent.scout_query,
-            },
-            scoutResults
-          );
-          scoutId = scoutRecord.id;
-          logger.info(`✅ [SmartShare] Persistent scout intent saved for ${extractionResult.discovery_intent.item}`);
-        } catch (dbError) {
-          logger.error(`❌ [SmartShare] Failed to save persistent scout intent:`, dbError);
-          // Don't fail the request, just log it
-        }
-        
-        res.status(200).json({
-          success: true,
-          tripId: trip.id,
-          tripName: trip.name,
-          destination,
-          destinationCountry,
-          isNewTrip,
-          placesExtracted: 0,
-          places: [],
-          discovery_intent: extractionResult.discovery_intent,
-          scout_results: scoutResults,
-          scout_id: scoutId
-        });
-        return;
-      }
-
+      // FALLBACK logic: If no specific places found
       if (!extractionResult?.places?.length) {
+        let reason = 'I couldn\'t find any specific restaurant or place names in this content.';
+        
+        // If the AI actually saw a food item but no place name, be specific!
+        if (extractionResult.discovery_intent) {
+          reason = `I see you're interested in ${extractionResult.discovery_intent.item} in ${extractionResult.discovery_intent.city}, but this video didn't mention any specific restaurant names to save!`;
+        }
+
         res.status(200).json({
           success: true,
-          message: 'No places found in this content',
+          message: reason,
           tripId: null,
           placesExtracted: 0,
           places: [],
