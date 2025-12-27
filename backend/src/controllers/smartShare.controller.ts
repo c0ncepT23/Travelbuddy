@@ -11,7 +11,7 @@
  */
 
 import { Response } from 'express';
-import { AuthRequest, DiscoveryIntent } from '../types';
+import { AuthRequest } from '../types';
 import { TripGroupModel } from '../models/tripGroup.model';
 import { TripGroup } from '../types';
 import { SavedItemModel } from '../models/savedItem.model';
