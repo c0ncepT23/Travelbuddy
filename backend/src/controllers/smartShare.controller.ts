@@ -124,7 +124,6 @@ export class SmartShareController {
               country: destinationCountry,
               vibe: intent.vibe,
               source_url: url,
-              source_title: extractionResult.source_title,
               source_platform: contentType,
             }
           );

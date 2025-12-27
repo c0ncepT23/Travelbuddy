@@ -643,7 +643,6 @@ export class ContentProcessorService {
             places: [],
             guideMetadata,
             discovery_intent: analysis.discovery_intent,
-            source_title: videoData.title,
           };
         }
 
