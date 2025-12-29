@@ -50,6 +50,10 @@ import { useLocationStore } from '../../stores/locationStore';
 
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { ScoutCarousel, ScoutResult } from '../../components/ScoutCarousel';
+import ExploreTab from '../../components/ExploreTab';
+
+// Tab types for bottom navigation
+type TabType = 'map' | 'explore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -446,22 +450,50 @@ function filterItemsByMapBounds(items: SavedItem[], bounds: number[][]): SavedIt
   
   // Mapbox returns [[neLng, neLat], [swLng, swLat]]
   const [ne, sw] = bounds;
-  const neLng = ne[0], neLat = ne[1];
-  const swLng = sw[0], swLat = sw[1];
+  let neLng = ne[0], neLat = ne[1];
+  let swLng = sw[0], swLat = sw[1];
   
-  // Calculate actual min/max to handle any format
+  // Calculate actual min/max
   const minLat = Math.min(neLat, swLat);
   const maxLat = Math.max(neLat, swLat);
-  const minLng = Math.min(neLng, swLng);
-  const maxLng = Math.max(neLng, swLng);
   
-  return items.filter(item => {
+  // Longitude wrapping logic:
+  // Mapbox can return longitudes outside [-180, 180] when zoomed out or panned multiple times.
+  // We need to normalize both the bounds and the item coordinates.
+  const normalizeLng = (lng: number) => {
+    let n = (lng + 180) % 360;
+    if (n < 0) n += 360;
+    return n - 180;
+  };
+
+  // If the bounds span more than 360 degrees, show everything
+  if (Math.abs(neLng - swLng) >= 360) {
+    return items.filter(item => item.location_lat && item.location_lng);
+  }
+
+  const normNeLng = normalizeLng(neLng);
+  const normSwLng = normalizeLng(swLng);
+
+  const filtered = items.filter(item => {
     if (!item.location_lat || !item.location_lng) return false;
     const lat = Number(item.location_lat);
-    const lng = Number(item.location_lng);
+    const lng = normalizeLng(Number(item.location_lng));
     
-    return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
+    const isLatMatch = lat >= minLat && lat <= maxLat;
+    let isLngMatch = false;
+
+    if (normSwLng <= normNeLng) {
+      // Normal case
+      isLngMatch = lng >= normSwLng && lng <= normNeLng;
+    } else {
+      // Crosses antimeridian
+      isLngMatch = lng >= normSwLng || lng <= normNeLng;
+    }
+    
+    return isLatMatch && isLngMatch;
   });
+
+  return filtered;
 }
 
 // Minimum zoom level to activate map-based filtering (5 = city level)
@@ -640,6 +672,9 @@ export default function CountryBubbleScreen() {
   
   // Category filter state (for chip filtering)
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilterType>('all');
+  
+  // Bottom tab navigation state
+  const [activeTab, setActiveTab] = useState<TabType>('map');
   
   // Map bounds filtering state
   const [currentZoom, setCurrentZoom] = useState<number>(0);
@@ -850,6 +885,29 @@ export default function CountryBubbleScreen() {
     }
   };
 
+  // Handle saving a place from Explore tab (triggers enrichment)
+  const handleSaveFromExplore = async (item: { id: string; item: string; city: string; country?: string }) => {
+    try {
+      // Call backend to enrich and save the place
+      const response = await api.post(`/trips/${tripId}/items/from-discovery`, {
+        discoveryItemId: item.id,
+        name: item.item,
+        city: item.city,
+        country: item.country || countryName,
+      });
+
+      if (response.data.success) {
+        // Refresh items to show the new place
+        await fetchItems();
+        // Switch to map tab to show the saved place
+        setActiveTab('map');
+      }
+    } catch (error) {
+      console.error('Error saving place from explore:', error);
+      throw error; // Re-throw so ExploreTab can handle it
+    }
+  };
+
   const fetchItems = async () => {
     if (!tripId) {
       setIsLoading(false);
@@ -864,6 +922,15 @@ export default function CountryBubbleScreen() {
       // Filter for unique items before setting state
       const uniqueItems = filterUniqueItems(fetchedItems);
       console.log(`📦 Fetched ${fetchedItems.length} items, filtered to ${uniqueItems.length} unique places`);
+      
+      // DEBUG: Log coordinate status
+      const withCoords = uniqueItems.filter(i => i.location_lat && i.location_lng);
+      const withoutCoords = uniqueItems.filter(i => !i.location_lat || !i.location_lng);
+      console.log(`   📍 With coordinates: ${withCoords.length}`);
+      console.log(`   ❌ Without coordinates: ${withoutCoords.length}`);
+      if (withoutCoords.length > 0) {
+        withoutCoords.forEach(i => console.log(`      - ${i.name} (no coords)`));
+      }
       
       setAllItems(uniqueItems);
       setFilteredItems(uniqueItems);
@@ -1873,6 +1940,18 @@ export default function CountryBubbleScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
+      {/* Explore Tab Content */}
+      {activeTab === 'explore' && (
+        <ExploreTab
+          tripId={tripId}
+          countryName={countryName}
+          onSavePlace={handleSaveFromExplore}
+        />
+      )}
+      
+      {/* Map Tab Content */}
+      {activeTab === 'map' && (
+        <>
       {/* Map Background - Mapbox */}
       <MapView
         ref={mapViewRef}
@@ -1900,10 +1979,6 @@ export default function CountryBubbleScreen() {
           followUserLocation={false}
           minZoomLevel={1}
           maxZoomLevel={20}
-          maxBounds={countryBounds ? {
-            ne: [countryBounds.maxLng + 2, countryBounds.maxLat + 2],
-            sw: [countryBounds.minLng - 2, countryBounds.minLat - 2],
-          } : undefined}
         />
 
         {/* PLACES HOTSPOTS (CLUSTERS) - Purple density glow */}
@@ -2522,21 +2597,7 @@ export default function CountryBubbleScreen() {
         </MotiView>
       )}
 
-      {/* Floating AI Orb */}
-      <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen} />
-
-      {/* Compact AI Chat */}
-      <CompactAIChat
-        isOpen={isCompactChatOpen}
-        onClose={handleCloseCompactChat}
-        onOpenFullChat={handleOpenFullChat}
-        messages={chatMessages}
-        onSendMessage={handleSendMessage}
-        isTyping={isAITyping || companionLoading}
-        suggestions={dynamicSuggestions}
-      />
-
-      {/* Scout Carousel Overlay */}
+      {/* Scout Carousel Overlay - Map tab only */}
       {isScoutCarouselVisible && scoutResults.length > 0 && (
         <View style={styles.scoutOverlay} pointerEvents="box-none">
           <TouchableOpacity 
@@ -2558,18 +2619,15 @@ export default function CountryBubbleScreen() {
         </View>
       )}
 
-      {/* Skeleton Loading State */}
+      {/* Skeleton Loading State - Map tab only */}
       {isLoading && (
         <View style={styles.skeletonOverlay}>
-          {/* Header Skeleton */}
           <View style={styles.header}>
             <View style={styles.headerTopRow}>
               <SkeletonLoader width={180} height={48} borderRadius={24} />
               <SkeletonLoader width={44} height={44} borderRadius={22} />
             </View>
           </View>
-
-          {/* Chips Skeleton */}
           <View style={[styles.categoryChipsContainer, { marginTop: 10 }]}>
             <View style={styles.categoryChipsScroll}>
               {[1, 2, 3, 4].map((i) => (
@@ -2577,8 +2635,6 @@ export default function CountryBubbleScreen() {
               ))}
             </View>
           </View>
-
-          {/* Bottom Drawer Skeleton */}
           <View style={styles.drawerSkeleton}>
             <View style={styles.drawerSkeletonHeader}>
               <SkeletonLoader width={120} height={20} borderRadius={10} />
@@ -2596,6 +2652,61 @@ export default function CountryBubbleScreen() {
           </View>
         </View>
       )}
+        </>
+      )}
+
+      {/* Bottom Tab Bar - Always visible */}
+      <View style={styles.bottomTabBar}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'map' && styles.tabButtonActive]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setActiveTab('map');
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.tabIconContainer, activeTab === 'map' && styles.tabIconContainerActive]}>
+            <Ionicons 
+              name={activeTab === 'map' ? 'map' : 'map-outline'} 
+              size={20} 
+              color={activeTab === 'map' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
+            />
+          </View>
+          <Text style={[styles.tabLabel, activeTab === 'map' && styles.tabLabelActive]}>Map</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'explore' && styles.tabButtonActive]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setActiveTab('explore');
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.tabIconContainer, activeTab === 'explore' && styles.tabIconContainerActive]}>
+            <Ionicons 
+              name={activeTab === 'explore' ? 'compass' : 'compass-outline'} 
+              size={20} 
+              color={activeTab === 'explore' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
+            />
+          </View>
+          <Text style={[styles.tabLabel, activeTab === 'explore' && styles.tabLabelActive]}>Explore</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Floating AI Orb - Always visible */}
+      <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen} />
+
+      {/* Compact AI Chat - Always visible */}
+      <CompactAIChat
+        isOpen={isCompactChatOpen}
+        onClose={handleCloseCompactChat}
+        onOpenFullChat={handleOpenFullChat}
+        messages={chatMessages}
+        onSendMessage={handleSendMessage}
+        isTyping={isAITyping || companionLoading}
+        suggestions={dynamicSuggestions}
+      />
     </View>
   );
 }
@@ -2933,5 +3044,53 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 20,
     elevation: 20,
+  },
+  
+  // Bottom Tab Bar
+  bottomTabBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(15, 17, 21, 0.98)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    paddingHorizontal: 40,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    zIndex: 500,
+    elevation: 20,
+  },
+  tabButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 24,
+  },
+  tabButtonActive: {
+    // Active state styling handled by icon container
+  },
+  tabIconContainer: {
+    width: 40,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  tabIconContainerActive: {
+    backgroundColor: '#06B6D4',
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginTop: 2,
+  },
+  tabLabelActive: {
+    color: '#06B6D4',
   },
 });

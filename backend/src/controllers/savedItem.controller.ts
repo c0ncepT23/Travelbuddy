@@ -3,6 +3,7 @@ import { AuthRequest } from '../types';
 import { SavedItemService } from '../services/savedItem.service';
 import { GooglePlacesService } from '../services/googlePlaces.service';
 import { SavedItemModel } from '../models/savedItem.model';
+import { DiscoveryQueueModel } from '../models/discoveryQueue.model';
 import logger from '../config/logger';
 
 export class SavedItemController {
@@ -590,6 +591,89 @@ export class SavedItemController {
       res.status(400).json({
         success: false,
         error: error.message || 'Failed to get items by sub-type',
+      });
+    }
+  }
+
+  /**
+   * Create item from discovery queue with Places API enrichment
+   * This is the "Save" action from the Explore tab
+   */
+  static async createFromDiscovery(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { tripId } = req.params;
+      const { discoveryItemId, name, city, country } = req.body;
+
+      logger.info(`[CreateFromDiscovery] Processing: "${name}" in ${city}, ${country}`);
+
+      // Get the discovery item to verify it exists and get source info
+      const discoveryItem = await DiscoveryQueueModel.getById(discoveryItemId);
+      if (!discoveryItem) {
+        res.status(404).json({ success: false, error: 'Discovery item not found' });
+        return;
+      }
+
+      // Search for the place using Google Places API
+      const searchQuery = `${name} ${city}`;
+      logger.info(`[CreateFromDiscovery] Searching Google Places: "${searchQuery}"`);
+
+      const googleData = await GooglePlacesService.enrichPlace(name, city);
+
+      // Build the item data
+      const itemData: any = {
+        name: googleData?.name || name,
+        category: 'food', // Discovery items are typically food suggestions
+        description: `Found via AI: "${discoveryItem.vibe || discoveryItem.item}"`,
+        destination: country || discoveryItem.country,
+        cuisineType: discoveryItem.item, // The food item they were looking for
+        sourceUrl: discoveryItem.source_url,
+        sourceTitle: discoveryItem.source_title,
+      };
+
+      // Add Google Places enrichment if found
+      if (googleData) {
+        if (googleData.place_id) itemData.googlePlaceId = googleData.place_id;
+        if (googleData.rating) itemData.rating = googleData.rating;
+        if (googleData.user_ratings_total) itemData.userRatingsTotal = googleData.user_ratings_total;
+        if (googleData.price_level !== undefined) itemData.priceLevel = googleData.price_level;
+        if (googleData.formatted_address) itemData.formattedAddress = googleData.formatted_address;
+        if (googleData.area_name) itemData.locationName = googleData.area_name;
+        if (googleData.geometry?.location) {
+          itemData.locationLat = googleData.geometry.location.lat;
+          itemData.locationLng = googleData.geometry.location.lng;
+        }
+        if (googleData.photos && googleData.photos.length > 0) {
+          itemData.photosJson = JSON.stringify(googleData.photos);
+        }
+        if (googleData.opening_hours) {
+          itemData.openingHoursJson = JSON.stringify(googleData.opening_hours);
+        }
+        logger.info(`[CreateFromDiscovery] Found: "${googleData.name}" - Rating: ${googleData.rating}, Photos: ${googleData.photos?.length || 0}`);
+      } else {
+        logger.warn(`[CreateFromDiscovery] No Google data found for "${name}" in ${city}`);
+      }
+
+      // Create the saved item
+      const item = await SavedItemService.createItem(req.user.id, tripId, itemData);
+
+      // Mark the discovery item as saved
+      await DiscoveryQueueModel.markSaved(discoveryItemId);
+
+      res.status(201).json({
+        success: true,
+        data: item,
+        message: 'Place saved successfully',
+      });
+    } catch (error: any) {
+      logger.error('Create from discovery error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to save place',
       });
     }
   }

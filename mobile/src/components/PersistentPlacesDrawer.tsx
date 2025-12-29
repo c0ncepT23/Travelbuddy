@@ -39,11 +39,17 @@ import { getPlacePhotoUrl } from '../config/maps';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Snap points as percentages of screen height
+// Tab bar height to account for bottom navigation
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 60 : 50;
+
+// Effective height for drawer calculations
+const DRAWER_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
+
+// Snap points as percentages of drawer height
 const SNAP_POINTS = {
-  PEEK: SCREEN_HEIGHT * 0.22,       // 22% - Ensures full card (image + name + rating) is visible
-  HALF: SCREEN_HEIGHT * 0.45,       // 45% - Browse mode
-  FULL: SCREEN_HEIGHT * 0.85,       // 85% - Full list
+  PEEK: DRAWER_HEIGHT * 0.22,       // 22% - Ensures full card (image + name + rating) is visible
+  HALF: DRAWER_HEIGHT * 0.45,       // 45% - Browse mode
+  FULL: DRAWER_HEIGHT * 0.85,       // 85% - Full list
 };
 
 // Colors matching the Midnight Discovery palette
@@ -220,7 +226,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
   onPlaceSelect,
   selectedPlaceId,
 }, ref) => {
-  const translateY = useSharedValue(SCREEN_HEIGHT - SNAP_POINTS.PEEK);
+  const translateY = useSharedValue(DRAWER_HEIGHT - SNAP_POINTS.PEEK);
   const currentSnapPoint = useSharedValue(SNAP_POINTS.PEEK);
   const context = useSharedValue({ y: 0 });
   
@@ -229,7 +235,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   // Snap to a specific point
   const snapTo = useCallback((point: number) => {
-    translateY.value = withSpring(SCREEN_HEIGHT - point, {
+    translateY.value = withSpring(DRAWER_HEIGHT - point, {
       damping: 20,
       stiffness: 150,
     });
@@ -265,13 +271,13 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
       const newY = context.value.y + event.translationY;
       // Clamp between full and peek
       translateY.value = Math.max(
-        SCREEN_HEIGHT - SNAP_POINTS.FULL,
-        Math.min(SCREEN_HEIGHT - SNAP_POINTS.PEEK + 20, newY) // Small overscroll allowed
+        DRAWER_HEIGHT - SNAP_POINTS.FULL,
+        Math.min(DRAWER_HEIGHT - SNAP_POINTS.PEEK + 20, newY) // Small overscroll allowed
       );
     })
     .onEnd((event) => {
       'worklet';
-      const currentHeight = SCREEN_HEIGHT - translateY.value;
+      const currentHeight = DRAWER_HEIGHT - translateY.value;
       const velocity = event.velocityY;
 
       let targetSnap: number;
@@ -305,7 +311,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
         }
       }
 
-      translateY.value = withSpring(SCREEN_HEIGHT - targetSnap, {
+      translateY.value = withSpring(DRAWER_HEIGHT - targetSnap, {
         damping: 20,
         stiffness: 150,
       });
@@ -319,7 +325,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   // Animated opacity for content switching
   const peekContentOpacity = useAnimatedStyle(() => {
-    const height = SCREEN_HEIGHT - translateY.value;
+    const height = DRAWER_HEIGHT - translateY.value;
     return {
       opacity: interpolate(
         height,
@@ -331,7 +337,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
   });
 
   const listContentOpacity = useAnimatedStyle(() => {
-    const height = SCREEN_HEIGHT - translateY.value;
+    const height = DRAWER_HEIGHT - translateY.value;
     return {
       opacity: interpolate(
         height,
@@ -446,7 +452,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    height: SCREEN_HEIGHT,
+    bottom: TAB_BAR_HEIGHT,
+    height: SCREEN_HEIGHT - TAB_BAR_HEIGHT,
     zIndex: 100,
   },
   glassContainer: {

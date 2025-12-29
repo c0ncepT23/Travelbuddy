@@ -69,6 +69,19 @@ router.post(
   SavedItemController.createForTrip
 );
 
+// Create a new item from discovery queue (with enrichment)
+router.post(
+  '/:tripId/items/from-discovery',
+  validate([
+    param('tripId').isUUID().withMessage('Invalid trip ID'),
+    body('discoveryItemId').isUUID().withMessage('Discovery item ID required'),
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('city').trim().notEmpty().withMessage('City is required'),
+    body('country').optional().trim(),
+  ]),
+  SavedItemController.createFromDiscovery
+);
+
 // Reorder items within a day (for drag-drop)
 router.patch(
   '/:tripId/items/reorder',
