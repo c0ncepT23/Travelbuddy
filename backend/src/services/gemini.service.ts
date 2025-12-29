@@ -1055,8 +1055,11 @@ If specific places ARE found, set "discovery_intent" to null.`;
       };
       
     } catch (error: any) {
-      logger.error('[Gemini Video] Analysis error:', error.message);
-      throw error;
+      // Log full error details for debugging
+      const errorMsg = error.message || error.toString() || 'Unknown error';
+      const errorCode = error.code || error.response?.status || 'NO_CODE';
+      logger.error(`[Gemini Video] Analysis error: ${errorMsg} (code: ${errorCode})`);
+      throw new Error(`Video analysis failed: ${errorMsg}`);
     } finally {
       // Always cleanup temp file
       if (tempFilePath && fs.existsSync(tempFilePath)) {

@@ -269,8 +269,8 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
         setStage('detecting');
       }
       
-      // Wait a bit for network to stabilize, especially on cold boot
-      await delay(retryCount === 0 ? 1500 : 1000);
+      // Minimal delay - just enough for UI to render
+      await delay(retryCount === 0 ? 300 : 200);
 
       // Stage 2: Extracting
       setStage('extracting');
@@ -333,14 +333,16 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
 
     } catch (error: any) {
       // Retry logic for Network Errors (common on cold boot)
+      // Note: ECONNABORTED = timeout, Network Error = connection issues
       if ((error.message === 'Network Error' || error.code === 'ECONNABORTED') && retryCount < 2) {
-        console.log(`[SmartShare] Network error, retrying (${retryCount + 1}/2)...`);
+        console.log(`[SmartShare] Network error, waiting 2s before retry (${retryCount + 1}/2)...`);
+        await delay(2000); // Wait before retrying to let backend stabilize
         processUrl(retryCount + 1);
         return;
       }
 
       const msg = error.response?.data?.error || error.message || 'Failed to process';
-      console.error('[SmartShare] Error:', error);
+      console.error('[SmartShare] Error:', msg);
       setStage('error');
       setErrorMessage(msg);
       HapticFeedback.error();

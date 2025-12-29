@@ -13,10 +13,12 @@ import logger from '../config/logger';
 const APIFY_API_BASE = 'https://api.apify.com/v2';
 
 // YouTube actors on Apify (free, no monthly fee)
-// Primary: https://apify.com/pintostudio/youtube-transcript-scraper
-// Backup: https://apify.com/starvibe/youtube-video-transcript
+// Transcript: https://apify.com/pintostudio/youtube-transcript-scraper
+// Fallback: https://apify.com/starvibe/youtube-video-transcript
+// Video Download: https://apify.com/streamers/youtube-video-downloader
 const YOUTUBE_TRANSCRIPT_ACTOR = 'pintostudio~youtube-transcript-scraper';
 const YOUTUBE_SCRAPER_ACTOR = 'starvibe~youtube-video-transcript';
+const YOUTUBE_DOWNLOADER_ACTOR = 'streamers~youtube-video-downloader';
 
 interface YouTubeTranscriptResult {
   videoId: string;
@@ -315,6 +317,174 @@ export class ApifyYoutubeService {
       logger.error('[ApifyYoutube] oEmbed metadata fetch failed');
       return null;
     }
+  }
+
+  /**
+   * Download YouTube video via Apify (bypasses YouTube blocks)
+   * Returns a direct download URL that can be used to fetch the video
+   * Cost: ~$0.02-0.05 per video
+   */
+  static async downloadVideo(url: string): Promise<{
+    downloadUrl: string;
+    title: string;
+    duration: number;
+    fileSize?: number;
+  } | null> {
+    if (!this.APIFY_TOKEN) {
+      logger.warn('[ApifyYoutube] Token not configured for video download');
+      return null;
+    }
+
+    const videoId = this.extractVideoId(url);
+    if (!videoId) {
+      throw new Error('Invalid YouTube URL');
+    }
+
+    try {
+      logger.info(`[ApifyYoutube] Starting video download for: ${videoId}`);
+
+      // Use Streamers YouTube Video Downloader actor
+      // Docs: https://apify.com/streamers/youtube-video-downloader
+      const inputPayload = {
+        startUrls: [{ url }],
+        urls: [url],           // Some actors use this format
+        downloadVideo: true,
+        quality: 'lowest',     // Lowest quality = smallest file = fastest for Gemini
+        maxVideos: 1,
+      };
+
+      const runResponse = await axios.post(
+        `${APIFY_API_BASE}/acts/${YOUTUBE_DOWNLOADER_ACTOR}/runs`,
+        inputPayload,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.APIFY_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          params: {
+            waitForFinish: 180, // Wait up to 3 minutes for download
+          },
+          timeout: 200000,
+        }
+      );
+
+      const datasetId = runResponse.data.data.defaultDatasetId;
+      logger.info(`[ApifyYoutube] Download run started, getting results...`);
+
+      // Get results from dataset
+      const datasetResponse = await axios.get(
+        `${APIFY_API_BASE}/datasets/${datasetId}/items`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.APIFY_TOKEN}`,
+          },
+        }
+      );
+
+      const items = datasetResponse.data;
+      if (!items || items.length === 0) {
+        logger.warn('[ApifyYoutube] No download results');
+        return null;
+      }
+
+      const item = items[0];
+      
+      // Different actors return URLs in different fields - try all common ones
+      const downloadUrl = item.videoUrl || item.downloadUrl || item.url || 
+                          item.video_url || item.mediaUrl || item.media_url ||
+                          item.fileUrl || item.file_url;
+      
+      if (!downloadUrl) {
+        logger.warn('[ApifyYoutube] No download URL in results. Fields:', Object.keys(item));
+        return null;
+      }
+
+      logger.info(`[ApifyYoutube] Video download ready: ${item.title || 'Video'} - URL: ${downloadUrl.substring(0, 50)}...`);
+
+      return {
+        downloadUrl,
+        title: item.title || 'YouTube Video',
+        duration: item.duration || 0,
+        fileSize: item.fileSize,
+      };
+
+    } catch (error: any) {
+      logger.error('[ApifyYoutube] Video download error:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Full extraction pipeline: Transcript OR Video Download + Gemini Analysis
+   * This is the main entry point for YouTube processing
+   * 
+   * Flow:
+   * 1. Try to get transcript via Apify
+   * 2. If no transcript (common for Shorts), download video
+   * 3. Return video file for Gemini analysis
+   */
+  static async getVideoContent(url: string): Promise<{
+    videoId: string;
+    title: string;
+    channelName: string;
+    thumbnailUrl: string;
+    transcript?: string;       // If transcript available
+    videoDownloadUrl?: string; // If video needs Gemini analysis
+    description?: string;
+  } | null> {
+    const videoId = this.extractVideoId(url);
+    if (!videoId) return null;
+
+    // Step 1: Always get basic metadata first (fast, free)
+    const metadata = await this.getVideoMetadata(url);
+    const title = metadata?.title || 'YouTube Video';
+    const channelName = metadata?.channelName || 'Unknown';
+    const thumbnailUrl = metadata?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+    // Step 2: Try to get transcript
+    try {
+      const transcriptResult = await this.getVideoTranscript(url);
+      if (transcriptResult && transcriptResult.transcript && transcriptResult.transcript.length > 50) {
+        logger.info(`[ApifyYoutube] Got transcript for ${videoId}: ${transcriptResult.transcript.length} chars`);
+        return {
+          videoId,
+          title: transcriptResult.title || title,
+          channelName: transcriptResult.channelName || channelName,
+          thumbnailUrl: transcriptResult.thumbnailUrl || thumbnailUrl,
+          transcript: transcriptResult.transcript,
+          description: transcriptResult.description,
+        };
+      }
+    } catch (e: any) {
+      logger.warn(`[ApifyYoutube] Transcript extraction failed: ${e.message}`);
+    }
+
+    // Step 3: No transcript - download video for Gemini analysis
+    logger.info(`[ApifyYoutube] No transcript, downloading video for ${videoId}...`);
+    
+    try {
+      const downloadResult = await this.downloadVideo(url);
+      if (downloadResult && downloadResult.downloadUrl) {
+        return {
+          videoId,
+          title: downloadResult.title || title,
+          channelName,
+          thumbnailUrl,
+          videoDownloadUrl: downloadResult.downloadUrl,
+        };
+      }
+    } catch (e: any) {
+      logger.warn(`[ApifyYoutube] Video download failed: ${e.message}`);
+    }
+
+    // Step 4: All failed - return metadata only
+    logger.warn(`[ApifyYoutube] All extraction methods failed for ${videoId}, returning metadata only`);
+    return {
+      videoId,
+      title,
+      channelName,
+      thumbnailUrl,
+    };
   }
 }
 

@@ -5,7 +5,8 @@ import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
 import { ApifyInstagramService } from './apifyInstagram.service';
-import { YtDlpService } from './ytdlp.service';
+import { ApifyYoutubeService } from './apifyYoutube.service';
+import { VideoCacheModel } from '../models/videoCache.model';
 import {
   extractYouTubeVideoId,
   extractInstagramPostId,
@@ -95,60 +96,42 @@ export class ContentProcessorService {
   }
 
   /**
-   * Fetch YouTube video data using yt-dlp (most reliable method)
-   * Falls back to Apify if yt-dlp is blocked by YouTube
-   * Final fallback to oEmbed API for basic metadata
+   * Fetch YouTube video data using Apify (ONLY)
+   * yt-dlp removed - it gets blocked on Railway/cloud environments
+   * 
+   * Flow:
+   * 1. Apify transcript extraction
+   * 2. If no transcript, Apify downloads video for Gemini analysis
+   * 3. Final fallback: oEmbed metadata only
    */
-  private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData> {
+  private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData & { videoDownloadUrl?: string }> {
     const videoId = extractYouTubeVideoId(url);
     if (!videoId) {
       throw new Error('Invalid YouTube URL');
     }
 
-    // Strategy 1: Try Apify first (Most reliable in production/Railway)
-    // It handles proxy rotation and bot detection which yt-dlp struggles with in data centers
-    try {
-      const { ApifyYoutubeService } = await import('./apifyYoutube.service');
+    // Use Apify for everything (transcript + video download if needed)
+    if (ApifyYoutubeService.isConfigured()) {
+      logger.info(`[ContentProcessor] Fetching YouTube via Apify: ${videoId}`);
       
-      if (ApifyYoutubeService.isConfigured()) {
-        logger.info(`[ContentProcessor] Fetching YouTube via Apify: ${videoId}`);
-        const apifyResult = await ApifyYoutubeService.getVideoTranscript(url);
-        
-        if (apifyResult) {
-          logger.info(`[ContentProcessor] Apify success: "${apifyResult.title}"`);
-          return {
-            title: apifyResult.title,
-            description: apifyResult.description || '',
-            transcript: apifyResult.transcript || '',
-            thumbnail_url: apifyResult.thumbnailUrl,
-            thumbnail: apifyResult.thumbnailUrl,
-            channel: apifyResult.channelName,
-          };
-        }
+      const result = await ApifyYoutubeService.getVideoContent(url);
+      
+      if (result) {
+        return {
+          title: result.title,
+          description: result.description || '',
+          transcript: result.transcript || '',
+          thumbnail_url: result.thumbnailUrl,
+          thumbnail: result.thumbnailUrl,
+          channel: result.channelName,
+          videoDownloadUrl: result.videoDownloadUrl, // For Gemini video analysis
+        };
       }
-    } catch (apifyError: any) {
-      logger.error('[ContentProcessor] Apify error:', apifyError.message);
-      // Fall through to yt-dlp
+    } else {
+      logger.warn('[ContentProcessor] Apify not configured - using oEmbed only');
     }
 
-    // Strategy 2: Try yt-dlp (Great for local dev, but often blocked on Railway)
-    try {
-      logger.info(`[ContentProcessor] Trying yt-dlp fallback: ${videoId}`);
-      const videoData = await YtDlpService.getVideoData(url);
-
-      return {
-        title: videoData.title,
-        description: videoData.description,
-        transcript: videoData.transcript,
-        thumbnail_url: videoData.thumbnailUrl,
-        thumbnail: videoData.thumbnailUrl,
-        channel: videoData.channelName,
-      };
-    } catch (error: any) {
-      logger.warn('[ContentProcessor] yt-dlp fallback failed:', error.message);
-    }
-
-    // Strategy 3: Final fallback to oEmbed (Always works for metadata, but NO transcript)
+    // Final fallback: oEmbed (metadata only, no transcript/video)
     logger.info('[ContentProcessor] Falling back to oEmbed API');
     return await this.fetchYouTubeWithOembed(videoId);
   }
@@ -480,72 +463,99 @@ export class ContentProcessorService {
     discovery_intent?: DiscoveryIntent;
   }> {
     try {
-      logger.info('Processing YouTube video metadata...');
+      const videoId = extractYouTubeVideoId(url);
+      if (!videoId) {
+        throw new Error('Invalid YouTube URL');
+      }
 
-      // Fetch video metadata (title + description)
+      // ========== STEP 1: CHECK CACHE ==========
+      try {
+        const cached = await VideoCacheModel.get(videoId, 'youtube');
+        if (cached && cached.places_json) {
+          logger.info(`[YouTube] 🎯 CACHE HIT for ${videoId} - returning ${cached.places_json.length} cached places`);
+          
+          return {
+            summary: cached.summary || '',
+            video_type: (cached.video_type as 'places' | 'guide' | 'howto') || 'places',
+            destination: cached.destination,
+            destination_country: cached.destination_country,
+            places: cached.places_json,
+            guideMetadata: {
+              title: cached.title || 'YouTube Video',
+              creatorName: cached.channel_name || 'Unknown',
+              thumbnailUrl: cached.thumbnail_url,
+              hasDayStructure: false,
+              totalDays: 0,
+            },
+            discovery_intent: cached.discovery_intent_json,
+          };
+        }
+      } catch (cacheError: any) {
+        logger.warn('[YouTube] Cache lookup failed:', cacheError.message);
+        // Continue with processing
+      }
+
+      logger.info(`[YouTube] Processing video: ${videoId}`);
+
+      // ========== STEP 2: FETCH VIDEO DATA VIA APIFY ==========
       const videoData = await this.fetchYouTubeVideo(url);
 
       logger.info(`Video: ${videoData.title}`);
-      logger.info(`Transcript length: ${videoData.transcript.length} characters`);
+      logger.info(`Transcript: ${videoData.transcript?.length || 0} chars, VideoURL: ${videoData.videoDownloadUrl ? 'YES' : 'NO'}`);
 
       let analysis;
       
-      // Smart decision: Use video analysis if no good transcript available
+      // ========== STEP 3: ANALYZE CONTENT ==========
       const hasGoodTranscript = videoData.transcript && videoData.transcript.length > 100;
       
       if (hasGoodTranscript) {
-        // Use text-based analysis (cheaper, faster)
+        // Best case: We have a transcript - use text-based analysis (fast, cheap)
         logger.info('[YouTube] Using transcript-based analysis');
         analysis = await GeminiService.analyzeVideoMetadata(
           videoData.title,
           videoData.description,
           videoData.transcript
         );
-      } else {
-        // Fallback to video analysis (for silent/music videos with burned-in subtitles)
-        logger.info('[YouTube] No transcript - falling back to VIDEO analysis');
+      } else if (videoData.videoDownloadUrl) {
+        // No transcript but Apify downloaded the video - use Gemini video analysis
+        logger.info('[YouTube] Using Gemini VIDEO analysis (Apify download)');
         try {
-          // Get direct video URL from yt-dlp (we need the actual video file URL)
-          const { YtDlpService } = await import('./ytdlp.service');
-          const videoFileUrl = await YtDlpService.getVideoDownloadUrl(url);
+          const videoAnalysis = await GeminiService.analyzeVideoContent(videoData.videoDownloadUrl, {
+            platform: 'youtube',
+            title: videoData.title,
+            caption: videoData.description,
+          });
           
-          if (videoFileUrl) {
-            const videoAnalysis = await GeminiService.analyzeVideoContent(videoFileUrl, {
-              platform: 'youtube',
-              title: videoData.title,
-              caption: videoData.description,
-            });
-            
-            // Convert to expected format
-            analysis = {
-              summary: videoAnalysis.summary,
-              video_type: videoAnalysis.video_type,
-              destination: videoAnalysis.destination,
-              destination_country: videoAnalysis.destination_country,
-              places: videoAnalysis.places.map(p => ({
-                ...p,
-                category: p.category as any,
-              })),
-              duration_days: undefined,
-              itinerary: undefined,
-            };
-          } else {
-            // Double fallback: use title/description only
-            logger.warn('[YouTube] Could not get video URL, using metadata only');
-            analysis = await GeminiService.analyzeVideoMetadata(
-              videoData.title,
-              videoData.description,
-              ''
-            );
-          }
+          analysis = {
+            summary: videoAnalysis.summary,
+            video_type: videoAnalysis.video_type,
+            destination: videoAnalysis.destination,
+            destination_country: videoAnalysis.destination_country,
+            places: videoAnalysis.places.map(p => ({
+              ...p,
+              category: p.category as any,
+            })),
+            duration_days: undefined,
+            itinerary: undefined,
+            discovery_intent: videoAnalysis.discovery_intent,
+          };
         } catch (videoError: any) {
-          logger.error('[YouTube] Video analysis failed, using metadata only:', videoError.message);
+          logger.error('[YouTube] Video analysis failed:', videoError.message);
+          // Fall back to metadata only
           analysis = await GeminiService.analyzeVideoMetadata(
             videoData.title,
             videoData.description,
             ''
           );
         }
+      } else {
+        // No transcript, no video download - use metadata only
+        logger.info('[YouTube] Using metadata-only analysis (no transcript/video available)');
+        analysis = await GeminiService.analyzeVideoMetadata(
+          videoData.title,
+          videoData.description,
+          ''
+        );
       }
 
       logger.info(`Video type: ${analysis.video_type}`);
@@ -584,6 +594,25 @@ export class ContentProcessorService {
             video_type: 'guide',
           },
         }));
+
+        // Cache guide results
+        try {
+          await VideoCacheModel.set({
+            videoId,
+            platform: 'youtube',
+            url,
+            title: videoData.title,
+            channelName: videoData.channel,
+            thumbnailUrl: videoData.thumbnail_url,
+            summary: analysis.summary,
+            videoType: 'guide',
+            destination: analysis.destination,
+            destinationCountry: analysis.destination_country,
+            places: processedPlaces,
+            discoveryIntent: analysis.discovery_intent,
+            expiresInDays: 30,
+          });
+        } catch (e) { /* ignore cache errors */ }
 
         return {
           summary: analysis.summary,
@@ -634,6 +663,24 @@ export class ContentProcessorService {
         if (analysis.discovery_intent) {
           logger.info(`[YouTube] No places found, but found discovery intent: ${analysis.discovery_intent.item} in ${analysis.discovery_intent.city}`);
           
+          // Cache even discovery intents (same video = same result)
+          try {
+            await VideoCacheModel.set({
+              videoId,
+              platform: 'youtube',
+              url,
+              title: videoData.title,
+              channelName: videoData.channel,
+              summary: analysis.summary,
+              videoType: 'places',
+              destination: analysis.destination,
+              destinationCountry: analysis.destination_country,
+              places: [],
+              discoveryIntent: analysis.discovery_intent,
+              expiresInDays: 30,
+            });
+          } catch (e) { /* ignore cache errors */ }
+
           // Return empty places with the intent - SmartShare controller will save to discovery_queue
           return {
             summary: analysis.summary,
@@ -768,6 +815,29 @@ export class ContentProcessorService {
       const placeTypes = [...new Set(enrichedPlaces.filter(p => p.place_type).map(p => p.place_type))];
       if (cuisineTypes.length > 0) logger.info(`🍽️ Cuisine types: ${cuisineTypes.join(', ')}`);
       if (placeTypes.length > 0) logger.info(`📍 Place types: ${placeTypes.join(', ')}`);
+
+      // ========== SAVE TO CACHE ==========
+      try {
+        await VideoCacheModel.set({
+          videoId,
+          platform: 'youtube',
+          url,
+          title: videoData.title,
+          channelName: videoData.channel,
+          thumbnailUrl: videoData.thumbnail_url,
+          transcript: videoData.transcript,
+          summary: analysis.summary,
+          videoType: 'places',
+          destination: analysis.destination,
+          destinationCountry: analysis.destination_country,
+          places: enrichedPlaces,
+          discoveryIntent: analysis.discovery_intent,
+          expiresInDays: 30, // Cache for 30 days
+        });
+      } catch (cacheError: any) {
+        logger.warn('[YouTube] Failed to save to cache:', cacheError.message);
+        // Don't fail the request if caching fails
+      }
 
       return {
         summary: analysis.summary,
@@ -926,10 +996,12 @@ export class ContentProcessorService {
    * Now also extracts cuisine_type, place_type, tags, and destination
    * 
    * Pipeline:
-   * 1. Apify scrapes Instagram (handles anti-bot, gets video URL)
-   * 2. For Reels: Download video → Gemini 2.5 multimodal analysis (sees + hears content)
-   * 3. For Posts: Gemini analyzes caption + image
-   * 4. Google Places enriches with ratings, photos, hours
+   * 1. CHECK CACHE first (same reel = instant results)
+   * 2. Apify scrapes Instagram (handles anti-bot, gets video URL)
+   * 3. For Reels: Download video → Gemini 2.5 multimodal analysis (sees + hears content)
+   * 4. For Posts: Gemini analyzes caption + image
+   * 5. Google Places enriches with ratings, photos, hours
+   * 6. SAVE TO CACHE for future users
    */
   static async extractMultiplePlacesFromInstagram(
     url: string
@@ -940,6 +1012,27 @@ export class ContentProcessorService {
     places: Array<ProcessedContent & { originalContent: any }>;
   }> {
     try {
+      // Extract Instagram post ID for caching
+      const postId = extractInstagramPostId(url);
+      
+      // ========== CHECK CACHE FIRST ==========
+      if (postId) {
+        try {
+          const cached = await VideoCacheModel.get(postId, 'instagram');
+          if (cached && cached.places_json) {
+            logger.info(`[Instagram] 🎯 CACHE HIT for ${postId} - returning ${cached.places_json.length} cached places`);
+            return {
+              summary: cached.summary || '',
+              destination: cached.destination,
+              destination_country: cached.destination_country,
+              places: cached.places_json,
+            };
+          }
+        } catch (cacheError: any) {
+          logger.warn('[Instagram] Cache lookup failed:', cacheError.message);
+        }
+      }
+
       logger.info('🎬 [Instagram] Processing with Apify + Gemini 2.5 pipeline...');
 
       // Check if Apify is configured
@@ -950,12 +1043,35 @@ export class ContentProcessorService {
         
         logger.info(`🎉 [Instagram] Extracted ${result.places.length} places via Apify pipeline`);
         
+        const places = result.places.map(place => ({
+          ...place,
+          source_title: result.source_title,
+        }));
+
+        // ========== SAVE TO CACHE ==========
+        if (postId) {
+          try {
+            await VideoCacheModel.set({
+              videoId: postId,
+              platform: 'instagram',
+              url,
+              title: result.source_title,
+              summary: result.summary,
+              destination: result.destination,
+              destinationCountry: result.destination_country,
+              places,
+              expiresInDays: 30,
+            });
+          } catch (cacheError: any) {
+            logger.warn('[Instagram] Failed to save to cache:', cacheError.message);
+          }
+        }
+        
         return {
           summary: result.summary,
-          places: result.places.map(place => ({
-            ...place,
-            source_title: result.source_title,
-          })),
+          destination: result.destination,
+          destination_country: result.destination_country,
+          places,
         };
       }
 

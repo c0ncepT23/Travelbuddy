@@ -20,7 +20,7 @@ export interface DiscoveryQueueItem {
 export class DiscoveryQueueModel {
   /**
    * Add an item to the discovery queue
-   * Uses upsert to avoid duplicates for same item/city
+   * Uses manual upsert to avoid duplicates for same item/city (case-insensitive)
    */
   static async add(
     userId: string,
@@ -35,15 +35,36 @@ export class DiscoveryQueueModel {
       source_platform?: string;
     }
   ): Promise<DiscoveryQueueItem> {
+    // First check if a pending item already exists (case-insensitive)
+    const existing = await query(
+      `SELECT * FROM discovery_queue 
+       WHERE user_id = $1 
+       AND LOWER(item) = LOWER($2) 
+       AND LOWER(city) = LOWER($3) 
+       AND status = 'pending'
+       LIMIT 1`,
+      [userId, data.item, data.city]
+    );
+
+    if (existing.rows.length > 0) {
+      // Update existing item
+      const updated = await query(
+        `UPDATE discovery_queue SET
+           source_url = COALESCE($1, source_url),
+           source_title = COALESCE($2, source_title),
+           updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [data.source_url, data.source_title, existing.rows[0].id]
+      );
+      return updated.rows[0];
+    }
+
+    // Insert new item
     const result = await query(
       `INSERT INTO discovery_queue 
        (user_id, trip_group_id, item, city, country, vibe, source_url, source_title, source_platform)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (user_id, LOWER(item), LOWER(city)) WHERE status = 'pending'
-       DO UPDATE SET 
-         source_url = COALESCE(EXCLUDED.source_url, discovery_queue.source_url),
-         source_title = COALESCE(EXCLUDED.source_title, discovery_queue.source_title),
-         updated_at = NOW()
        RETURNING *`,
       [
         userId,
