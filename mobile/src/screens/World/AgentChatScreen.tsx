@@ -19,7 +19,6 @@ import {
   FlatList, 
   StyleSheet, 
   Platform, 
-  ActivityIndicator, 
   Dimensions, 
   StatusBar,
   ScrollView,
@@ -443,12 +442,12 @@ export default function AgentChatScreen() {
         {/* Input Area */}
         <View style={styles.inputArea}>
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, isLoading && styles.inputWrapperDisabled]}>
               <TextInput
                 style={styles.input}
                 value={inputText}
                 onChangeText={setInputText}
-                placeholder="Ask me anything..."
+                placeholder={isLoading ? "AI is thinking..." : "Ask me anything..."}
                 placeholderTextColor={COLORS.textSecondary}
                 multiline
                 maxLength={500}
@@ -464,16 +463,12 @@ export default function AgentChatScreen() {
               onPress={handleSend}
               disabled={!inputText.trim() || isLoading}
             >
-              {isLoading ? (
-                <ActivityIndicator color={COLORS.textPrimary} size="small" />
-              ) : (
-                <LinearGradient
-                  colors={GRADIENTS.primary}
-                  style={styles.sendButtonGradient}
-                >
-                  <Ionicons name="send" size={18} color={COLORS.textPrimary} />
-                </LinearGradient>
-              )}
+              <LinearGradient
+                colors={GRADIENTS.primary}
+                style={styles.sendButtonGradient}
+              >
+                <Ionicons name="send" size={18} color={COLORS.textPrimary} />
+              </LinearGradient>
             </BouncyPressable>
           </View>
         </View>
@@ -786,6 +781,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
     minHeight: 48,
     justifyContent: 'center',
+  },
+  inputWrapperDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#1F2022',
   },
   input: {
     paddingHorizontal: 18,
