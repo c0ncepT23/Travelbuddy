@@ -129,6 +129,12 @@ Response rules:
     time?: 'now' | 'later' | 'any';
     referencedPlace?: string;
     reason?: string;
+    // NEW: Smart query fields
+    limit?: number;
+    sortBy?: 'rating' | 'distance' | 'recent' | null;
+    sortOrder?: 'desc' | 'asc';
+    cuisineType?: string;
+    specificDish?: string;
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
@@ -139,38 +145,84 @@ Response rules:
         }
       });
 
-      const prompt = `Analyze this travel query and classify the user's intent.
+      const prompt = `You are a world-class travel AI query parser. Analyze this query with PRECISION.
 
 User query: "${query}"
 Current time: ${context.currentTime}
 User location: ${context.hasLocation ? 'Known' : 'Unknown'}
 Destination: ${context.destination}
 
-Classify as ONE of:
+**INTENT TYPES:**
 - location_based: "near me", "nearby", "around here", "close by"
 - category: asking about food/shopping/places/activities
 - specific: asking about a named place
 - surprise: "surprise me", "random", "anything", "you pick"
-- alternatives: can't go to a place, wants similar options ("X is closed", "alternative to X")
+- alternatives: can't go to a place, wants similar options
 - planning: wants to plan their day, create itinerary
 - general: other questions or conversation
 
-Extract:
-1. type: the intent type from above
-2. category: if mentioned (food, shopping, place, activity, accommodation, tip) or null
-3. keywords: relevant search words from the query
-4. distance: nearby (<500m), walking (<2km), or any
-5. time: now (immediate), later (planning), or any
-6. referencedPlace: for alternatives - the place name they can't visit (or null)
-7. reason: for alternatives - why they can't visit (or null)
+**SMART EXTRACTION RULES:**
 
-RESPOND ONLY WITH JSON:
+1. **limit**: Extract explicit count from phrases like:
+   - "top 3" → 3
+   - "best 5" → 5
+   - "give me 2" → 2
+   - "a few" → 3
+   - No number mentioned → null (will default to 5)
+
+2. **sortBy**: Extract sorting intent:
+   - "best rated", "top rated", "highest rated" → "rating"
+   - "closest", "nearest" → "distance"
+   - "newest", "recently added" → "recent"
+   - No sorting mentioned → null
+
+3. **sortOrder**: Usually "desc" for "best/top/highest", "asc" for "closest"
+
+4. **cuisineType**: Extract specific food type:
+   - "best ramen" → "ramen"
+   - "where can I get pizza" → "pizza"
+   - "sushi places" → "sushi"
+   - "street food" → "street food"
+   - Not food-specific → null
+
+5. **specificDish**: The exact dish if mentioned:
+   - "best pad thai" → "pad thai"
+   - "cheesecake spots" → "cheesecake"
+   - General food query → null
+
+6. **category**: food, shopping, place, activity, accommodation, tip (or null)
+
+7. **keywords**: Other relevant search terms NOT already captured
+
+**EXAMPLES:**
+
+Query: "what are the top 3 best rated food spots"
+→ { "type": "category", "category": "food", "limit": 3, "sortBy": "rating", "sortOrder": "desc", "keywords": [] }
+
+Query: "where can I get the best ramen"
+→ { "type": "category", "category": "food", "cuisineType": "ramen", "sortBy": "rating", "sortOrder": "desc", "keywords": ["ramen"] }
+
+Query: "closest coffee shop"
+→ { "type": "location_based", "category": "food", "cuisineType": "coffee", "sortBy": "distance", "sortOrder": "asc", "keywords": ["coffee"] }
+
+Query: "show me 2 nice viewpoints"
+→ { "type": "category", "category": "place", "limit": 2, "keywords": ["viewpoint"] }
+
+Query: "surprise me with a hidden gem"
+→ { "type": "surprise", "keywords": ["hidden gem"] }
+
+RESPOND ONLY WITH VALID JSON:
 {
   "type": "category",
   "category": "food",
-  "keywords": ["ramen", "lunch"],
+  "keywords": [],
   "distance": "any",
   "time": "now",
+  "limit": 3,
+  "sortBy": "rating",
+  "sortOrder": "desc",
+  "cuisineType": null,
+  "specificDish": null,
   "referencedPlace": null,
   "reason": null
 }`;
@@ -186,6 +238,8 @@ RESPOND ONLY WITH JSON:
       
       const parsed = JSON.parse(cleanText);
       
+      logger.info(`[SmartIntent] Parsed: limit=${parsed.limit}, sortBy=${parsed.sortBy}, cuisineType=${parsed.cuisineType}`);
+      
       return {
         type: parsed.type || 'general',
         category: parsed.category === 'null' || parsed.category === null ? undefined : parsed.category,
@@ -194,6 +248,12 @@ RESPOND ONLY WITH JSON:
         time: parsed.time || 'any',
         referencedPlace: parsed.referencedPlace === 'null' || parsed.referencedPlace === null ? undefined : parsed.referencedPlace,
         reason: parsed.reason === 'null' || parsed.reason === null ? undefined : parsed.reason,
+        // NEW fields
+        limit: parsed.limit === 'null' || parsed.limit === null ? undefined : parsed.limit,
+        sortBy: parsed.sortBy === 'null' || parsed.sortBy === null ? undefined : parsed.sortBy,
+        sortOrder: parsed.sortOrder || 'desc',
+        cuisineType: parsed.cuisineType === 'null' || parsed.cuisineType === null ? undefined : parsed.cuisineType,
+        specificDish: parsed.specificDish === 'null' || parsed.specificDish === null ? undefined : parsed.specificDish,
       };
     } catch (error) {
       logger.error('Gemini intent analysis error:', error);
@@ -216,6 +276,10 @@ RESPOND ONLY WITH JSON:
       userName: string;
       destination: string;
       currentTime: string;
+      // NEW: Smart query context
+      limit?: number;
+      sortBy?: string;
+      cuisineType?: string;
     },
     places: Array<{
       name: string;
@@ -240,6 +304,15 @@ RESPOND ONLY WITH JSON:
           maxOutputTokens: 500, // Increased for richer responses
         }
       });
+
+      // SMART: Extract actual locations from the places found
+      const uniqueLocations = [...new Set(places
+        .map(p => p.location_name)
+        .filter(Boolean)
+      )];
+      const locationContext = uniqueLocations.length > 0 
+        ? uniqueLocations.slice(0, 3).join(', ') 
+        : context.destination;
 
       const placesContext = places.map((p, i) => {
         let placeInfo = `
@@ -266,26 +339,43 @@ ${i + 1}. ${p.name} - ${p.category}${p.cuisine_type ? ` (${p.cuisine_type})` : '
         return placeInfo;
       }).join('\n');
 
-      const prompt = `You are TravelPal helping ${context.userName} explore ${context.destination}.
+      // Build smart context for the prompt
+      let queryContext = '';
+      if (context.sortBy === 'rating') {
+        queryContext = `The user asked for BEST RATED places. These are sorted by rating (highest first).`;
+      } else if (context.sortBy === 'distance') {
+        queryContext = `The user asked for CLOSEST places. These are sorted by distance.`;
+      }
+      if (context.limit) {
+        queryContext += ` They specifically asked for ${context.limit} results.`;
+      }
+      if (context.cuisineType) {
+        queryContext += ` They're looking for ${context.cuisineType}.`;
+      }
+
+      const prompt = `You are TravelPal, a world-class travel AI helping ${context.userName}.
 
 User asked: "${query}"
 Time: ${context.currentTime}
+Trip destination: ${context.destination}
 
-THEIR SAVED PLACES (${places.length} found):
+${queryContext}
+
+THEIR SAVED PLACES (${places.length} found, located in: ${locationContext}):
 ${placesContext || 'No saved places match this query'}
 
-YOUR SPECIAL POWER: You have access to CREATOR INSIGHTS - what the YouTuber/Instagrammer/blogger said about each place when the user saved it. Use this to give personalized, insider tips!
+YOUR SPECIAL POWER: You have access to CREATOR INSIGHTS - what the YouTuber/Instagrammer/blogger said about each place!
 
-RULES:
-- ONLY mention places from the list above
-- If places found: Highlight 2-3 with brief details
-- USE THE CREATOR INSIGHTS when answering questions like "is this good for X?"
-- Reference the source/creator when relevant (e.g., "According to @TravelVlogger...")
-- If a place has tags like "hidden gem" or "michelin", mention it!
+**CRITICAL RULES:**
+- ONLY mention places from the list above - never invent places
+- Use the ACTUAL location names from the places (e.g., "${locationContext}"), NOT just "${context.destination}"
+- If sorted by rating: mention the ratings! "Top rated at ⭐4.8"
+- If user asked for specific count (e.g., "top 3"): Only highlight that many places
+- USE THE CREATOR INSIGHTS when answering questions
 - Be friendly, use 1-2 emojis max
-- Keep response focused and helpful (3-4 sentences max)
+- Keep response concise (2-3 sentences introducing, then the places speak for themselves)
 
-Generate a helpful response that leverages the creator's insider knowledge:`;
+Generate a helpful, accurate response:`;
 
       const result = await model.generateContent(prompt);
       return result.response.text() || "I found some interesting places for you! 🎯";

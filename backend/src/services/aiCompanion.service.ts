@@ -408,6 +408,12 @@ export class AICompanionService {
     time?: 'now' | 'later' | 'any';
     referencedPlace?: string; // For alternatives - the place user can't visit
     reason?: string; // Why they can't visit (closed, crowded, etc.)
+    // NEW: Smart query fields
+    limit?: number;
+    sortBy?: 'rating' | 'distance' | 'recent' | null;
+    sortOrder?: 'desc' | 'asc';
+    cuisineType?: string;
+    specificDish?: string;
   }> {
     try {
       // Use Gemini 2.5 Flash for intent analysis (fast & cheap)
@@ -428,6 +434,12 @@ export class AICompanionService {
         time: result.time,
         referencedPlace: result.referencedPlace,
         reason: result.reason,
+        // NEW fields
+        limit: result.limit,
+        sortBy: result.sortBy,
+        sortOrder: result.sortOrder,
+        cuisineType: result.cuisineType,
+        specificDish: result.specificDish,
       };
     } catch (error) {
       logger.error('Intent analysis error:', error);
@@ -442,6 +454,7 @@ export class AICompanionService {
 
   /**
    * Filter places based on intent and context
+   * SMART FILTERING: Supports count limits, sorting by rating/distance, and cuisine filtering
    */
   private static async filterRelevantPlaces(
     allPlaces: SavedItem[],
@@ -454,55 +467,107 @@ export class AICompanionService {
     logger.info(`[FilterPlaces] All places count: ${allPlaces.length}`);
     logger.info(`[FilterPlaces] Place categories: ${allPlaces.map(p => `${p.name}:${p.category}`).join(', ')}`);
 
-    // Filter by category if specified (case-insensitive)
+    // 1. Filter by category if specified (case-insensitive)
     if (intent.category && intent.category !== 'null' && intent.category !== null) {
       const targetCategory = intent.category.toLowerCase();
       filtered = filtered.filter((p) => p.category?.toLowerCase() === targetCategory);
       logger.info(`[FilterPlaces] After category filter (${targetCategory}): ${filtered.length} places`);
     }
 
-    // Filter by keywords (only if we still have results)
-    if (intent.keywords && intent.keywords.length > 0 && filtered.length > 0) {
-      const keywordFiltered = filtered.filter((place) => {
-        const searchText = `${place.name} ${place.description} ${place.location_name}`.toLowerCase();
-        return intent.keywords.some((keyword: string) =>
-          searchText.includes(keyword.toLowerCase())
-        );
+    // 2. Filter by cuisine type if specified (for food places)
+    if (intent.cuisineType && filtered.length > 0) {
+      const cuisineType = intent.cuisineType.toLowerCase();
+      const cuisineFiltered = filtered.filter((place) => {
+        const searchText = `${place.name} ${place.description} ${place.cuisine_type || ''} ${place.tags?.join(' ') || ''}`.toLowerCase();
+        return searchText.includes(cuisineType);
       });
-      // Only apply keyword filter if it doesn't eliminate all results
-      if (keywordFiltered.length > 0) {
-        filtered = keywordFiltered;
+      // Only apply if it doesn't eliminate all results
+      if (cuisineFiltered.length > 0) {
+        filtered = cuisineFiltered;
+        logger.info(`[FilterPlaces] After cuisine filter (${cuisineType}): ${filtered.length} places`);
+      } else {
+        logger.info(`[FilterPlaces] Cuisine filter (${cuisineType}) would eliminate all results, skipping`);
       }
-      logger.info(`[FilterPlaces] After keyword filter: ${filtered.length} places`);
     }
 
-    // Filter by location if user has location and wants nearby
-    // Only apply if user explicitly wants nearby places
-    if (context.location && intent.distance === 'nearby') {
-      const placesWithCoords = filtered.filter((place) => place.location_lat && place.location_lng);
+    // 3. Filter by keywords (only if we still have results)
+    if (intent.keywords && intent.keywords.length > 0 && filtered.length > 0) {
+      // Don't re-filter by cuisine keywords we already handled
+      const keywordsToUse = intent.keywords.filter((k: string) => 
+        k.toLowerCase() !== intent.cuisineType?.toLowerCase()
+      );
       
-      if (placesWithCoords.length > 0) {
-        const withDistance = placesWithCoords.map((place) => ({
-          ...place,
-          distance: this.calculateDistance(
-            context.location!.lat,
-            context.location!.lng,
-            place.location_lat!,
-            place.location_lng!
-          ),
-        }));
-        
-        // Sort by distance
-        withDistance.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-        filtered = withDistance;
-        logger.info(`[FilterPlaces] After distance sort: ${filtered.length} places`);
+      if (keywordsToUse.length > 0) {
+        const keywordFiltered = filtered.filter((place) => {
+          const searchText = `${place.name} ${place.description} ${place.location_name}`.toLowerCase();
+          return keywordsToUse.some((keyword: string) =>
+            searchText.includes(keyword.toLowerCase())
+          );
+        });
+        // Only apply keyword filter if it doesn't eliminate all results
+        if (keywordFiltered.length > 0) {
+          filtered = keywordFiltered;
+        }
+        logger.info(`[FilterPlaces] After keyword filter: ${filtered.length} places`);
       }
     }
 
-    logger.info(`[FilterPlaces] Final result: ${filtered.length} places`);
+    // 4. Calculate distances if user has location
+    if (context.location) {
+      filtered = filtered.map((place) => ({
+        ...place,
+        distance: place.location_lat && place.location_lng
+          ? this.calculateDistance(
+              context.location!.lat,
+              context.location!.lng,
+              place.location_lat,
+              place.location_lng
+            )
+          : undefined,
+      }));
+    }
+
+    // 5. SMART SORTING based on intent
+    const sortBy = intent.sortBy;
+    const sortOrder = intent.sortOrder || 'desc';
     
-    // Limit results to top 5
-    return filtered.slice(0, 5);
+    if (sortBy === 'rating') {
+      // Sort by rating (handle null/undefined ratings)
+      filtered.sort((a, b) => {
+        const ratingA = a.rating ?? 0;
+        const ratingB = b.rating ?? 0;
+        return sortOrder === 'desc' ? ratingB - ratingA : ratingA - ratingB;
+      });
+      logger.info(`[FilterPlaces] Sorted by rating (${sortOrder})`);
+    } else if (sortBy === 'distance' && context.location) {
+      // Sort by distance (closest first for 'asc', farthest first for 'desc')
+      filtered.sort((a, b) => {
+        const distA = a.distance ?? Infinity;
+        const distB = b.distance ?? Infinity;
+        return sortOrder === 'asc' ? distA - distB : distB - distA;
+      });
+      logger.info(`[FilterPlaces] Sorted by distance (${sortOrder})`);
+    } else if (sortBy === 'recent') {
+      // Sort by created_at
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+      });
+      logger.info(`[FilterPlaces] Sorted by recent (${sortOrder})`);
+    } else if (intent.distance === 'nearby' && context.location) {
+      // Legacy: If user wants "nearby", sort by distance ascending
+      filtered.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+      logger.info(`[FilterPlaces] Sorted by distance (nearby intent)`);
+    }
+
+    // 6. SMART LIMIT: Respect user's requested count
+    const limit = intent.limit || 5; // Default to 5 if not specified
+    const finalCount = Math.min(limit, filtered.length);
+    
+    logger.info(`[FilterPlaces] Final result: ${filtered.length} places, limiting to ${finalCount} (requested: ${intent.limit || 'default 5'})`);
+    
+    return filtered.slice(0, finalCount);
   }
 
   /**
@@ -729,7 +794,7 @@ export class AICompanionService {
     query: string,
     context: UserContext,
     places: Array<SavedItem & { distance?: number }>,
-    _intent: any
+    intent: any
   ): Promise<CompanionResponse> {
     try {
       // Use Gemini 2.5 Flash for response generation (fast & cheap)
@@ -740,6 +805,10 @@ export class AICompanionService {
           userName: context.userName,
           destination: context.destination,
           currentTime: context.time.toLocaleTimeString(),
+          // NEW: Smart query context for better responses
+          limit: intent.limit,
+          sortBy: intent.sortBy,
+          cuisineType: intent.cuisineType,
         },
         places.map(p => ({
           name: p.name,

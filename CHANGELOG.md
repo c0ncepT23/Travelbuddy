@@ -4,6 +4,15 @@ All notable changes to the Travel Research Companion project will be documented 
 
 ## [Unreleased]
 
+### Added
+- **Smart AI Query Processing** - World-class natural language understanding for travel queries:
+  - **Count Extraction**: "top 3", "best 5", "give me 2" → Returns exact count requested
+  - **Rating Sorting**: "best rated", "top rated", "highest rated" → Sorts by rating descending
+  - **Distance Sorting**: "closest", "nearest" → Sorts by proximity
+  - **Cuisine Filtering**: "best ramen", "pizza places", "street food" → Filters by cuisine type
+  - **Specific Dish Search**: "best pad thai", "cheesecake spots" → Understands dish-specific queries
+  - **Smart Location Context**: Responses now use actual place locations (e.g., "Busan, Jeju") instead of hardcoded trip destination
+
 ### Fixed
 - **Gemini Model 404 Error** - Updated all Gemini model references from expired preview model `gemini-2.5-flash-preview-05-20` to stable GA model `gemini-2.5-flash`. The dated preview model was deprecated by Google, causing AI chat failures with "404 Not Found" errors. Affected files:
   - `backend/src/services/gemini.service.ts`
