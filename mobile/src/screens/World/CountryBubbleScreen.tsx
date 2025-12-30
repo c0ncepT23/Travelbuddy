@@ -23,6 +23,7 @@ import {
   Linking, 
   ScrollView,
   BackHandler,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -66,9 +67,12 @@ import { useTripDataStore } from '../../stores/tripDataStore';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { ScoutCarousel, ScoutResult } from '../../components/ScoutCarousel';
 import ExploreTab from '../../components/ExploreTab';
+import { MyJourneyView } from '../../components/MyJourneyView';
+
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 // Tab types for bottom navigation
-type TabType = 'map' | 'explore';
+type TabType = 'map' | 'explore' | 'journey';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -668,17 +672,15 @@ export default function CountryBubbleScreen() {
 
   // Data state
   const [isLoading, setIsLoading] = useState(true);
-  const [allItems, setAllItems] = useState<SavedItem[]>([]);
-  const [filteredItems, setFilteredItems] = useState<SavedItem[]>([]);
-  const [subClusters, setSubClusters] = useState<SubClusters | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('macro');
-  // selectedCategory state REMOVED - no longer using orbital bubbles
-
+  
   // Filter state
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [activeAreaFilter, setActiveAreaFilter] = useState<string | null>(null);
   const [activeAreaCoords, setActiveAreaCoords] = useState<CityCoords | null>(null);
   const [currentRadiusKm, setCurrentRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
+
+  const [subClusters, setSubClusters] = useState<SubClusters | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('macro');
   const [userInCountry, setUserInCountry] = useState<boolean>(false);
   const [hasAutoFocused, setHasAutoFocused] = useState<boolean>(false);
   
@@ -706,6 +708,7 @@ export default function CountryBubbleScreen() {
   const [isCompactChatOpen, setIsCompactChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isAITyping, setIsAITyping] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   // Bottom Sheet State (Clusters/Pins use this)
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
@@ -734,8 +737,13 @@ export default function CountryBubbleScreen() {
     isTripLoading,
     pendingAction, 
     clearPendingAction,
-    clearTransition 
+    clearTransition,
+    markPlaceAsVisited,
+    setTransition,
+    savedPlacesByTrip,
   } = useTripDataStore();
+
+  const allItems = useMemo(() => savedPlacesByTrip[tripId] || [], [savedPlacesByTrip, tripId]);
 
   const countryKey = getCountryKey(countryName);
   const countryCoords = COUNTRY_COORDS[countryKey] || COUNTRY_COORDS.default;
@@ -766,6 +774,28 @@ export default function CountryBubbleScreen() {
     
     return counts;
   }, [drawerItems]);
+
+  // Derived filtered items based on allItems from store
+  // NOTE: Uses static getDistanceKm helper (defined at top of file) to avoid dependency issues
+  const filteredItems = useMemo(() => {
+    if (filterMode === 'all') return allItems;
+    
+    if (filterMode === 'nearMe' && location) {
+      const lat = location.coords.latitude;
+      const lng = location.coords.longitude;
+      return allItems.filter(item => {
+        if (!item.location_lat || !item.location_lng) return false;
+        const distanceKm = getDistanceKm(lat, lng, item.location_lat, item.location_lng);
+        return distanceKm <= currentRadiusKm;
+      });
+    }
+
+    if (filterMode === 'area' && activeAreaCoords) {
+      return filterItemsByLocation(allItems, activeAreaFilter || '', activeAreaCoords);
+    }
+
+    return allItems;
+  }, [allItems, filterMode, location, currentRadiusKm, activeAreaCoords, activeAreaFilter]);
   
   // Apply category filter on top of location-based filtering
   const categoryFilteredItems = useMemo(() => {
@@ -963,9 +993,6 @@ export default function CountryBubbleScreen() {
         withoutCoords.forEach(i => console.log(`      - ${i.name} (no coords)`));
       }
       
-      setAllItems(uniqueItems);
-      setFilteredItems(uniqueItems);
-
       // FIX: Center camera on actual places, not default country coords
       if (uniqueItems.length > 0) {
         const { center, zoomLevel } = calculateBoundsFromItems(uniqueItems);
@@ -1105,7 +1132,6 @@ export default function CountryBubbleScreen() {
     setFilterMode('nearMe');
     setActiveAreaFilter('Near You');
     setActiveAreaCoords(null);
-    setFilteredItems(nearbyItems);
     setViewMode('macro');
     // setSelectedCategory REMOVED - no longer using orbital bubbles
     
@@ -1120,25 +1146,22 @@ export default function CountryBubbleScreen() {
     setActiveAreaCoords(coords);
     setCurrentRadiusKm(Math.max(coords.latDelta, coords.lngDelta) * 50);
     
-    const filtered = filterItemsByLocation(allItems, locationName, coords);
-    setFilteredItems(filtered);
     setViewMode('macro');
     // setSelectedCategory REMOVED - no longer using orbital bubbles
     
     animateToRegion(coords.latitude, coords.longitude, coords.latDelta, coords.lngDelta);
-  }, [allItems, animateToRegion]);
+  }, [animateToRegion]);
 
   const resetToCountryView = useCallback(() => {
     setFilterMode('all');
     setActiveAreaFilter(null);
     setActiveAreaCoords(null);
     setCurrentRadiusKm(DEFAULT_RADIUS_KM);
-    setFilteredItems(allItems);
     setViewMode('macro');
     // setSelectedCategory REMOVED - no longer using orbital bubbles
     
     animateToRegion(countryCoords.latitude, countryCoords.longitude, countryCoords.latDelta, countryCoords.lngDelta);
-  }, [allItems, countryCoords, animateToRegion]);
+  }, [countryCoords, animateToRegion]);
 
   // Calculate distance between two coordinates in meters (Haversine formula)
   const getDistanceMeters = useCallback((coord1: [number, number], coord2: [number, number]): number => {
@@ -1633,15 +1656,26 @@ export default function CountryBubbleScreen() {
     console.log('✅ CHECK-IN! Marking as visited:', place.name);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
-    // TODO: API call to update place status
-    // For now just show feedback
-    // await api.patch(`/api/saved-items/${place.id}`, { status: 'visited' });
+    // Show celebratory transition immediately (World Class UX)
+    setTransition(`Added ${place.name} to your Journey!`, '📸');
+    setShowConfetti(true);
     
-    // Close the bottom sheet after check-in
+    // Close the bottom sheet immediately to show the map/confetti
     setBottomSheetVisible(false);
     setSelectedPlace(null);
     setSelectedPlaceId(undefined);
-  }, []);
+
+    // Update status in backend and store
+    const success = await markPlaceAsVisited(tripId, place.id);
+    
+    // Cleanup
+    setTimeout(() => setShowConfetti(false), 3000);
+    setTimeout(() => clearTransition(), 2000);
+
+    if (!success) {
+      console.warn('⚠️ Backend check-in failed, but local state updated optimistically');
+    }
+  }, [tripId, markPlaceAsVisited, setTransition, clearTransition]);
 
   // Calculate best viewing angle based on place position relative to map center
   const calculateBestBearing = useCallback((lng: number, lat: number): number => {
@@ -2027,6 +2061,13 @@ export default function CountryBubbleScreen() {
           tripId={tripId}
           countryName={countryName}
           onSavePlace={handleSaveFromExplore}
+        />
+      )}
+
+      {activeTab === 'journey' && (
+        <MyJourneyView 
+          items={allItems} 
+          tripName={countryName}
         />
       )}
       
@@ -2557,102 +2598,111 @@ export default function CountryBubbleScreen() {
       {/* Floating Clouds - REMOVED (was part of bubble UI) */}
 
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }}>
-            <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
-              <View style={styles.backButtonInner}>
-                <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.countryInfo}>
-                <Text style={styles.countryTitle}>{countryFlag} {countryName}</Text>
-                <Text style={styles.placeCount}>
-                  {discoveryIntent ? `🔍 Scouting ${discoveryIntent.item}...` : 
-                   filterMode !== 'all' ? `${items.length} spots nearby` : `${items.length} saved`}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </MotiView>
-
-          {/* Near Me Button - Top Right */}
-          <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-            <TouchableOpacity
-              style={[styles.headerActionButton, filterMode === 'nearMe' && styles.headerActionButtonActive]}
-              onPress={handleNearMePress}
-              activeOpacity={0.8}
-            >
-              <Ionicons 
-                name="locate" 
-                size={22} 
-                color={filterMode === 'nearMe' ? '#FFFFFF' : '#06B6D4'} 
-              />
-            </TouchableOpacity>
-          </MotiView>
-        </View>
-
-        {/* Filter Chip - shows for explicit filters */}
-        {filterMode !== 'all' && (
-          <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.filterChipContainer}>
-            <TouchableOpacity style={styles.filterChip} onPress={resetToCountryView} activeOpacity={0.8}>
-              <Ionicons 
-                name="location" 
-                size={14} 
-                color="#06B6D4" 
-              />
-              <Text style={styles.filterChipText}>
-                {activeAreaFilter || `${currentRadiusKm}km`}
-              </Text>
-              <Ionicons name="close-circle" size={16} color="#06B6D4" />
-            </TouchableOpacity>
-          </MotiView>
-        )}
-      </View>
-
-      {/* Category Filter Chips - Horizontal Scrollable */}
-      <View style={styles.categoryChipsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryChipsScroll}
-        >
-          {CATEGORY_FILTERS.map((category) => {
-            const count = categoryCounts[category.key];
-            const isSelected = selectedCategory === category.key;
-            // Don't show chips with 0 items (except "All")
-            if (count === 0 && category.key !== 'all') return null;
-            
-            return (
-            <BouncyPressable
-                key={category.key}
-                style={[
-                  styles.categoryChip,
-                  isSelected && { backgroundColor: category.color, borderColor: category.color },
-                ]}
-                onPress={() => handleCategorySelect(category.key)}
-              >
-                <Text style={styles.categoryChipIcon}>{category.icon}</Text>
-                <Text style={[
-                  styles.categoryChipLabel,
-                  isSelected && styles.categoryChipLabelActive,
-                ]}>
-                  {category.label}
-                </Text>
-                <View style={[
-                  styles.categoryChipCount,
-                  isSelected && styles.categoryChipCountActive,
-                ]}>
-                  <Text style={[
-                    styles.categoryChipCountText,
-                    isSelected && styles.categoryChipCountTextActive,
-                  ]}>
-                    {count}
+      {!isCompactChatOpen && activeTab === 'map' && (
+        <View style={styles.header}>
+          <View style={styles.headerTopRow}>
+            <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }}>
+              <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
+                <View style={styles.backButtonInner}>
+                  <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+                </View>
+                <View style={styles.countryInfo}>
+                  <Text style={styles.countryTitle}>{countryFlag} {countryName}</Text>
+                  <Text style={styles.placeCount}>
+                    {discoveryIntent ? `🔍 Scouting ${discoveryIntent.item}...` : 
+                    filterMode !== 'all' ? `${items.length} spots nearby` : `${items.length} saved`}
                   </Text>
                 </View>
-              </BouncyPressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+              </TouchableOpacity>
+            </MotiView>
+
+            {/* Near Me Button - Top Right */}
+            <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+              <TouchableOpacity
+                style={[styles.headerActionButton, filterMode === 'nearMe' && styles.headerActionButtonActive]}
+                onPress={handleNearMePress}
+                activeOpacity={0.8}
+              >
+                <Ionicons 
+                  name="locate" 
+                  size={22} 
+                  color={filterMode === 'nearMe' ? '#FFFFFF' : '#06B6D4'} 
+                />
+              </TouchableOpacity>
+            </MotiView>
+          </View>
+
+          {/* Filter Chip - shows for explicit filters */}
+          {filterMode !== 'all' && (
+            <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={styles.filterChipContainer}>
+              <TouchableOpacity style={styles.filterChip} onPress={resetToCountryView} activeOpacity={0.8}>
+                <Ionicons 
+                  name="location" 
+                  size={14} 
+                  color="#06B6D4" 
+                />
+                <Text style={styles.filterChipText}>
+                  {activeAreaFilter || `${currentRadiusKm}km`}
+                </Text>
+                <Ionicons name="close-circle" size={16} color="#06B6D4" />
+              </TouchableOpacity>
+            </MotiView>
+          )}
+        </View>
+      )}
+
+      {/* Category Filter Chips - Horizontal Scrollable */}
+      {!isCompactChatOpen && activeTab === 'map' && (
+        <MotiView
+          from={{ opacity: 0, translateY: -20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          exit={{ opacity: 0, translateY: -20 }}
+          style={styles.categoryChipsContainer}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryChipsScroll}
+          >
+            {CATEGORY_FILTERS.map((category) => {
+              const count = categoryCounts[category.key];
+              const isSelected = selectedCategory === category.key;
+              // Don't show chips with 0 items (except "All")
+              if (count === 0 && category.key !== 'all') return null;
+              
+              return (
+              <BouncyPressable
+                  key={category.key}
+                  style={[
+                    styles.categoryChip,
+                    isSelected && { backgroundColor: category.color, borderColor: category.color },
+                  ]}
+                  onPress={() => handleCategorySelect(category.key)}
+                >
+                  <Text style={styles.categoryChipIcon}>{category.icon}</Text>
+                  <Text style={[
+                    styles.categoryChipLabel,
+                    isSelected && styles.categoryChipLabelActive,
+                  ]}>
+                    {category.label}
+                  </Text>
+                  <View style={[
+                    styles.categoryChipCount,
+                    isSelected && styles.categoryChipCountActive,
+                  ]}>
+                    <Text style={[
+                      styles.categoryChipCountText,
+                      isSelected && styles.categoryChipCountTextActive,
+                    ]}>
+                      {count}
+                    </Text>
+                  </View>
+                </BouncyPressable>
+              );
+            })}
+          </ScrollView>
+        </MotiView>
+      )}
 
       {/* CLUSTERS AND PINS are now rendered inside MapView - see ShapeSource "places-source" */}
 
@@ -2666,7 +2716,7 @@ export default function CountryBubbleScreen() {
         categoryColor={currentCategoryConfig.color}
         onPlaceSelect={handlePlaceSelect}
         selectedPlaceId={selectedPlaceId}
-        isHidden={isSinglePlaceDetailOpen}
+        isHidden={isSinglePlaceDetailOpen || isCompactChatOpen || activeTab !== 'map'}
       />
 
       {/* Game Bottom Sheet - For MULTIPLE places (clusters) */}
@@ -2830,21 +2880,56 @@ export default function CountryBubbleScreen() {
           </View>
           <Text style={[styles.tabLabel, activeTab === 'explore' && styles.tabLabelActive]}>Explore</Text>
         </BouncyPressable>
+
+        <BouncyPressable
+          style={[styles.tabButton, activeTab === 'journey' && styles.tabButtonActive]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setActiveTab('journey');
+          }}
+        >
+          <View style={[styles.tabIconContainer, activeTab === 'journey' && styles.tabIconContainerActive]}>
+            <Ionicons 
+              name={activeTab === 'journey' ? 'sparkles' : 'sparkles-outline'} 
+              size={20} 
+              color={activeTab === 'journey' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
+            />
+          </View>
+          <Text style={[styles.tabLabel, activeTab === 'journey' && styles.tabLabelActive]}>Journey</Text>
+        </BouncyPressable>
       </View>
 
       {/* Floating AI Orb - Always visible */}
-      <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen} />
+      <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen && activeTab !== 'journey'} />
 
       {/* Compact AI Chat - Always visible */}
-      <CompactAIChat
-        isOpen={isCompactChatOpen}
-        onClose={handleCloseCompactChat}
-        onOpenFullChat={handleOpenFullChat}
-        messages={chatMessages}
-        onSendMessage={handleSendMessage}
-        isTyping={isAITyping || companionLoading}
-        suggestions={dynamicSuggestions}
-      />
+      {activeTab !== 'journey' && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardAvoidingChat}
+          pointerEvents="box-none"
+        >
+          <CompactAIChat
+            isOpen={isCompactChatOpen}
+            onClose={handleCloseCompactChat}
+            onOpenFullChat={handleOpenFullChat}
+            messages={chatMessages}
+            onSendMessage={handleSendMessage}
+            isTyping={isAITyping || companionLoading}
+            suggestions={dynamicSuggestions}
+          />
+        </KeyboardAvoidingView>
+      )}
+
+      {/* Confetti Cannon - Celebrating Check-ins! */}
+      {showConfetti && (
+        <ConfettiCannon
+          count={200}
+          origin={{ x: SCREEN_WIDTH / 2, y: -20 }}
+          fadeOut={true}
+          fallSpeed={3000}
+        />
+      )}
     </View>
   );
 }
@@ -2856,6 +2941,13 @@ export default function CountryBubbleScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1F2022' },
   map: { ...StyleSheet.absoluteFillObject },
+  keyboardAvoidingChat: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 500,
+  },
   gradientOverlay: { ...StyleSheet.absoluteFillObject },
   
   header: {

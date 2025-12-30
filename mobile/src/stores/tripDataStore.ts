@@ -59,6 +59,7 @@ interface TripDataState {
   invalidateTrip: (tripId: string) => void;
   addPlaceToTrip: (tripId: string, place: SavedItem) => void;
   removePlaceFromTrip: (tripId: string, placeId: string) => void;
+  markPlaceAsVisited: (tripId: string, placeId: string, notes?: string) => Promise<boolean>;
 }
 
 export const useTripDataStore = create<TripDataState>((set, get) => ({
@@ -217,6 +218,38 @@ export const useTripDataStore = create<TripDataState>((set, get) => ({
         [tripId]: (s.savedPlacesByTrip[tripId] || []).filter((p) => p.id !== placeId),
       },
     }));
+  },
+
+  // Mark a place as visited
+  markPlaceAsVisited: async (tripId: string, placeId: string, notes?: string) => {
+    try {
+      console.log(`✅ [TripDataStore] Marking place ${placeId} as visited in trip ${tripId}...`);
+      
+      // OPTIMISTIC UPDATE: Update local state immediately for instant UI response
+      const originalPlaces = get().savedPlacesByTrip[tripId] || [];
+      const updatedPlaces = originalPlaces.map(p => 
+        p.id === placeId 
+          ? { ...p, status: 'visited' as any, updated_at: new Date().toISOString() } 
+          : p
+      );
+      
+      set((s) => ({
+        savedPlacesByTrip: {
+          ...s.savedPlacesByTrip,
+          [tripId]: updatedPlaces,
+        }
+      }));
+
+      // Call API in background
+      await api.post(`/items/${placeId}/visit`, { notes });
+      
+      return true;
+    } catch (error) {
+      console.error(`❌ [TripDataStore] Error marking place as visited:`, error);
+      // Fallback: we keep it as visited locally for now to avoid flickering, 
+      // but in a real app you might want to rollback on error.
+      return false;
+    }
   },
 }));
 

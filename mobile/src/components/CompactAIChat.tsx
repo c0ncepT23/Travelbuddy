@@ -28,9 +28,8 @@ import theme from '../config/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Tab bar height and drawer peek height to position above them
+// Tab bar height to position above it
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 60 : 50;
-const DRAWER_PEEK_HEIGHT = SCREEN_HEIGHT * 0.22;
 
 // Auto-hide response bubble after this many seconds
 const RESPONSE_TIMEOUT_MS = 10000; // 10 seconds
@@ -123,7 +122,10 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
       animate={{ opacity: 1, translateY: 0 }}
       exit={{ opacity: 0, translateY: 30 }}
       transition={{ type: 'spring', damping: 20 }}
-      style={styles.container}
+      style={[
+        styles.container,
+        { bottom: TAB_BAR_HEIGHT + 10 } // Sit just above the tab bar since drawer is hidden
+      ]}
     >
       {/* Map-Aware Suggestions */}
       {suggestions.length > 0 && !isTyping && (
@@ -281,7 +283,6 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT + DRAWER_PEEK_HEIGHT + 10, // Above tab bar + drawer peek
     left: 16,
     right: 16,
     zIndex: 500, // Above everything
