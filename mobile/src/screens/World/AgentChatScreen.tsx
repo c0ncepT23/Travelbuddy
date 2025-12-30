@@ -31,14 +31,30 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { format } from 'date-fns';
 import { useCompanionStore, CompanionMessage, PlaceResult } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripStore } from '../../stores/tripStore';
 
-import { GlassCard } from '../../components/GlassCard';
 import { BouncyPressable } from '../../components/BouncyPressable';
-import theme from '../../config/theme';
+
+// Hardcoded theme colors to avoid module load order issues
+const COLORS = {
+  primary: '#6366F1',
+  primaryLight: '#818CF8',
+  success: '#10B981',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#94A3B8',
+  food: '#F43F5E',
+  accommodation: '#8B5CF6',
+  place: '#0EA5E9',
+  shopping: '#EC4899',
+  activity: '#10B981',
+  tip: '#F59E0B',
+};
+
+const GRADIENTS = {
+  primary: ['#6366F1', '#A855F7'] as const,
+};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -131,14 +147,14 @@ export default function AgentChatScreen() {
 
   const getCategoryColor = (category: string): string => {
     const categoryColors: Record<string, string> = {
-      food: theme.colors.food,
-      place: theme.colors.place,
-      shopping: theme.colors.shopping,
-      activity: theme.colors.activity,
-      accommodation: '#6366F1',
-      tip: '#F59E0B',
+      food: COLORS.food,
+      place: COLORS.place,
+      shopping: COLORS.shopping,
+      activity: COLORS.activity,
+      accommodation: COLORS.accommodation,
+      tip: COLORS.tip,
     };
-    return categoryColors[category] || theme.colors.primary;
+    return categoryColors[category] || COLORS.primary;
   };
 
   const getCategoryIcon = (category: string): string => {
@@ -154,7 +170,8 @@ export default function AgentChatScreen() {
   };
 
   const renderPlaceCard = (place: PlaceResult) => {
-    const photoUrl = getPlacePhotoUrl(place.photos_json, 300);
+    const photoUrl = getPlacePhotoUrl((place as any).photos_json, 300);
+    const categoryColor = getCategoryColor(place.category);
     
     return (
       <TouchableOpacity
@@ -171,7 +188,7 @@ export default function AgentChatScreen() {
               resizeMode={FastImage.resizeMode.cover}
             />
           ) : (
-            <View style={[styles.miniCardPlaceholder, { backgroundColor: getCategoryColor(place.category) + '20' }]}>
+            <View style={[styles.miniCardPlaceholder, { backgroundColor: categoryColor + '20' }]}>
               <Text style={styles.miniCardPlaceholderEmoji}>{getCategoryIcon(place.category)}</Text>
             </View>
           )}
@@ -186,10 +203,10 @@ export default function AgentChatScreen() {
           <View style={styles.miniCardFooter}>
             <View style={styles.miniCardRating}>
               <Ionicons name="star" size={10} color="#FFD700" />
-              <Text style={styles.miniCardRatingText}>{place.rating || '4.0'}</Text>
+              <Text style={styles.miniCardRatingText}>{(place as any).rating || '4.0'}</Text>
             </View>
             <View style={styles.miniCardGo}>
-              <Ionicons name="navigate" size={12} color="#06B6D4" />
+              <Ionicons name="navigate" size={12} color={COLORS.primary} />
               <Text style={styles.miniCardGoText}>GO</Text>
             </View>
           </View>
@@ -220,7 +237,7 @@ export default function AgentChatScreen() {
         
         {place.distance !== undefined && (
           <View style={styles.distanceBadge}>
-            <Ionicons name="navigate" size={10} color={theme.colors.primary} />
+            <Ionicons name="navigate" size={10} color={COLORS.primary} />
             <Text style={styles.distanceText}>
               {place.distance < 1000
                 ? `${Math.round(place.distance)}m`
@@ -230,7 +247,7 @@ export default function AgentChatScreen() {
         )}
       </View>
       
-      <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+      <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
     </TouchableOpacity>
   );
 
@@ -277,7 +294,7 @@ export default function AgentChatScreen() {
         ]}>
           {isUser ? (
             <LinearGradient
-              colors={theme.gradients.primary}
+              colors={GRADIENTS.primary}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.userBubbleGradient}
@@ -326,14 +343,14 @@ export default function AgentChatScreen() {
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <View style={styles.header}>
           <BouncyPressable style={styles.backButton} onPress={handleClose}>
-            <Ionicons name="chevron-back" size={24} color={theme.colors.textInverse} />
+            <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
           </BouncyPressable>
           <View style={styles.headerCenter}>
             <LinearGradient
-              colors={theme.gradients.primary}
+              colors={GRADIENTS.primary}
               style={styles.aiIconBox}
             >
-              <Ionicons name="sparkles" size={20} color={theme.colors.textInverse} />
+              <Ionicons name="sparkles" size={20} color={COLORS.textPrimary} />
             </LinearGradient>
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>AI Travel Agent</Text>
@@ -370,20 +387,18 @@ export default function AgentChatScreen() {
         transition={{ type: 'spring', damping: 20, stiffness: 150 }}
         style={styles.contentContainer}
       >
-        <GlassCard intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-        
         {/* Header */}
         <View style={styles.header}>
           <BouncyPressable style={styles.backButton} onPress={handleClose}>
-            <Ionicons name="close" size={24} color={theme.colors.textInverse} />
+            <Ionicons name="close" size={24} color={COLORS.textPrimary} />
           </BouncyPressable>
           
           <View style={styles.headerCenter}>
             <LinearGradient
-              colors={theme.gradients.primary}
+              colors={GRADIENTS.primary}
               style={styles.aiIconBox}
             >
-              <Ionicons name="sparkles" size={20} color={theme.colors.textInverse} />
+              <Ionicons name="sparkles" size={20} color={COLORS.textPrimary} />
             </LinearGradient>
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>AI Travel Agent</Text>
@@ -420,7 +435,7 @@ export default function AgentChatScreen() {
                 value={inputText}
                 onChangeText={setInputText}
                 placeholder="Ask me anything..."
-                placeholderTextColor={theme.colors.textTertiary}
+                placeholderTextColor={COLORS.textSecondary}
                 multiline
                 maxLength={500}
                 editable={!isLoading}
@@ -436,13 +451,13 @@ export default function AgentChatScreen() {
               disabled={!inputText.trim() || isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color={theme.colors.textInverse} size="small" />
+                <ActivityIndicator color={COLORS.textPrimary} size="small" />
               ) : (
                 <LinearGradient
-                  colors={theme.gradients.primary}
+                  colors={GRADIENTS.primary}
                   style={styles.sendButtonGradient}
                 >
-                  <Ionicons name="send" size={18} color={theme.colors.textInverse} />
+                  <Ionicons name="send" size={18} color={COLORS.textPrimary} />
                 </LinearGradient>
               )}
             </BouncyPressable>
@@ -466,11 +481,15 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     height: '85%',
-    backgroundColor: '#0F172A', // Slate-900 base
+    backgroundColor: '#1F2022', // Charcoal theme
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     overflow: 'hidden',
-    ...theme.shadows.soft.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 8,
   },
 
   // Header
@@ -506,7 +525,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.soft.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   headerText: {
     marginLeft: 12,
@@ -514,7 +537,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   statusRow: {
@@ -526,12 +549,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: theme.colors.success,
+    backgroundColor: '#10B981', // success color
     marginRight: 6,
   },
   statusText: {
     fontSize: 12,
-    color: theme.colors.textTertiary,
+    color: '#94A3B8',
     fontWeight: '600',
   },
 
@@ -557,7 +580,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   aiBubble: {
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    backgroundColor: 'rgba(45, 46, 48, 0.7)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     padding: 16,
@@ -565,7 +588,11 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     borderBottomRightRadius: 4,
-    ...theme.shadows.soft.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   userBubbleGradient: {
     padding: 14,
@@ -574,13 +601,13 @@ const styles = StyleSheet.create({
   },
   aiMessageText: {
     fontSize: 15,
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
     lineHeight: 22,
     fontWeight: '500',
   },
   userMessageText: {
     fontSize: 15,
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
     lineHeight: 22,
     fontWeight: '600',
   },
@@ -592,7 +619,7 @@ const styles = StyleSheet.create({
   },
   typingBubble: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    backgroundColor: 'rgba(45, 46, 48, 0.7)',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -604,7 +631,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: '#818CF8', // primaryLight
   },
 
   // Places (Horizontal)
@@ -619,17 +646,19 @@ const styles = StyleSheet.create({
   },
   miniPlaceCard: {
     width: 180,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    ...theme.shadows.soft.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   miniCardImageContainer: {
     height: 110,
     width: '100%',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#E8EAED',
   },
   miniCardImage: {
     width: '100%',
@@ -664,7 +693,7 @@ const styles = StyleSheet.create({
   miniCardName: {
     fontSize: 14,
     fontWeight: '800',
-    color: theme.colors.textInverse,
+    color: '#0F172A',
     marginBottom: 8,
   },
   miniCardFooter: {
@@ -680,13 +709,13 @@ const styles = StyleSheet.create({
   miniCardRatingText: {
     fontSize: 12,
     fontWeight: '700',
-    color: theme.colors.textTertiary,
+    color: '#64748B',
   },
   miniCardGo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -694,7 +723,7 @@ const styles = StyleSheet.create({
   miniCardGoText: {
     fontSize: 11,
     fontWeight: '800',
-    color: theme.colors.primaryLight,
+    color: '#6366F1',
   },
 
   // Suggestions
@@ -714,13 +743,13 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     fontSize: 13,
-    color: theme.colors.primaryLight,
+    color: '#818CF8',
     fontWeight: '700',
   },
 
   // Input
   inputArea: {
-    backgroundColor: '#17191F',
+    backgroundColor: '#1F2022',
     paddingBottom: Platform.OS === 'ios' ? 32 : 16,
     paddingTop: 16,
     borderTopWidth: 1,
@@ -733,7 +762,7 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     flex: 1,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#2D2E30',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -745,7 +774,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
     fontSize: 16,
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   sendButton: {
@@ -778,13 +807,60 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: theme.colors.textInverse,
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: theme.colors.textTertiary,
+    color: '#94A3B8',
     textAlign: 'center',
     lineHeight: 22,
+  },
+
+  // Distance Badge
+  distanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  distanceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6366F1',
+  },
+
+  // Place Card (Vertical)
+  placeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+  },
+  placeCategoryDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  placeCategoryIcon: {
+    fontSize: 18,
+  },
+  placeInfo: {
+    flex: 1,
+  },
+  placeName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  placeLocation: {
+    fontSize: 13,
+    color: '#64748B',
   },
 });

@@ -31,17 +31,17 @@ export const colors = {
   errorDark: '#DC2626',
   warning: '#F59E0B',
 
-  // Background Colors
-  background: '#F8FAFC',    // Slate-50 background (cleaner)
-  backgroundAlt: '#F1F5F9', // Slate-100
-  surface: '#FFFFFF',
+  // Background Colors (Deep Premium Charcoal)
+  background: '#1F2022',    // Dark grey (Slate-900 equivalent)
+  backgroundAlt: '#2D2E30', // Slightly lighter for contrast
+  surface: '#FFFFFF',       // Keep cards white for that "elevated" look
   surfaceElevated: '#FFFFFF',
 
-  // Text Colors
-  textPrimary: '#0F172A',   // Slate-900 (softer than black)
-  textSecondary: '#64748B', // Slate-500
-  textTertiary: '#94A3B8',  // Slate-400
-  textInverse: '#FFFFFF',
+  // Text Colors (Light by default for Charcoal Theme)
+  textPrimary: '#FFFFFF',   // White
+  textSecondary: '#94A3B8', // Slate-400
+  textTertiary: '#64748B',  // Slate-500
+  textInverse: '#0F172A',   // Slate-900 (for white cards)
 
   // Border Colors
   border: '#E2E8F0',        // Slate-200

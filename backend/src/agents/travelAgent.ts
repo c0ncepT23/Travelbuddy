@@ -7,7 +7,7 @@ import logger from '../config/logger';
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 
 const MODELS = {
-  FLASH: 'gemini-2.5-flash-preview-05-20',
+  FLASH: 'gemini-2.5-flash',  // Stable GA model
   FLASH_LEGACY: 'gemini-2.0-flash',
 };
 

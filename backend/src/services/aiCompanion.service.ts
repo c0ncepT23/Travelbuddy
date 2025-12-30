@@ -1233,7 +1233,7 @@ Generate ONLY the message text, no JSON:`;
       const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
       
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash-preview-05-20',
+        model: 'gemini-2.5-flash',
         generationConfig: { temperature: 0.8, maxOutputTokens: 100 }
       });
       

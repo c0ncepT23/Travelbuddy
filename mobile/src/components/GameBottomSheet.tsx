@@ -49,24 +49,24 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Snap points as percentages of screen height
 const SNAP_POINTS = {
-  COMPACT: SCREEN_HEIGHT * 0.15,    // 15% - Mini card view after place selection
-  COLLAPSED: SCREEN_HEIGHT * 0.25,  // 25% - Default collapsed
-  HALF: SCREEN_HEIGHT * 0.5,        // 50% - Browse mode
-  EXPANDED: SCREEN_HEIGHT * 0.85,   // 85% - Full screen
+  COMPACT: SCREEN_HEIGHT * 0.15,
+  COLLAPSED: SCREEN_HEIGHT * 0.25,
+  HALF: SCREEN_HEIGHT * 0.5,
+  EXPANDED: SCREEN_HEIGHT - 200, // Leaves room for chips
 };
 
-// Midnight Discovery palette
+// Deep Charcoal palette
 const COLORS = {
-  background: 'rgba(15, 17, 21, 0.95)',
-  surface: 'rgba(23, 25, 31, 0.9)',
-  surfaceLight: 'rgba(39, 41, 47, 0.8)',
-  primaryGlow: '#06B6D4', // Electric Cyan
-  secondaryGlow: '#22D3EE',
-  accent: '#22C55E',
+  background: '#1F2022',
+  surface: '#FFFFFF',
+  surfaceLight: '#2D2E30',
+  primaryGlow: '#6366F1',
+  secondaryGlow: '#94A3B8',
+  accent: '#A855F7',
   text: '#FFFFFF',
   textSecondary: '#94A3B8',
-  border: 'rgba(6, 182, 212, 0.2)',
-  cardGlow: 'rgba(6, 182, 212, 0.1)',
+  border: 'rgba(255, 255, 255, 0.05)',
+  cardGlow: 'rgba(99, 102, 241, 0.1)',
 };
 
 interface PlaceCardProps {
@@ -819,14 +819,14 @@ const styles = StyleSheet.create({
     right: 0,
     height: SCREEN_HEIGHT,
     backgroundColor: 'transparent',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     overflow: 'hidden',
     shadowColor: COLORS.primaryGlow,
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
-    elevation: 20,
+    elevation: 25,
   },
   glassContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -1066,7 +1066,7 @@ const styles = StyleSheet.create({
   },
   gmapsScrollContentInner: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 120, // Extra padding for fixed actions
   },
   gmapsHeaderRow: {
     flexDirection: 'row',
@@ -1173,10 +1173,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 12,
     paddingHorizontal: 8,
-    paddingBottom: 24,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(148, 163, 184, 0.2)',
-    backgroundColor: COLORS.background,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#1F2022',
   },
   gmapsActionButton: {
     alignItems: 'center',

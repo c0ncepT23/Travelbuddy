@@ -13,9 +13,9 @@ const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
 
 // Model tiers for different use cases
 const MODELS = {
-  FLASH: 'gemini-2.5-flash-preview-05-20',  // Fast, cheap - for chat, intent detection
-  PRO: 'gemini-2.5-pro-preview-05-06',      // Complex reasoning - for planning, guides
-  FLASH_LEGACY: 'gemini-2.0-flash',         // Fallback if 2.5 not available
+  FLASH: 'gemini-2.5-flash',  // Fast, cheap - for chat, intent detection (stable GA)
+  PRO: 'gemini-2.5-pro',      // Complex reasoning - for planning, guides (stable GA)
+  FLASH_LEGACY: 'gemini-2.0-flash',  // Fallback
 };
 
 export class GeminiService {

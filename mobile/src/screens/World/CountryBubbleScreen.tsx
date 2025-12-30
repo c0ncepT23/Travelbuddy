@@ -29,7 +29,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { BlurView } from 'expo-blur';
-import Mapbox, { MapView, Camera, ShapeSource, CircleLayer, SymbolLayer, Images } from '@rnmapbox/maps';
+import Mapbox, { 
+  MapView, 
+  Camera, 
+  ShapeSource, 
+  CircleLayer, 
+  SymbolLayer, 
+  Images, 
+  FillExtrusionLayer, 
+  SkyLayer, 
+  Atmosphere,
+  Light
+} from '@rnmapbox/maps';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import api from '../../config/api';
@@ -327,7 +338,7 @@ const CATEGORY_FILTERS: CategoryFilterConfig[] = [
 ];
 
 // Mapbox style - navigation night for dark Zenly aesthetic
-const MAPBOX_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
+const MAPBOX_STYLE = 'mapbox://styles/mapbox/dark-v11';
 
 type ViewMode = 'macro' | 'micro';
 type FilterMode = 'all' | 'nearMe' | 'area';
@@ -803,12 +814,16 @@ export default function CountryBubbleScreen() {
     
     // Use requestAnimationFrame to ensure touch event is finished
     requestAnimationFrame(() => {
+      // DYNAMIC PITCH: Tilt the map as we zoom in for a 3D effect (World Class Interaction)
+      const targetZoom = options.zoom ?? currentZoomRef.current;
+      const dynamicPitch = targetZoom >= 16 ? 60 : targetZoom >= 14 ? 45 : targetZoom >= 12 ? 35 : 0;
+
       cameraRef.current?.setCamera({
         centerCoordinate: options.center,
-        zoomLevel: options.zoom ?? currentZoomRef.current,
-        pitch: options.pitch ?? 0,
+        zoomLevel: targetZoom,
+        pitch: options.pitch ?? dynamicPitch,
         heading: options.heading ?? 0,
-        animationDuration: options.duration ?? 800,
+        animationDuration: options.duration ?? 2800, // Cinematic duration
         animationMode: options.mode ?? 'flyTo',
       });
     });
@@ -1918,26 +1933,40 @@ export default function CountryBubbleScreen() {
   // RENDER
   // ============================================================
 
-  // Dynamic suggestions based on map context
+  // Dynamic suggestions based on map context - 100% Data-Driven
   const dynamicSuggestions = useMemo(() => {
     const suggestions = [];
     
     // 1. If we have active area filter (e.g. "Shibuya")
     if (activeAreaFilter && activeAreaFilter !== 'Near You' && activeAreaFilter !== '0 in view') {
-      suggestions.push(`☕ Hidden cafes in ${activeAreaFilter}`);
-      suggestions.push(`🍔 Best food in ${activeAreaFilter}`);
+      const areaItems = drawerItems.filter(item => 
+        item.area_name === activeAreaFilter || item.location_name?.includes(activeAreaFilter)
+      );
+      
+      if (areaItems.length > 0) {
+        suggestions.push(`🔍 Explore my ${areaItems.length} saved spots in ${activeAreaFilter}`);
+        
+        const foodCount = areaItems.filter(i => i.category === 'food').length;
+        if (foodCount > 0) {
+          suggestions.push(`🍔 My ${foodCount} food saves in ${activeAreaFilter}`);
+        }
+      }
     } else if (drawerItems.length > 0) {
-      // 2. If we have items in view
-      suggestions.push(`🎯 What's nearby?`);
-      suggestions.push(`🍹 Nightlife around here`);
+      // 2. If we have items in view but no specific area filter
+      suggestions.push(`📍 Tell me about these ${drawerItems.length} spots`);
+      
+      const topRated = [...drawerItems].sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0))[0];
+      if (topRated) {
+        suggestions.push(`⭐ What's special about ${topRated.name}?`);
+      }
     } else {
-      // 3. Default suggestions for the country
-      suggestions.push(`🏞️ Top things to do in ${countryName}`);
-      suggestions.push(`🏨 Best places to stay`);
+      // 3. Default suggestions for the country based on total saves
+      suggestions.push(`🗺️ Show my top saves in ${countryName}`);
+      suggestions.push(`✈️ What's my next stop in ${countryName}?`);
     }
     
     return suggestions;
-  }, [activeAreaFilter, drawerItems.length, countryName]);
+  }, [activeAreaFilter, drawerItems, countryName]);
 
   return (
     <View style={styles.container}>
@@ -1966,7 +1995,69 @@ export default function CountryBubbleScreen() {
         scaleBarEnabled={false}
         onMapIdle={handleMapIdle}
         onPress={handleMapPress}
+        projection="globe"
+        pitchEnabled={true} // Allow 3D tilt
       >
+        {/* ATMOSPHERE & SKY - Makes the map feel like a real world */}
+        <Atmosphere style={{
+          color: 'rgba(30, 41, 59, 0.8)',
+        }} />
+        <SkyLayer id="sky" style={{
+          skyType: 'atmosphere',
+          skyAtmosphereColor: 'rgba(99, 102, 241, 0.5)',
+          skyAtmosphereSun: [0, 0],
+          skyAtmosphereSunIntensity: 15,
+        }} />
+
+        {/* 3D LIGHTING - Essential for seeing depth on extrusions */}
+        <Light style={{
+          anchor: 'viewport',
+          color: '#FFFFFF',
+          intensity: 0.4,
+          position: [1.15, 210, 30], // [radial, azimuthal, polar] - creates nice highlights
+        }} />
+
+        {/* 3D BUILDINGS LAYER - Performance Optimized Glass City */}
+        <FillExtrusionLayer
+          id="3d-buildings"
+          sourceID="composite"
+          sourceLayerID="building"
+          minZoomLevel={14.5} // Only render when close to keep FPS high
+          maxZoomLevel={22}
+          style={{
+            // Dynamic Glass Color: Slate base with Candy top
+            fillExtrusionColor: [
+              'interpolate',
+              ['linear'],
+              ['get', 'height'],
+              0, 'rgba(30, 41, 59, 0.5)',   // Opaque slate base
+              50, 'rgba(99, 102, 241, 0.4)', // Glassy Indigo mid
+              100, 'rgba(168, 85, 247, 0.3)' // Translucent Purple top
+            ],
+            // Vertical Gradient: Makes walls darker at bottom (realistic depth)
+            fillExtrusionVerticalGradient: true,
+            
+            // Exaggerated height for "World View" feel
+            fillExtrusionHeight: [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              14.5, 0,
+              16, ['*', ['coalesce', ['get', 'height'], 20], 1.1]
+            ],
+            fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
+            
+            // Glass Opacity: High enough to see form, low enough to feel light
+            fillExtrusionOpacity: [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              14.5, 0,
+              15, 0.85
+            ],
+          }}
+        />
+
         {/* Load category icons from CDN */}
         <Images images={PIN_ICONS} />
 
@@ -2714,7 +2805,7 @@ export default function CountryBubbleScreen() {
 // ============================================================
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F1115' },
+  container: { flex: 1, backgroundColor: '#1F2022' },
   map: { ...StyleSheet.absoluteFillObject },
   gradientOverlay: { ...StyleSheet.absoluteFillObject },
   
@@ -2802,7 +2893,7 @@ const styles = StyleSheet.create({
     top: Platform.OS === 'ios' ? 135 : 120,
     left: 0,
     right: 0,
-    zIndex: 20,
+    zIndex: 200, // Above the drawer (100)
   },
   categoryChipsScroll: {
     paddingHorizontal: 16,
@@ -3051,9 +3142,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    backgroundColor: 'rgba(15, 17, 21, 0.98)',
+    backgroundColor: '#1F2022', // Charcoal grey
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
     paddingTop: 6,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     paddingHorizontal: 40,
@@ -3080,15 +3171,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   tabIconContainerActive: {
-    backgroundColor: '#06B6D4',
+    backgroundColor: theme.colors.primary,
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
     marginTop: 2,
   },
   tabLabelActive: {
-    color: '#06B6D4',
+    color: theme.colors.primary,
   },
 });

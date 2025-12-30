@@ -4,6 +4,14 @@ All notable changes to the Travel Research Companion project will be documented 
 
 ## [Unreleased]
 
+### Fixed
+- **Gemini Model 404 Error** - Updated all Gemini model references from expired preview model `gemini-2.5-flash-preview-05-20` to stable GA model `gemini-2.5-flash`. The dated preview model was deprecated by Google, causing AI chat failures with "404 Not Found" errors. Affected files:
+  - `backend/src/services/gemini.service.ts`
+  - `backend/src/agents/travelAgent.ts`
+  - `backend/src/services/itinerary.service.ts`
+  - `backend/src/services/dayPlanning.service.ts`
+  - `backend/src/services/aiCompanion.service.ts`
+
 ### Added
 - **Explore Tab (Discovery UX Overhaul)** - New dedicated tab in CountryBubbleScreen for AI-suggested places:
   - Bottom navigation with Map and Explore tabs

@@ -49,9 +49,9 @@ const DRAWER_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
 
 // Snap points as percentages of drawer height
 const SNAP_POINTS = {
-  PEEK: DRAWER_HEIGHT * 0.22,       // 22% - Ensures full card (image + name + rating) is visible
-  HALF: DRAWER_HEIGHT * 0.45,       // 45% - Browse mode
-  FULL: DRAWER_HEIGHT * 0.85,       // 85% - Full list
+  PEEK: DRAWER_HEIGHT * 0.22,
+  HALF: DRAWER_HEIGHT * 0.45,
+  FULL: DRAWER_HEIGHT - 200, // Leaves room for category chips at the top
 };
 
 // Compact horizontal card for peek mode
@@ -366,17 +366,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
-      <View style={styles.glassContainer}>
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.background }]} />
-        )}
-        <LinearGradient
-          colors={[categoryColor + '40', 'transparent']}
-          style={styles.topGlow}
-        />
-      </View>
+      {/* Glow removed - it was causing the "frosted" look on Android */}
 
       <GestureDetector gesture={panGesture}>
         <Animated.View style={styles.header}>
@@ -441,6 +431,12 @@ const styles = StyleSheet.create({
     bottom: TAB_BAR_HEIGHT,
     height: SCREEN_HEIGHT - TAB_BAR_HEIGHT,
     zIndex: 100,
+    backgroundColor: '#1F2022', // Charcoal grey
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    elevation: 25,
+    shadowColor: '#000000',
+    overflow: 'hidden',
   },
   glassContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -562,7 +558,7 @@ const styles = StyleSheet.create({
   compactName: {
     fontSize: 13,
     fontWeight: '700',
-    color: theme.colors.textPrimary,
+    color: theme.colors.textInverse, // Dark on white card
     marginTop: 6,
   },
   compactRating: {
@@ -573,7 +569,7 @@ const styles = StyleSheet.create({
   },
   compactRatingText: {
     fontSize: 11,
-    color: theme.colors.textSecondary,
+    color: '#64748B', // Hardcoded Slate-500 for rating
     fontWeight: '700',
   },
   listContent: {
@@ -631,7 +627,7 @@ const styles = StyleSheet.create({
   fullCardName: {
     fontSize: 17,
     fontWeight: '800',
-    color: theme.colors.textPrimary,
+    color: theme.colors.textInverse, // Dark on white card
   },
   fullCardMeta: {
     flexDirection: 'row',
@@ -646,12 +642,12 @@ const styles = StyleSheet.create({
   },
   fullCardRatingText: {
     fontSize: 14,
-    color: theme.colors.textPrimary,
+    color: theme.colors.textInverse, // Dark on white card
     fontWeight: '700',
   },
   fullCardLocation: {
     fontSize: 14,
-    color: theme.colors.textSecondary,
+    color: '#64748B', // Hardcoded Slate-500
     fontWeight: '500',
     flex: 1,
   },

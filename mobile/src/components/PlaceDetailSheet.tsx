@@ -10,9 +10,9 @@ import {
   StyleSheet,
   Image,
   Dimensions,
-  ScrollView as RNScrollView,
   Platform,
 } from 'react-native';
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import BottomSheet, { 
   BottomSheetScrollView, 
   BottomSheetFooter, 
@@ -25,7 +25,10 @@ import theme from '../config/theme';
 import { BouncyPressable } from './BouncyPressable';
 import * as Haptics from 'expo-haptics';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Tab bar height to account for bottom navigation
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 60 : 50;
 
 export interface PlaceDetailSheetRef {
   expand: () => void;
@@ -52,8 +55,8 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 }, ref) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // Snap points: Peek (25%) and Default (55%)
-  const snapPoints = useMemo(() => ['25%', '55%', '90%'], []);
+  // Snap points: Peek (25%), Default (55%), and Max (below chips)
+  const snapPoints = useMemo(() => ['25%', '55%', SCREEN_HEIGHT - 200], []);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
@@ -161,6 +164,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
       backgroundStyle={styles.sheetBackground}
       handleIndicatorStyle={styles.handleIndicator}
       handleStyle={styles.handleStyle}
+      bottomInset={TAB_BAR_HEIGHT + 10} // Increased inset to clear tab bar fully
     >
       {place && (
         <View style={styles.fixedHeader}>
@@ -204,11 +208,13 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
               </Text>
             </View>
 
-            <RNScrollView 
+            {/* Photo Carousel */}
+            <GestureScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false} 
               style={styles.photoCarousel}
               contentContainerStyle={styles.photoCarouselContent}
+              nestedScrollEnabled={true}
             >
               {photoUrls.length > 0 ? (
                 photoUrls.map((url, i) => (
@@ -224,7 +230,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
                   <Ionicons name="image-outline" size={40} color={theme.colors.textSecondary} />
                 </View>
               )}
-            </RNScrollView>
+            </GestureScrollView>
 
             {place.description && (
               <View style={styles.insights}>
@@ -248,7 +254,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 
 const styles = StyleSheet.create({
   sheetBackground: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#1F2022', // Charcoal grey
   },
   handleIndicator: {
     backgroundColor: theme.colors.border,
@@ -257,7 +263,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   handleStyle: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#1F2022', // Charcoal grey
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
   },
@@ -265,7 +271,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 4,
     paddingBottom: 8,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#1F2022', // Charcoal grey
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -284,8 +290,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   closeButton: {
-    padding: 4,
-    backgroundColor: theme.colors.backgroundAlt,
+    padding: 6,
+    backgroundColor: '#2D2E30', // SurfaceLight equivalent
     borderRadius: 20,
   },
   metaRow: {
@@ -331,13 +337,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   photo: {
-    width: 200,
-    height: 140,
+    width: 280, // Larger photos
+    height: 180,
     borderRadius: 20,
     backgroundColor: theme.colors.backgroundAlt,
   },
   photoFirst: {
-    width: 240,
+    width: 280,
   },
   photoPlaceholder: {
     width: 240,
@@ -348,11 +354,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   insights: {
-    backgroundColor: theme.colors.backgroundAlt,
+    backgroundColor: '#FFFFFF', // Solid white card on grey background
     borderRadius: 24,
     padding: 18,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
+    ...theme.shadows.soft.sm,
   },
   insightsHeader: {
     flexDirection: 'row',
@@ -361,7 +368,7 @@ const styles = StyleSheet.create({
   },
   insightsLabel: {
     fontSize: 14,
-    color: theme.colors.textPrimary,
+    color: theme.colors.textInverse, // Dark on white card
     marginLeft: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -369,7 +376,7 @@ const styles = StyleSheet.create({
   },
   insightsQuote: {
     fontSize: 15,
-    color: theme.colors.textSecondary,
+    color: '#475569', // Darker slate for readability on white
     fontStyle: 'italic',
     lineHeight: 22,
     fontWeight: '500',
@@ -379,10 +386,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 12,
     paddingHorizontal: 12,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    backgroundColor: theme.colors.background,
+    paddingBottom: 12, // Consistent padding since it's above tab bar
+    backgroundColor: '#1F2022', // Charcoal grey
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
   },
   actionButton: {
     alignItems: 'center',

@@ -5,9 +5,9 @@ import { TripGroupModel } from '../models/tripGroup.model';
 import { TripSegment } from '../types';
 import logger from '../config/logger';
 
-// Migrated from OpenAI to Gemini 2.5 Flash (100x cheaper, faster)
+// Using Gemini 2.5 Flash (100x cheaper, faster, stable GA)
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
-const GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 interface ParsedItineraryInfo {
   city?: string;
