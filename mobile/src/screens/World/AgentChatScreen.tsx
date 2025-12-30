@@ -203,7 +203,9 @@ export default function AgentChatScreen() {
           <View style={styles.miniCardFooter}>
             <View style={styles.miniCardRating}>
               <Ionicons name="star" size={12} color="#FFD700" />
-              <Text style={styles.miniCardRatingText}>{place.rating?.toFixed(1) || '4.0'}</Text>
+              <Text style={styles.miniCardRatingText}>
+                {place.rating ? Number(place.rating).toFixed(1) : '4.0'}
+              </Text>
             </View>
             <View style={styles.miniCardGo}>
               <Ionicons name="navigate" size={12} color={COLORS.primary} />
