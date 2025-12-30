@@ -20,6 +20,7 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { pushNotificationService } from './src/services/pushNotification.service';
 import shareIntentService, { SharedContent } from './src/services/shareIntent.service';
 import { SmartShareProcessor } from './src/components/SmartShareProcessor';
+import { TransitionOverlay } from './src/components/TransitionOverlay';
 import theme from './src/config/theme';
 
 // Onboarding
@@ -548,6 +549,9 @@ export default function App() {
             onClose={handleShareClose}
           />
         )}
+        
+        {/* Global Transition Overlay - Shows during cross-screen navigation */}
+        <TransitionOverlay />
       </ErrorBoundary>
     </GestureHandlerRootView>
   );

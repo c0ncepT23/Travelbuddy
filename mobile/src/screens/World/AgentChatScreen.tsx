@@ -34,6 +34,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useCompanionStore, CompanionMessage, PlaceResult } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripStore } from '../../stores/tripStore';
+import { useTripDataStore } from '../../stores/tripDataStore';
 
 import { BouncyPressable } from '../../components/BouncyPressable';
 
@@ -134,16 +135,22 @@ export default function AgentChatScreen() {
     setInputText(query);
   };
 
-  const handlePlacePress = (placeId: string, placeTripId?: string) => {
-    const targetTripId = placeTripId || tripId;
-    if (targetTripId) {
-      // Navigate back to CountryBubbles with the place to highlight
-      navigation.navigate('CountryBubbles', { 
-        tripId: targetTripId, 
-        highlightPlaceId: placeId,
-        countryName: countryName 
-      });
-    }
+  // Get store actions for cross-screen communication
+  const { setPendingAction, setTransition } = useTripDataStore();
+
+  const handlePlacePress = (placeId: string, placeName?: string) => {
+    // Set pending action for CountryBubbleScreen to handle
+    setPendingAction({
+      type: 'highlight_place',
+      placeId,
+      placeName: placeName || 'Selected place',
+    });
+    
+    // Show transition overlay with nice feedback
+    setTransition(`Flying to ${placeName || 'place'}...`, '✈️');
+    
+    // Go back to the map (CountryBubbleScreen) - no data reload!
+    navigation.goBack();
   };
 
   const handleClose = () => {
@@ -182,7 +189,7 @@ export default function AgentChatScreen() {
       <TouchableOpacity
         key={place.id}
         style={styles.miniPlaceCard}
-        onPress={() => handlePlacePress(place.id)}
+        onPress={() => handlePlacePress(place.id, place.name)}
         activeOpacity={0.9}
       >
         <View style={styles.miniCardImageContainer}>
@@ -226,7 +233,7 @@ export default function AgentChatScreen() {
     <TouchableOpacity
       key={place.id}
       style={styles.placeCard}
-      onPress={() => handlePlacePress(place.id)}
+      onPress={() => handlePlacePress(place.id, place.name)}
       activeOpacity={0.8}
     >
       <View style={[styles.placeCategoryDot, { backgroundColor: getCategoryColor(place.category) }]}>

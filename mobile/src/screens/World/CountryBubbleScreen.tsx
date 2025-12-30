@@ -61,6 +61,7 @@ import theme from '../../config/theme';
 import { GlassCard } from '../../components/GlassCard';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
+import { useTripDataStore } from '../../stores/tripDataStore';
 
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { ScoutCarousel, ScoutResult } from '../../components/ScoutCarousel';
@@ -348,6 +349,7 @@ interface RouteParams {
   countryName: string;
   discoveryIntent?: any;
   scoutResults?: any[];
+  highlightPlaceId?: string; // Legacy support for direct navigation
 }
 
 interface BubbleData {
@@ -661,7 +663,8 @@ export default function CountryBubbleScreen() {
   const params = route.params || {};
   const tripId = params.tripId || '';
   const countryName = params.countryName || 'Unknown';
-  const highlightPlaceId = params.highlightPlaceId as string | undefined;
+  // Legacy support: highlightPlaceId from params (new: use pendingAction)
+  const highlightPlaceIdFromParams = params.highlightPlaceId as string | undefined;
 
   // Data state
   const [isLoading, setIsLoading] = useState(true);
@@ -725,6 +728,14 @@ export default function CountryBubbleScreen() {
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
   const { location, startTracking } = useLocationStore();
+  const { 
+    fetchSavedPlaces, 
+    getSavedPlaces, 
+    isTripLoading,
+    pendingAction, 
+    clearPendingAction,
+    clearTransition 
+  } = useTripDataStore();
 
   const countryKey = getCountryKey(countryName);
   const countryCoords = COUNTRY_COORDS[countryKey] || COUNTRY_COORDS.default;
@@ -935,12 +946,13 @@ export default function CountryBubbleScreen() {
     
     setIsLoading(true);
     try {
-      const itemsResponse = await api.get(`/trips/${tripId}/items`);
-      const fetchedItems: SavedItem[] = itemsResponse.data.data || itemsResponse.data || [];
+      // Use the centralized store for data fetching (with caching!)
+      // This avoids refetching when navigating back from chat
+      const fetchedItems = await fetchSavedPlaces(tripId);
       
       // Filter for unique items before setting state
       const uniqueItems = filterUniqueItems(fetchedItems);
-      console.log(`📦 Fetched ${fetchedItems.length} items, filtered to ${uniqueItems.length} unique places`);
+      console.log(`📦 Loaded ${fetchedItems.length} items, filtered to ${uniqueItems.length} unique places`);
       
       // DEBUG: Log coordinate status
       const withCoords = uniqueItems.filter(i => i.location_lat && i.location_lng);
@@ -997,19 +1009,41 @@ export default function CountryBubbleScreen() {
     }
   };
 
-  // Handle highlight from chat navigation - open place detail when coming from AgentChatScreen
+  // Handle pendingAction from other screens (e.g., AgentChatScreen)
+  // This is the scalable cross-screen action system
   useEffect(() => {
-    if (!isLoading && allItems.length > 0 && highlightPlaceId) {
-      const placeToHighlight = allItems.find(p => p.id === highlightPlaceId);
+    if (!isLoading && allItems.length > 0 && pendingAction) {
+      if (pendingAction.type === 'highlight_place') {
+        const placeToHighlight = allItems.find(p => p.id === pendingAction.placeId);
+        if (placeToHighlight) {
+          console.log(`🎯 [PendingAction] Highlighting place: ${placeToHighlight.name}`);
+          // Small delay to ensure UI is ready, then fly to place
+          setTimeout(() => {
+            handlePlaceSelect(placeToHighlight);
+            clearPendingAction();
+            clearTransition();
+          }, 300);
+        } else {
+          console.log(`⚠️ [PendingAction] Place not found: ${pendingAction.placeId}`);
+          clearPendingAction();
+          clearTransition();
+        }
+      }
+    }
+  }, [isLoading, allItems, pendingAction]);
+
+  // Legacy support: highlightPlaceId from route params (backwards compatibility)
+  useEffect(() => {
+    if (!isLoading && allItems.length > 0 && highlightPlaceIdFromParams && !pendingAction) {
+      const placeToHighlight = allItems.find(p => p.id === highlightPlaceIdFromParams);
       if (placeToHighlight) {
-        console.log(`🎯 Highlighting place from chat: ${placeToHighlight.name}`);
-        // Small delay to ensure UI is ready
+        console.log(`🎯 [Legacy] Highlighting place from params: ${placeToHighlight.name}`);
         setTimeout(() => {
           handlePlaceSelect(placeToHighlight);
         }, 500);
       }
     }
-  }, [isLoading, allItems, highlightPlaceId]);
+  }, [isLoading, allItems, highlightPlaceIdFromParams]);
 
   // Auto-focus to user location if in country
   useEffect(() => {

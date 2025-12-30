@@ -4,6 +4,14 @@ All notable changes to the Travel Research Companion project will be documented 
 
 ## [Unreleased]
 
+### Added
+- **Zustand Trip Data Store (Scalable Architecture)** - New centralized state management for trip data:
+  - `useTripDataStore` - Caches saved places per trip (survives screen navigation)
+  - `pendingAction` pattern - Cross-screen communication without prop drilling
+  - `transitionState` - Global UI feedback during navigation
+  - `TransitionOverlay` component - Beautiful animated overlay during transitions
+  - **Result**: Clicking a chat place card now instantly flies to it (no 2-3s reload!)
+
 ### Fixed
 - **AI Chat Place Cards UX** - Fixed broken chat card display:
   - Backend now returns `photos_json`, `rating`, `user_ratings_total` for rich UI cards
