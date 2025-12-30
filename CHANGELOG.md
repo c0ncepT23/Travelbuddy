@@ -4,6 +4,14 @@ All notable changes to the Travel Research Companion project will be documented 
 
 ## [Unreleased]
 
+### Fixed
+- **AI Chat Place Cards UX** - Fixed broken chat card display:
+  - Backend now returns `photos_json`, `rating`, `user_ratings_total` for rich UI cards
+  - Place cards now show photos properly (was only showing emoji placeholders)
+  - Cards are now compact (160x180) instead of vertically stretched
+  - AI message no longer lists places - just a short intro since cards are swipeable
+  - Updated `PlaceResult` interface to include all card data fields
+
 ### Added
 - **Smart AI Query Processing (Holy Grail)** - World-class natural language understanding with schema-enforced JSON:
   - **"Don't Beg" Architecture**: Uses Gemini's `responseSchema` for guaranteed JSON structure - no parsing errors, no hallucinated fields

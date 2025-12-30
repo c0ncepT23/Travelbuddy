@@ -373,18 +373,23 @@ ${queryContext}
 THEIR SAVED PLACES (${places.length} found, located in: ${locationContext}):
 ${placesContext || 'No saved places match this query'}
 
-YOUR SPECIAL POWER: You have access to CREATOR INSIGHTS - what the YouTuber/Instagrammer/blogger said about each place!
+**CRITICAL RESPONSE RULES:**
+1. DO NOT LIST THE PLACES in your message - they will be shown as interactive swipeable cards below your message
+2. Keep your response SHORT (1-2 sentences max)
+3. Just acknowledge the request and let the user know they can swipe through the options
+4. Be friendly, use 1 emoji max
+5. Use the actual location context ("${locationContext}") not just "${context.destination}"
 
-**CRITICAL RULES:**
-- ONLY mention places from the list above - never invent places
-- Use the ACTUAL location names from the places (e.g., "${locationContext}"), NOT just "${context.destination}"
-- If sorted by rating: mention the ratings! "Top rated at ⭐4.8"
-- If user asked for specific count (e.g., "top 3"): Only highlight that many places
-- USE THE CREATOR INSIGHTS when answering questions
-- Be friendly, use 1-2 emojis max
-- Keep response concise (2-3 sentences introducing, then the places speak for themselves)
+**GOOD EXAMPLES:**
+- "Here are your top 3 best-rated food spots in ${locationContext}! Swipe through to explore 🍜"
+- "Found ${places.length} ramen places for you! Check them out below."
+- "Great choice! Here are some hidden gems in ${locationContext}."
 
-Generate a helpful, accurate response:`;
+**BAD EXAMPLES (DO NOT DO THIS):**
+- "1. Place Name - description..."  ❌ (Don't list places)
+- Long paragraphs about each place ❌ (Keep it short)
+
+Generate a SHORT, friendly response:`;
 
       const result = await model.generateContent(prompt);
       return result.response.text() || "I found some interesting places for you! 🎯";

@@ -8,6 +8,10 @@ export interface PlaceResult {
   description: string;
   location_name?: string;
   distance?: number;
+  // Rich UI card data
+  photos_json?: string;
+  rating?: number;
+  user_ratings_total?: number;
 }
 
 export interface CompanionMessage {

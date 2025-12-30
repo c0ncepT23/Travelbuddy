@@ -843,6 +843,10 @@ export class AICompanionService {
           description: p.description || '',
           location_name: p.location_name,
           distance: p.distance,
+          // Include data for rich UI cards
+          photos_json: p.photos_json,
+          rating: p.rating,
+          user_ratings_total: p.user_ratings_total,
         })),
       };
     } catch (error) {
@@ -864,6 +868,10 @@ export class AICompanionService {
           description: p.description || '',
           location_name: p.location_name,
           distance: p.distance,
+          // Include data for rich UI cards
+          photos_json: p.photos_json,
+          rating: p.rating,
+          user_ratings_total: p.user_ratings_total,
         })),
       };
     }

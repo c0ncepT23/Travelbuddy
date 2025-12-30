@@ -170,7 +170,7 @@ export default function AgentChatScreen() {
   };
 
   const renderPlaceCard = (place: PlaceResult) => {
-    const photoUrl = getPlacePhotoUrl((place as any).photos_json, 300);
+    const photoUrl = getPlacePhotoUrl(place.photos_json, 300);
     const categoryColor = getCategoryColor(place.category);
     
     return (
@@ -202,8 +202,8 @@ export default function AgentChatScreen() {
           <Text style={styles.miniCardName} numberOfLines={1}>{place.name}</Text>
           <View style={styles.miniCardFooter}>
             <View style={styles.miniCardRating}>
-              <Ionicons name="star" size={10} color="#FFD700" />
-              <Text style={styles.miniCardRatingText}>{(place as any).rating || '4.0'}</Text>
+              <Ionicons name="star" size={12} color="#FFD700" />
+              <Text style={styles.miniCardRatingText}>{place.rating?.toFixed(1) || '4.0'}</Text>
             </View>
             <View style={styles.miniCardGo}>
               <Ionicons name="navigate" size={12} color={COLORS.primary} />
@@ -645,9 +645,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   miniPlaceCard: {
-    width: 180,
+    width: 160,
+    height: 180, // Fixed height to prevent stretching
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   miniCardImageContainer: {
-    height: 110,
+    height: 100,
     width: '100%',
     backgroundColor: '#E8EAED',
   },
@@ -688,13 +689,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   miniCardInfo: {
-    padding: 12,
+    padding: 10,
+    flex: 1,
+    justifyContent: 'space-between',
   },
   miniCardName: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#0F172A',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   miniCardFooter: {
     flexDirection: 'row',
