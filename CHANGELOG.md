@@ -5,9 +5,12 @@ All notable changes to the Travel Research Companion project will be documented 
 ## [Unreleased]
 
 ### Added
-- **Smart AI Query Processing** - World-class natural language understanding for travel queries:
+- **Smart AI Query Processing (Holy Grail)** - World-class natural language understanding with schema-enforced JSON:
+  - **"Don't Beg" Architecture**: Uses Gemini's `responseSchema` for guaranteed JSON structure - no parsing errors, no hallucinated fields
+  - **Type-Safe Intent**: `SchemaType.INTEGER` for limit ensures real numbers, `enum` constraints ensure only valid values
   - **Count Extraction**: "top 3", "best 5", "give me 2" → Returns exact count requested
-  - **Rating Sorting**: "best rated", "top rated", "highest rated" → Sorts by rating descending
+  - **Rating Sorting**: "best rated", "top rated", "highest rated" → Sorts by rating descending (using actual Google data)
+  - **Popularity Sorting**: "most popular", "viral", "famous" → Sorts by review count
   - **Distance Sorting**: "closest", "nearest" → Sorts by proximity
   - **Cuisine Filtering**: "best ramen", "pizza places", "street food" → Filters by cuisine type
   - **Specific Dish Search**: "best pad thai", "cheesecake spots" → Understands dish-specific queries

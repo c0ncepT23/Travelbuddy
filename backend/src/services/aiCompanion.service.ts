@@ -408,9 +408,9 @@ export class AICompanionService {
     time?: 'now' | 'later' | 'any';
     referencedPlace?: string; // For alternatives - the place user can't visit
     reason?: string; // Why they can't visit (closed, crowded, etc.)
-    // NEW: Smart query fields
+    // Smart query fields (Schema-enforced from Gemini)
     limit?: number;
-    sortBy?: 'rating' | 'distance' | 'recent' | null;
+    sortBy?: 'rating' | 'distance' | 'recent' | 'review_count' | null;
     sortOrder?: 'desc' | 'asc';
     cuisineType?: string;
     specificDish?: string;
@@ -555,6 +555,14 @@ export class AICompanionService {
         return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
       });
       logger.info(`[FilterPlaces] Sorted by recent (${sortOrder})`);
+    } else if (sortBy === 'review_count') {
+      // Sort by popularity (number of reviews) - "most popular", "viral"
+      filtered.sort((a, b) => {
+        const reviewsA = a.user_ratings_total ?? 0;
+        const reviewsB = b.user_ratings_total ?? 0;
+        return sortOrder === 'desc' ? reviewsB - reviewsA : reviewsA - reviewsB;
+      });
+      logger.info(`[FilterPlaces] Sorted by review_count (${sortOrder})`);
     } else if (intent.distance === 'nearby' && context.location) {
       // Legacy: If user wants "nearby", sort by distance ascending
       filtered.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, Content } from '@google/generative-ai';
+import { GoogleGenerativeAI, Content, SchemaType } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { config } from '../config/env';
 import { ItemCategory, AgentContext, DiscoveryIntent } from '../types';
@@ -114,6 +114,10 @@ Response rules:
    * Analyze user query intent using Gemini 2.5 Flash
    * Returns structured intent for routing
    */
+  /**
+   * Analyze user query intent using Schema-Enforced JSON ("Don't Beg" approach)
+   * Uses responseSchema for GUARANTEED structure - no parsing errors, no hallucinated fields
+   */
   static async analyzeIntent(
     query: string,
     context: { 
@@ -129,131 +133,136 @@ Response rules:
     time?: 'now' | 'later' | 'any';
     referencedPlace?: string;
     reason?: string;
-    // NEW: Smart query fields
+    // Smart query fields
     limit?: number;
-    sortBy?: 'rating' | 'distance' | 'recent' | null;
+    sortBy?: 'rating' | 'distance' | 'recent' | 'review_count' | null;
     sortOrder?: 'desc' | 'asc';
     cuisineType?: string;
     specificDish?: string;
   }> {
     try {
+      // SCHEMA DEFINITION - Forces model to strictly follow this structure
+      // This is the "Don't Beg" solution - guaranteed JSON, no parsing errors
+      const intentSchema: {
+        type: typeof SchemaType.OBJECT;
+        properties: Record<string, any>;
+        required: string[];
+      } = {
+        type: SchemaType.OBJECT,
+        properties: {
+          type: { 
+            type: SchemaType.STRING, 
+            enum: ['location_based', 'category', 'specific', 'surprise', 'general', 'alternatives', 'planning'],
+            description: 'The primary intent type'
+          },
+          category: { 
+            type: SchemaType.STRING, 
+            enum: ['food', 'shopping', 'place', 'activity', 'accommodation', 'tip'],
+            nullable: true,
+            description: 'Content category if mentioned'
+          },
+          keywords: { 
+            type: SchemaType.ARRAY, 
+            items: { type: SchemaType.STRING },
+            description: 'Relevant search keywords'
+          },
+          distance: { 
+            type: SchemaType.STRING, 
+            enum: ['nearby', 'walking', 'any'],
+            nullable: true 
+          },
+          time: { 
+            type: SchemaType.STRING, 
+            enum: ['now', 'later', 'any'],
+            nullable: true 
+          },
+          // Smart query fields - INTEGER guarantees real numbers
+          limit: { 
+            type: SchemaType.INTEGER, 
+            nullable: true,
+            description: 'Number of results requested (e.g., "top 3" = 3)'
+          },
+          sortBy: { 
+            type: SchemaType.STRING, 
+            enum: ['rating', 'distance', 'recent', 'review_count'],
+            nullable: true,
+            description: 'How to sort results'
+          },
+          sortOrder: { 
+            type: SchemaType.STRING, 
+            enum: ['desc', 'asc'],
+            nullable: true 
+          },
+          cuisineType: { 
+            type: SchemaType.STRING, 
+            nullable: true,
+            description: 'Specific cuisine (ramen, pizza, coffee, etc.)'
+          },
+          specificDish: { 
+            type: SchemaType.STRING, 
+            nullable: true,
+            description: 'Specific dish name if mentioned'
+          },
+          referencedPlace: { 
+            type: SchemaType.STRING, 
+            nullable: true,
+            description: 'Place name for alternatives intent'
+          },
+          reason: { 
+            type: SchemaType.STRING, 
+            nullable: true,
+            description: 'Reason for alternatives (closed, crowded, etc.)'
+          },
+        },
+        required: ['type', 'keywords']
+      };
+
       const model = genAI.getGenerativeModel({ 
         model: MODELS.FLASH,
         generationConfig: {
+          temperature: 0.1, // Low temp for consistent parsing
           responseMimeType: 'application/json',
-          temperature: 0.2,
+          responseSchema: intentSchema, // THE MAGIC - Schema enforcement
         }
       });
 
-      const prompt = `You are a world-class travel AI query parser. Analyze this query with PRECISION.
+      // Simplified prompt - schema handles structure, we just need intent guidance
+      const prompt = `Parse this travel query. Context: Time ${context.currentTime}, Location ${context.hasLocation ? 'Known' : 'Unknown'}, Destination: ${context.destination}.
 
 User query: "${query}"
-Current time: ${context.currentTime}
-User location: ${context.hasLocation ? 'Known' : 'Unknown'}
-Destination: ${context.destination}
 
-**INTENT TYPES:**
-- location_based: "near me", "nearby", "around here", "close by"
-- category: asking about food/shopping/places/activities
-- specific: asking about a named place
-- surprise: "surprise me", "random", "anything", "you pick"
-- alternatives: can't go to a place, wants similar options
-- planning: wants to plan their day, create itinerary
-- general: other questions or conversation
+PARSING RULES:
+- "near me", "nearby", "closest" → type: location_based, sortBy: distance, sortOrder: asc
+- "best rated", "top rated", "highest rated" → sortBy: rating, sortOrder: desc
+- "most popular", "viral", "famous" → sortBy: review_count, sortOrder: desc
+- "top 3", "best 5", "give me 2" → limit: that number
+- "a few" → limit: 3
+- Food types like "ramen", "pizza", "coffee" → cuisineType: that type
+- "X is closed", "alternative to X" → type: alternatives, referencedPlace: X
+- "surprise me", "random" → type: surprise
+- "plan my day" → type: planning
 
-**SMART EXTRACTION RULES:**
-
-1. **limit**: Extract explicit count from phrases like:
-   - "top 3" → 3
-   - "best 5" → 5
-   - "give me 2" → 2
-   - "a few" → 3
-   - No number mentioned → null (will default to 5)
-
-2. **sortBy**: Extract sorting intent:
-   - "best rated", "top rated", "highest rated" → "rating"
-   - "closest", "nearest" → "distance"
-   - "newest", "recently added" → "recent"
-   - No sorting mentioned → null
-
-3. **sortOrder**: Usually "desc" for "best/top/highest", "asc" for "closest"
-
-4. **cuisineType**: Extract specific food type:
-   - "best ramen" → "ramen"
-   - "where can I get pizza" → "pizza"
-   - "sushi places" → "sushi"
-   - "street food" → "street food"
-   - Not food-specific → null
-
-5. **specificDish**: The exact dish if mentioned:
-   - "best pad thai" → "pad thai"
-   - "cheesecake spots" → "cheesecake"
-   - General food query → null
-
-6. **category**: food, shopping, place, activity, accommodation, tip (or null)
-
-7. **keywords**: Other relevant search terms NOT already captured
-
-**EXAMPLES:**
-
-Query: "what are the top 3 best rated food spots"
-→ { "type": "category", "category": "food", "limit": 3, "sortBy": "rating", "sortOrder": "desc", "keywords": [] }
-
-Query: "where can I get the best ramen"
-→ { "type": "category", "category": "food", "cuisineType": "ramen", "sortBy": "rating", "sortOrder": "desc", "keywords": ["ramen"] }
-
-Query: "closest coffee shop"
-→ { "type": "location_based", "category": "food", "cuisineType": "coffee", "sortBy": "distance", "sortOrder": "asc", "keywords": ["coffee"] }
-
-Query: "show me 2 nice viewpoints"
-→ { "type": "category", "category": "place", "limit": 2, "keywords": ["viewpoint"] }
-
-Query: "surprise me with a hidden gem"
-→ { "type": "surprise", "keywords": ["hidden gem"] }
-
-RESPOND ONLY WITH VALID JSON:
-{
-  "type": "category",
-  "category": "food",
-  "keywords": [],
-  "distance": "any",
-  "time": "now",
-  "limit": 3,
-  "sortBy": "rating",
-  "sortOrder": "desc",
-  "cuisineType": null,
-  "specificDish": null,
-  "referencedPlace": null,
-  "reason": null
-}`;
+Extract the structured intent from the query.`;
 
       const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const parsed = JSON.parse(result.response.text());
       
-      // Parse JSON
-      let cleanText = text.trim();
-      if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      }
+      logger.info(`[SmartIntent] Schema-enforced: type=${parsed.type}, limit=${parsed.limit}, sortBy=${parsed.sortBy}, cuisineType=${parsed.cuisineType}`);
       
-      const parsed = JSON.parse(cleanText);
-      
-      logger.info(`[SmartIntent] Parsed: limit=${parsed.limit}, sortBy=${parsed.sortBy}, cuisineType=${parsed.cuisineType}`);
-      
+      // Return with defaults for optional fields
       return {
         type: parsed.type || 'general',
-        category: parsed.category === 'null' || parsed.category === null ? undefined : parsed.category,
+        category: parsed.category || undefined,
         keywords: parsed.keywords || [],
         distance: parsed.distance || 'any',
         time: parsed.time || 'any',
-        referencedPlace: parsed.referencedPlace === 'null' || parsed.referencedPlace === null ? undefined : parsed.referencedPlace,
-        reason: parsed.reason === 'null' || parsed.reason === null ? undefined : parsed.reason,
-        // NEW fields
-        limit: parsed.limit === 'null' || parsed.limit === null ? undefined : parsed.limit,
-        sortBy: parsed.sortBy === 'null' || parsed.sortBy === null ? undefined : parsed.sortBy,
+        referencedPlace: parsed.referencedPlace || undefined,
+        reason: parsed.reason || undefined,
+        limit: parsed.limit || undefined,
+        sortBy: parsed.sortBy || undefined,
         sortOrder: parsed.sortOrder || 'desc',
-        cuisineType: parsed.cuisineType === 'null' || parsed.cuisineType === null ? undefined : parsed.cuisineType,
-        specificDish: parsed.specificDish === 'null' || parsed.specificDish === null ? undefined : parsed.specificDish,
+        cuisineType: parsed.cuisineType || undefined,
+        specificDish: parsed.specificDish || undefined,
       };
     } catch (error) {
       logger.error('Gemini intent analysis error:', error);
