@@ -137,7 +137,12 @@ export default function AgentChatScreen() {
   const handlePlacePress = (placeId: string, placeTripId?: string) => {
     const targetTripId = placeTripId || tripId;
     if (targetTripId) {
-      navigation.navigate('TripDetail', { tripId: targetTripId, highlightItemId: placeId });
+      // Navigate back to CountryBubbles with the place to highlight
+      navigation.navigate('CountryBubbles', { 
+        tripId: targetTripId, 
+        highlightPlaceId: placeId,
+        countryName: countryName 
+      });
     }
   };
 

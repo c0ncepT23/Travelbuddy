@@ -661,6 +661,7 @@ export default function CountryBubbleScreen() {
   const params = route.params || {};
   const tripId = params.tripId || '';
   const countryName = params.countryName || 'Unknown';
+  const highlightPlaceId = params.highlightPlaceId as string | undefined;
 
   // Data state
   const [isLoading, setIsLoading] = useState(true);
@@ -995,6 +996,20 @@ export default function CountryBubbleScreen() {
       setIsLoading(false);
     }
   };
+
+  // Handle highlight from chat navigation - open place detail when coming from AgentChatScreen
+  useEffect(() => {
+    if (!isLoading && allItems.length > 0 && highlightPlaceId) {
+      const placeToHighlight = allItems.find(p => p.id === highlightPlaceId);
+      if (placeToHighlight) {
+        console.log(`🎯 Highlighting place from chat: ${placeToHighlight.name}`);
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          handlePlaceSelect(placeToHighlight);
+        }, 500);
+      }
+    }
+  }, [isLoading, allItems, highlightPlaceId]);
 
   // Auto-focus to user location if in country
   useEffect(() => {
