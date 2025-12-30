@@ -15,43 +15,45 @@
 // ============================================
 
 export const colors = {
-  // Primary Colors
-  primary: '#2563EB',       // Electric Blue - main CTA
-  primaryDark: '#1D4ED8',   // Darker blue for 3D depth
-  primaryLight: '#3B82F6',  // Lighter blue for hover
+  // Primary Colors (Candy Palette)
+  primary: '#6366F1',       // Indigo
+  primaryDark: '#4F46E5',   // Darker Indigo
+  primaryLight: '#818CF8',  // Lighter Indigo
+  accent: '#A855F7',        // Purple accent
+  accentLight: '#C084FC',
 
   // Secondary Colors
-  secondary: '#F59E0B',     // Amber/Gold - accent
-  secondaryDark: '#D97706', // Darker amber
+  secondary: '#F59E0B',     // Amber/Gold
+  secondaryDark: '#D97706',
   success: '#10B981',       // Emerald green
-  successDark: '#059669',   // Darker green
+  successDark: '#059669',
   error: '#EF4444',         // Red
-  errorDark: '#DC2626',     // Darker red
-  warning: '#F59E0B',       // Amber
+  errorDark: '#DC2626',
+  warning: '#F59E0B',
 
   // Background Colors
-  background: '#FAFAFA',    // Off-white main background
-  backgroundAlt: '#F5F5F5', // Slightly darker alt
-  surface: '#FFFFFF',       // Card/surface white
+  background: '#F8FAFC',    // Slate-50 background (cleaner)
+  backgroundAlt: '#F1F5F9', // Slate-100
+  surface: '#FFFFFF',
   surfaceElevated: '#FFFFFF',
 
   // Text Colors
-  textPrimary: '#1A1A1A',   // Near black
-  textSecondary: '#6B7280', // Gray 500
-  textTertiary: '#9CA3AF',  // Gray 400
-  textInverse: '#FFFFFF',   // White text
+  textPrimary: '#0F172A',   // Slate-900 (softer than black)
+  textSecondary: '#64748B', // Slate-500
+  textTertiary: '#94A3B8',  // Slate-400
+  textInverse: '#FFFFFF',
 
   // Border Colors
-  border: '#E5E7EB',        // Light gray border
-  borderDark: '#1A1A1A',    // Black border for NeoPOP effect
-  borderMedium: '#D1D5DB',  // Medium gray
+  border: '#E2E8F0',        // Slate-200
+  borderDark: '#0F172A',    // NeoPOP edge (softened to slate-900)
+  borderMedium: '#CBD5E1',
 
   // Category Colors (vibrant, saturated)
-  food: '#EF4444',          // Red
-  accommodation: '#8B5CF6', // Purple
-  place: '#3B82F6',         // Blue
+  food: '#F43F5E',          // Rose
+  accommodation: '#8B5CF6', // Violet
+  place: '#0EA5E9',         // Sky
   shopping: '#EC4899',      // Pink
-  activity: '#10B981',      // Green
+  activity: '#10B981',      // Emerald
   tip: '#F59E0B',           // Amber
 
   // Status Colors
@@ -61,6 +63,17 @@ export const colors = {
   // Special
   overlay: 'rgba(0,0,0,0.5)',
   shadow: '#000000',
+  glass: 'rgba(255, 255, 255, 0.7)',
+  glassBorder: 'rgba(255, 255, 255, 0.4)',
+};
+
+// Gradients (World Class feel)
+export const gradients = {
+  primary: ['#6366F1', '#A855F7'],
+  secondary: ['#F59E0B', '#EF4444'],
+  success: ['#10B981', '#34D399'],
+  glass: ['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.4)'],
+  darkGlass: ['rgba(0, 0, 0, 0.8)', 'rgba(0, 0, 0, 0.5)'],
 };
 
 // ============================================
@@ -203,12 +216,12 @@ export const shadows = {
 // ============================================
 
 export const components = {
-  // NeoPOP Button (Primary)
+  // NeoPOP Button (Primary) - Softened with border radius
   buttonPrimary: {
     backgroundColor: colors.primary,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.borderDark,
-    borderRadius: borderRadius.none,
+    borderRadius: borderRadius.xl,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xl,
     ...shadows.neopop.md,
@@ -217,9 +230,9 @@ export const components = {
   // NeoPOP Button (Secondary/Outline)
   buttonSecondary: {
     backgroundColor: colors.surface,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.borderDark,
-    borderRadius: borderRadius.none,
+    borderRadius: borderRadius.xl,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xl,
     ...shadows.neopop.sm,
@@ -233,12 +246,22 @@ export const components = {
     ...shadows.soft.md,
   },
 
-  // NeoPOP Card (with hard edges)
+  // Glass Card (World Class Premium feel)
+  cardGlass: {
+    backgroundColor: colors.glass,
+    borderRadius: borderRadius['2xl'],
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    ...shadows.soft.md,
+  },
+
+  // NeoPOP Card (with softened edges)
   cardNeopop: {
     backgroundColor: colors.surface,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.borderDark,
-    borderRadius: borderRadius.none,
+    borderRadius: borderRadius.lg,
     padding: spacing.lg,
     ...shadows.neopop.md,
   },
@@ -248,12 +271,11 @@ export const components = {
     backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: colors.borderDark,
-    borderRadius: borderRadius.none,
+    borderRadius: borderRadius.lg,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     fontSize: typography.sizes.md,
     color: colors.textPrimary,
-    ...shadows.neopop.sm,
   },
 
   // Tag/Pill

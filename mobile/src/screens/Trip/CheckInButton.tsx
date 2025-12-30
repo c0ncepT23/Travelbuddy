@@ -11,6 +11,10 @@ import {
 } from 'react-native';
 import { SavedItem } from '../../types';
 import { useCheckInStore } from '../../stores/checkInStore';
+import { BouncyPressable } from '../../components/BouncyPressable';
+import theme from '../../config/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { GlassCard } from '../../components/GlassCard';
 
 interface CheckInButtonProps {
   item: SavedItem;
@@ -18,6 +22,7 @@ interface CheckInButtonProps {
 }
 
 export const CheckInButton: React.FC<CheckInButtonProps> = ({ item, onCheckInComplete }) => {
+// ...
   const [showModal, setShowModal] = useState(false);
   const [rating, setRating] = useState<number>(0);
   const [note, setNote] = useState('');
@@ -104,7 +109,7 @@ export const CheckInButton: React.FC<CheckInButtonProps> = ({ item, onCheckInCom
 
   return (
     <>
-      <TouchableOpacity
+      <BouncyPressable
         style={[
           styles.checkInButton,
           hasCheckedIn && styles.checkInButtonChecked
@@ -113,16 +118,18 @@ export const CheckInButton: React.FC<CheckInButtonProps> = ({ item, onCheckInCom
         onLongPress={hasCheckedIn ? undefined : () => setShowModal(true)}
         disabled={isLoading || hasCheckedIn}
       >
-        <Text style={styles.checkInIcon}>
-          {hasCheckedIn ? '✅' : '📍'}
-        </Text>
+        <Ionicons 
+          name={hasCheckedIn ? "checkmark-circle" : "location"} 
+          size={18} 
+          color="#FFFFFF" 
+        />
         <Text style={[
           styles.checkInText,
           hasCheckedIn && styles.checkInTextChecked
         ]}>
           {hasCheckedIn ? 'Checked In' : 'Check In'}
         </Text>
-      </TouchableOpacity>
+      </BouncyPressable>
 
       <Modal
         visible={showModal}
@@ -181,14 +188,14 @@ export const CheckInButton: React.FC<CheckInButtonProps> = ({ item, onCheckInCom
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity
+              <BouncyPressable
                 style={styles.skipButton}
                 onPress={handleQuickCheckIn}
               >
                 <Text style={styles.skipText}>Skip Details</Text>
-              </TouchableOpacity>
+              </BouncyPressable>
               
-              <TouchableOpacity
+              <BouncyPressable
                 style={styles.saveButton}
                 onPress={handleDetailedCheckIn}
                 disabled={isLoading}
@@ -196,7 +203,7 @@ export const CheckInButton: React.FC<CheckInButtonProps> = ({ item, onCheckInCom
                 <Text style={styles.saveText}>
                   {isLoading ? 'Saving...' : 'Save'}
                 </Text>
-              </TouchableOpacity>
+              </BouncyPressable>
             </View>
           </View>
         </View>
@@ -209,150 +216,169 @@ const styles = StyleSheet.create({
   checkInButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#6366F1',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.xl,
+    gap: 8,
+    ...theme.shadows.neopop.sm,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
   },
   checkInButtonChecked: {
-    backgroundColor: '#10B981',
-    opacity: 0.8,
-  },
-  checkInIcon: {
-    fontSize: 16,
+    backgroundColor: theme.colors.success,
+    borderColor: theme.colors.borderDark,
   },
   checkInText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   checkInTextChecked: {
     color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)', // Slate-900 with alpha
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '85%',
+    ...theme.shadows.soft.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.colors.border,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 22,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
   },
   closeButton: {
-    fontSize: 24,
-    color: '#6B7280',
+    fontSize: 20,
+    color: theme.colors.textSecondary,
+    backgroundColor: theme.colors.backgroundAlt,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    textAlign: 'center',
+    lineHeight: 34,
+    overflow: 'hidden',
   },
   modalContent: {
-    padding: 20,
+    padding: 24,
   },
   placeInfo: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   placeName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 24,
+    fontWeight: '900',
+    color: theme.colors.textPrimary,
     marginBottom: 4,
   },
   placeLocation: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 15,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    marginBottom: 12,
   },
   starsContainer: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   starButton: {
     padding: 4,
   },
   star: {
-    fontSize: 32,
+    fontSize: 36,
   },
   textInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    color: '#111827',
-    minHeight: 80,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    color: theme.colors.textPrimary,
+    minHeight: 100,
     textAlignVertical: 'top',
   },
   costInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
+    paddingHorizontal: 16,
   },
   currencySymbol: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
     marginRight: 8,
   },
   costField: {
     flex: 1,
-    fontSize: 16,
-    color: '#111827',
-    paddingVertical: 12,
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.textPrimary,
+    paddingVertical: 16,
   },
   modalFooter: {
     flexDirection: 'row',
-    padding: 20,
-    gap: 12,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    gap: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: theme.colors.border,
   },
   skipButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
+    ...theme.shadows.neopop.sm,
   },
   skipText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
   },
   saveButton: {
     flex: 1,
-    backgroundColor: '#6366F1',
-    paddingVertical: 14,
-    borderRadius: 8,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
+    ...theme.shadows.neopop.md,
   },
   saveText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
     color: '#FFFFFF',
   },
 });

@@ -36,6 +36,8 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { SavedItem } from '../types';
 import * as Haptics from 'expo-haptics';
 import { getPlacePhotoUrl } from '../config/maps';
+import { BouncyPressable } from './BouncyPressable';
+import theme from '../config/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -52,19 +54,6 @@ const SNAP_POINTS = {
   FULL: DRAWER_HEIGHT * 0.85,       // 85% - Full list
 };
 
-// Colors matching the Midnight Discovery palette
-const COLORS = {
-  background: 'rgba(15, 17, 21, 0.98)',
-  surface: 'rgba(23, 25, 31, 0.95)',
-  surfaceLight: 'rgba(39, 41, 47, 0.8)',
-  primaryGlow: '#06B6D4', // Electric Cyan
-  secondaryGlow: '#22D3EE',
-  accent: '#22C55E',
-  text: '#FFFFFF',
-  textSecondary: '#94A3B8',
-  border: 'rgba(6, 182, 212, 0.2)',
-};
-
 // Compact horizontal card for peek mode
 interface CompactCardProps {
   item: SavedItem;
@@ -73,15 +62,14 @@ interface CompactCardProps {
 }
 
 const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) => {
-  // Use the helper that converts photo_reference to Google Photo URL
   const photoUrl = useMemo(() => {
-    return getPlacePhotoUrl(item?.photos_json, 200); // 200px width for compact cards
+    return getPlacePhotoUrl(item?.photos_json, 200); 
   }, [item?.photos_json]);
 
   const categoryEmoji = useMemo(() => {
     const cat = item.category?.toLowerCase();
     switch (cat) {
-      case 'food': return '🍔';
+      case 'food': return '🍜';
       case 'activity': return '🎯';
       case 'shopping': return '🛍️';
       case 'nightlife': return '🎉';
@@ -90,11 +78,16 @@ const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) 
     }
   }, [item.category]);
 
+  const categoryColor = useMemo(() => {
+    const cat = item.category?.toLowerCase();
+    return (theme.categoryColors[cat] || theme.categoryColors.place).accent;
+  }, [item.category]);
+
   return (
-    <TouchableOpacity
-      style={[styles.compactCard, isSelected && styles.compactCardSelected]}
+    <BouncyPressable
+      style={[styles.compactCard, isSelected && { borderColor: categoryColor, borderWidth: 2 }]}
       onPress={() => onPress(item)}
-      activeOpacity={0.85}
+      hapticType={Haptics.ImpactFeedbackStyle.Light}
     >
       <View style={styles.compactImageContainer}>
         {photoUrl ? (
@@ -104,13 +97,12 @@ const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) 
             resizeMode={FastImage.resizeMode.cover}
           />
         ) : (
-          <View style={styles.compactPlaceholder}>
+          <View style={[styles.compactPlaceholder, { backgroundColor: categoryColor + '15' }]}>
             <Text style={styles.compactPlaceholderEmoji}>{categoryEmoji}</Text>
           </View>
         )}
-        {/* Category badge - top right corner */}
-        <View style={styles.compactCategoryBadge}>
-          <Text style={styles.compactCategoryEmoji}>{categoryEmoji}</Text>
+        <View style={[styles.compactCategoryBadge, { backgroundColor: categoryColor }]}>
+          <Text style={[styles.compactCategoryEmoji, { color: '#FFFFFF' }]}>{categoryEmoji}</Text>
         </View>
       </View>
       <Text style={styles.compactName} numberOfLines={1}>{item.name}</Text>
@@ -122,7 +114,7 @@ const CompactCard: React.FC<CompactCardProps> = ({ item, onPress, isSelected }) 
           </Text>
         </View>
       )}
-    </TouchableOpacity>
+    </BouncyPressable>
   );
 };
 
@@ -134,15 +126,14 @@ interface FullCardProps {
 }
 
 const FullCard: React.FC<FullCardProps> = ({ item, onPress, isSelected }) => {
-  // Use the helper that converts photo_reference to Google Photo URL
   const photoUrl = useMemo(() => {
-    return getPlacePhotoUrl(item?.photos_json, 300); // 300px width for full cards
+    return getPlacePhotoUrl(item?.photos_json, 300);
   }, [item?.photos_json]);
 
   const categoryEmoji = useMemo(() => {
     const cat = item.category?.toLowerCase();
     switch (cat) {
-      case 'food': return '🍔';
+      case 'food': return '🍜';
       case 'activity': return '🎯';
       case 'shopping': return '🛍️';
       case 'nightlife': return '🎉';
@@ -152,12 +143,11 @@ const FullCard: React.FC<FullCardProps> = ({ item, onPress, isSelected }) => {
   }, [item.category]);
 
   return (
-    <TouchableOpacity
+    <BouncyPressable
       style={[styles.fullCard, isSelected && styles.fullCardSelected]}
       onPress={() => onPress(item)}
-      activeOpacity={0.85}
+      hapticType={Haptics.ImpactFeedbackStyle.Light}
     >
-      {/* Left: Image */}
       <View style={styles.fullCardImageContainer}>
         {photoUrl ? (
           <FastImage 
@@ -172,7 +162,6 @@ const FullCard: React.FC<FullCardProps> = ({ item, onPress, isSelected }) => {
         )}
       </View>
       
-      {/* Right: Info */}
       <View style={styles.fullCardInfo}>
         <Text style={styles.fullCardName} numberOfLines={1}>{item.name}</Text>
         <View style={styles.fullCardMeta}>
@@ -194,10 +183,8 @@ const FullCard: React.FC<FullCardProps> = ({ item, onPress, isSelected }) => {
           </View>
         )}
       </View>
-      
-      {/* Arrow */}
-      <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
-    </TouchableOpacity>
+      <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+    </BouncyPressable>
   );
 };
 
@@ -215,6 +202,7 @@ interface PersistentPlacesDrawerProps {
   categoryColor: string;
   onPlaceSelect: (item: SavedItem) => void;
   selectedPlaceId?: string | null;
+  isHidden?: boolean;
 }
 
 export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, PersistentPlacesDrawerProps>(({
@@ -225,13 +213,22 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
   categoryColor,
   onPlaceSelect,
   selectedPlaceId,
+  isHidden = false,
 }, ref) => {
   const translateY = useSharedValue(DRAWER_HEIGHT - SNAP_POINTS.PEEK);
+  const hideTranslateY = useSharedValue(0);
   const currentSnapPoint = useSharedValue(SNAP_POINTS.PEEK);
   const context = useSharedValue({ y: 0 });
   
-  // Track current mode for conditional rendering
   const [isPeekMode, setIsPeekMode] = useState(true);
+
+  // Handle hidden state animation
+  useEffect(() => {
+    hideTranslateY.value = withSpring(isHidden ? DRAWER_HEIGHT : 0, {
+      damping: 20,
+      stiffness: 120,
+    });
+  }, [isHidden]);
 
   // Snap to a specific point
   const snapTo = useCallback((point: number) => {
@@ -260,8 +257,8 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   // Pan gesture for dragging
   const panGesture = Gesture.Pan()
-    .activeOffsetY([-10, 10]) // Only trigger if vertical movement > 10px
-    .failOffsetX([-20, 20])   // Fail if horizontal movement > 20px (let horizontal list work)
+    .activeOffsetY([-10, 10])
+    .failOffsetX([-20, 20])
     .onStart(() => {
       'worklet';
       context.value = { y: translateY.value };
@@ -269,10 +266,9 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
     .onUpdate((event) => {
       'worklet';
       const newY = context.value.y + event.translationY;
-      // Clamp between full and peek
       translateY.value = Math.max(
         DRAWER_HEIGHT - SNAP_POINTS.FULL,
-        Math.min(DRAWER_HEIGHT - SNAP_POINTS.PEEK + 20, newY) // Small overscroll allowed
+        Math.min(DRAWER_HEIGHT - SNAP_POINTS.PEEK + 20, newY)
       );
     })
     .onEnd((event) => {
@@ -283,21 +279,18 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
       let targetSnap: number;
 
       if (velocity > 500) {
-        // Fast swipe down
         if (currentHeight > SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
         } else {
           targetSnap = SNAP_POINTS.PEEK;
         }
       } else if (velocity < -500) {
-        // Fast swipe up
         if (currentHeight < SNAP_POINTS.HALF) {
           targetSnap = SNAP_POINTS.HALF;
         } else {
           targetSnap = SNAP_POINTS.FULL;
         }
       } else {
-        // Slow drag - snap to nearest
         const distToPeek = Math.abs(currentHeight - SNAP_POINTS.PEEK);
         const distToHalf = Math.abs(currentHeight - SNAP_POINTS.HALF);
         const distToFull = Math.abs(currentHeight - SNAP_POINTS.FULL);
@@ -320,10 +313,9 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.value + hideTranslateY.value }],
   }));
 
-  // Animated opacity for content switching
   const peekContentOpacity = useAnimatedStyle(() => {
     const height = DRAWER_HEIGHT - translateY.value;
     return {
@@ -348,7 +340,6 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
     };
   });
 
-  // Render horizontal compact cards for peek mode
   const renderCompactItem = useCallback(({ item }: { item: SavedItem }) => (
     <CompactCard
       item={item}
@@ -357,7 +348,6 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
     />
   ), [handlePlacePress, selectedPlaceId]);
 
-  // Render full cards for half/full mode
   const renderFullItem = useCallback(({ item }: { item: SavedItem }) => (
     <FullCard
       item={item}
@@ -368,7 +358,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="map-outline" size={36} color={COLORS.textSecondary} />
+      <Ionicons name="map-outline" size={36} color={theme.colors.textSecondary} />
       <Text style={styles.emptyText}>No places in this area</Text>
       <Text style={styles.emptyHint}>Zoom out to see more places</Text>
     </View>
@@ -376,12 +366,11 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
-      {/* Glassmorphism background */}
       <View style={styles.glassContainer}>
         {Platform.OS === 'ios' ? (
           <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
         ) : (
-          <View style={[StyleSheet.absoluteFill, styles.androidBlur]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.background }]} />
         )}
         <LinearGradient
           colors={[categoryColor + '40', 'transparent']}
@@ -389,7 +378,6 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
         />
       </View>
 
-      {/* Draggable Header */}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={styles.header}>
           <View style={styles.handleIndicator} />
@@ -410,11 +398,10 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
         </Animated.View>
       </GestureDetector>
 
-      {/* PEEK MODE: Horizontal scroll of compact cards */}
       <Animated.View style={[styles.peekContent, peekContentOpacity]} pointerEvents={isPeekMode ? 'auto' : 'none'}>
         {items.length > 0 ? (
           <FlatList
-            data={items.slice(0, 10)} // Limit to 10 for peek mode
+            data={items.slice(0, 10)}
             keyExtractor={(item) => item.id}
             renderItem={renderCompactItem}
             horizontal
@@ -432,7 +419,6 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
         )}
       </Animated.View>
 
-      {/* HALF/FULL MODE: Vertical list */}
       <Animated.View style={[styles.listContent, listContentOpacity]} pointerEvents={isPeekMode ? 'none' : 'auto'}>
         <FlatList
           data={items}
@@ -458,12 +444,9 @@ const styles = StyleSheet.create({
   },
   glassContainer: {
     ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     overflow: 'hidden',
-  },
-  androidBlur: {
-    backgroundColor: COLORS.background,
   },
   topGlow: {
     position: 'absolute',
@@ -472,23 +455,18 @@ const styles = StyleSheet.create({
     right: 0,
     height: 60,
   },
-  gestureRoot: {
-    flex: 1,
-  },
-  
-  // Header
   header: {
-    paddingTop: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
   handleIndicator: {
-    width: 36,
-    height: 4,
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 2,
+    width: 40,
+    height: 5,
+    backgroundColor: theme.colors.border,
+    borderRadius: 3,
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 16,
   },
   headerContent: {
     flexDirection: 'row',
@@ -500,57 +478,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerEmoji: {
-    fontSize: 24,
-    marginRight: 10,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 1,
-  },
-  countBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  countBadgeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  
-  // Peek mode (horizontal scroll)
-  peekContent: {
-    position: 'absolute',
-    top: 70,
-    left: 0,
-    right: 0,
-    height: 140,
-  },
-  peekList: {
-    paddingHorizontal: 16,
-    height: 120, // Explicit height for peek mode scroll
-  },
-  
-  // Compact card (peek mode)
-  compactCard: {
-    width: 110,
+    fontSize: 28,
     marginRight: 12,
   },
-  compactCardSelected: {
-    transform: [{ scale: 1.05 }],
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  countBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    ...theme.shadows.soft.sm,
+  },
+  countBadgeText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  peekContent: {
+    position: 'absolute',
+    top: 85,
+    left: 0,
+    right: 0,
+    height: 160,
+  },
+  peekList: {
+    paddingHorizontal: 20,
+    height: 140, 
+  },
+  compactCard: {
+    width: 130,
+    marginRight: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 24,
+    padding: 10,
+    ...theme.shadows.soft.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   compactImageContainer: {
-    width: 110,
-    height: 80,
-    borderRadius: 14,
+    width: '100%',
+    height: 90,
+    borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: COLORS.surface,
+    backgroundColor: theme.colors.backgroundAlt,
   },
   compactImage: {
     width: '100%',
@@ -561,76 +540,74 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: theme.colors.backgroundAlt,
   },
   compactPlaceholderEmoji: {
-    fontSize: 24,
+    fontSize: 28,
   },
   compactCategoryBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    top: 6,
+    right: 6,
     borderRadius: 10,
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    ...theme.shadows.soft.sm,
   },
   compactCategoryEmoji: {
-    fontSize: 10,
+    fontSize: 12,
   },
   compactName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    marginTop: 6,
   },
   compactRating: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    marginTop: 3,
+    gap: 3,
   },
   compactRatingText: {
-    fontSize: 10,
-    color: '#FFD700',
-    marginLeft: 2,
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
   },
-  
-  // List mode (vertical scroll)
   listContent: {
     position: 'absolute',
-    top: 70,
+    top: 85,
     left: 0,
     right: 0,
     bottom: 0,
   },
   fullList: {
-    paddingHorizontal: 12,
-    paddingBottom: 100,
+    paddingHorizontal: 20,
+    paddingBottom: 120,
   },
-  
-  // Full card (list mode)
   fullCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    padding: 10,
-    marginBottom: 10,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 28,
+    padding: 14,
+    marginBottom: 14,
+    ...theme.shadows.soft.sm,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: theme.colors.border,
   },
   fullCardSelected: {
-    borderColor: COLORS.primaryGlow,
+    borderColor: theme.colors.primary,
     borderWidth: 2,
   },
   fullCardImageContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
+    width: 72,
+    height: 72,
+    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: theme.colors.backgroundAlt,
   },
   fullCardImage: {
     width: '100%',
@@ -641,83 +618,88 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.colors.backgroundAlt,
   },
   fullCardPlaceholderEmoji: {
-    fontSize: 24,
+    fontSize: 32,
   },
   fullCardInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 16,
     marginRight: 8,
   },
   fullCardName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
   },
   fullCardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 3,
+    marginTop: 4,
+    gap: 8,
   },
   fullCardRating: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
+    gap: 3,
   },
   fullCardRatingText: {
-    fontSize: 12,
-    color: '#FFD700',
-    marginLeft: 3,
+    fontSize: 14,
+    color: theme.colors.textPrimary,
+    fontWeight: '700',
   },
   fullCardLocation: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
     flex: 1,
   },
   fullCardTag: {
-    marginTop: 4,
+    marginTop: 8,
     alignSelf: 'flex-start',
-    backgroundColor: COLORS.surfaceLight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    backgroundColor: theme.colors.backgroundAlt,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   fullCardTagText: {
-    fontSize: 10,
-    color: COLORS.primaryGlow,
-    fontWeight: '600',
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
-  
-  // Empty state
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: 60,
   },
   emptyText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginTop: 8,
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
+    marginTop: 12,
   },
   emptyHint: {
-    fontSize: 12,
-    color: COLORS.primaryGlow,
-    marginTop: 4,
-    opacity: 0.7,
+    fontSize: 14,
+    color: theme.colors.primary,
+    fontWeight: '700',
+    marginTop: 6,
+    opacity: 0.8,
   },
   peekEmptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
   },
   peekEmptyText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
+    fontSize: 15,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
     textAlign: 'center',
+    lineHeight: 22,
   },
 });
 
 export default PersistentPlacesDrawer;
-

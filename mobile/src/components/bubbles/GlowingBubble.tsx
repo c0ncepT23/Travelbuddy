@@ -73,7 +73,8 @@ const COLOR_CONFIG: Record<BubbleColor, {
   },
 };
 
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+import { BouncyPressable } from '../BouncyPressable';
+import theme from '../../config/theme';
 
 export const GlowingBubble: React.FC<GlowingBubbleProps> = ({
   label,
@@ -94,28 +95,22 @@ export const GlowingBubble: React.FC<GlowingBubbleProps> = ({
   useEffect(() => {
     const duration = 4000;
     
-    scale.value = withDelay(
-      delay * 200,
-      withRepeat(
-        withSequence(
-          withTiming(1.03, { duration: duration / 2, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: duration / 2, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1,
-        false
-      )
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.03, { duration: duration / 2, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: duration / 2, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
     );
 
-    translateY.value = withDelay(
-      delay * 200,
-      withRepeat(
-        withSequence(
-          withTiming(-8, { duration: duration / 2, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: duration / 2, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1,
-        false
-      )
+    translateY.value = withRepeat(
+      withSequence(
+        withTiming(-8, { duration: duration / 2, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: duration / 2, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
     );
   }, []);
 
@@ -131,7 +126,7 @@ export const GlowingBubble: React.FC<GlowingBubbleProps> = ({
   const top = (position.y / 100) * SCREEN_HEIGHT - bubbleSize / 2;
 
   return (
-    <AnimatedTouchable
+    <BouncyPressable
       style={[
         styles.container,
         animatedStyle,
@@ -144,7 +139,7 @@ export const GlowingBubble: React.FC<GlowingBubbleProps> = ({
         },
       ]}
       onPress={onPress}
-      activeOpacity={0.9}
+      scaleTo={0.9}
     >
       <LinearGradient
         colors={config.gradient}
@@ -159,7 +154,7 @@ export const GlowingBubble: React.FC<GlowingBubbleProps> = ({
           ({count})
         </Text>
       </LinearGradient>
-    </AnimatedTouchable>
+    </BouncyPressable>
   );
 };
 

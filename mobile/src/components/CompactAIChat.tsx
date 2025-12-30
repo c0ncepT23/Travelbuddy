@@ -23,7 +23,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { BouncyPressable } from './BouncyPressable';
+import theme from '../config/theme';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Tab bar height and drawer peek height to position above them
+const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 60 : 50;
+const DRAWER_PEEK_HEIGHT = SCREEN_HEIGHT * 0.22;
 
 // Auto-hide response bubble after this many seconds
 const RESPONSE_TIMEOUT_MS = 10000; // 10 seconds
@@ -132,14 +139,13 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
             contentContainerStyle={styles.suggestionsScroll}
           >
             {suggestions.map((suggestion, index) => (
-              <TouchableOpacity
+              <BouncyPressable
                 key={index}
                 style={styles.suggestionChip}
                 onPress={() => onSendMessage(suggestion)}
-                activeOpacity={0.8}
               >
                 <Text style={styles.suggestionText}>{suggestion}</Text>
-              </TouchableOpacity>
+              </BouncyPressable>
             ))}
           </ScrollView>
         </MotiView>
@@ -275,37 +281,34 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 20,
+    bottom: TAB_BAR_HEIGHT + DRAWER_PEEK_HEIGHT + 10, // Above tab bar + drawer peek
     left: 16,
     right: 16,
-    zIndex: 200,
+    zIndex: 500, // Above everything
   },
 
   // Suggestions
   suggestionsContainer: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   suggestionsScroll: {
-    gap: 8,
-    paddingRight: 16,
+    gap: 10,
+    paddingRight: 20,
   },
   suggestionChip: {
-    backgroundColor: 'rgba(15, 17, 21, 0.9)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: theme.colors.border,
+    ...theme.shadows.soft.sm,
   },
   suggestionText: {
-    color: '#06B6D4',
-    fontSize: 13,
-    fontWeight: '600',
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 
   // Response Bubble
@@ -373,17 +376,17 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingHorizontal: 6,
     paddingVertical: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 15,
     borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.15)',
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   minimizeButton: {
     width: 40,

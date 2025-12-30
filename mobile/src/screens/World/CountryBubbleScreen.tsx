@@ -45,6 +45,9 @@ import { GameBottomSheet, GameBottomSheetRef } from '../../components/GameBottom
 import { PlaceDetailSheet, PlaceDetailSheetRef } from '../../components/PlaceDetailSheet';
 import { PersistentPlacesDrawer, PersistentPlacesDrawerRef } from '../../components/PersistentPlacesDrawer';
 // Removed: FloatingCloud, GlowingBubble, OrbitalBubbles - replaced with Mapbox clusters
+import { BouncyPressable } from '../../components/BouncyPressable';
+import theme from '../../config/theme';
+import { GlassCard } from '../../components/GlassCard';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 
@@ -1896,7 +1899,7 @@ export default function CountryBubbleScreen() {
       const locationData = location ? { lat: location.coords.latitude, lng: location.coords.longitude } : undefined;
       await sendQuery(tripId, message, locationData);
       const storeMessages = getMessages(tripId);
-      const latestAIMessage = storeMessages.filter(m => m.type === 'companion').pop();
+      const latestAIMessage = storeMessages.filter((m: any) => m.type === 'companion').pop();
       setChatMessages(prev => [...prev, {
         id: `ai-${Date.now()}`, type: 'ai',
         content: latestAIMessage?.content || "I found some great places! Tap expand to see details 🗺️",
@@ -2479,14 +2482,13 @@ export default function CountryBubbleScreen() {
             if (count === 0 && category.key !== 'all') return null;
             
             return (
-              <TouchableOpacity
+            <BouncyPressable
                 key={category.key}
                 style={[
                   styles.categoryChip,
                   isSelected && { backgroundColor: category.color, borderColor: category.color },
                 ]}
                 onPress={() => handleCategorySelect(category.key)}
-                activeOpacity={0.7}
               >
                 <Text style={styles.categoryChipIcon}>{category.icon}</Text>
                 <Text style={[
@@ -2506,7 +2508,7 @@ export default function CountryBubbleScreen() {
                     {count}
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </BouncyPressable>
             );
           })}
         </ScrollView>
@@ -2514,20 +2516,18 @@ export default function CountryBubbleScreen() {
 
       {/* CLUSTERS AND PINS are now rendered inside MapView - see ShapeSource "places-source" */}
 
-      {/* Persistent Places Drawer - Shows places visible in current map view */}
-      {/* Hide when single place detail sheet is open to avoid overlap */}
-      {!isSinglePlaceDetailOpen && (
-        <PersistentPlacesDrawer
-          ref={placesDrawerRef}
-          items={drawerItems}
-          selectedCategory={selectedCategory}
-          categoryLabel={currentCategoryConfig.label}
-          categoryEmoji={currentCategoryConfig.icon}
-          categoryColor={currentCategoryConfig.color}
-          onPlaceSelect={handlePlaceSelect}
-          selectedPlaceId={selectedPlaceId}
-        />
-      )}
+      {/* Persistent Places Drawer - Always mounted but slides away when detail is open */}
+      <PersistentPlacesDrawer
+        ref={placesDrawerRef}
+        items={drawerItems}
+        selectedCategory={selectedCategory}
+        categoryLabel={currentCategoryConfig.label}
+        categoryEmoji={currentCategoryConfig.icon}
+        categoryColor={currentCategoryConfig.color}
+        onPlaceSelect={handlePlaceSelect}
+        selectedPlaceId={selectedPlaceId}
+        isHidden={isSinglePlaceDetailOpen}
+      />
 
       {/* Game Bottom Sheet - For MULTIPLE places (clusters) */}
       {bottomSheetItems.length > 1 && (
@@ -2655,15 +2655,14 @@ export default function CountryBubbleScreen() {
         </>
       )}
 
-      {/* Bottom Tab Bar - Always visible */}
+            {/* Bottom Tab Bar - Always visible */}
       <View style={styles.bottomTabBar}>
-        <TouchableOpacity
+        <BouncyPressable
           style={[styles.tabButton, activeTab === 'map' && styles.tabButtonActive]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setActiveTab('map');
           }}
-          activeOpacity={0.7}
         >
           <View style={[styles.tabIconContainer, activeTab === 'map' && styles.tabIconContainerActive]}>
             <Ionicons 
@@ -2673,15 +2672,14 @@ export default function CountryBubbleScreen() {
             />
           </View>
           <Text style={[styles.tabLabel, activeTab === 'map' && styles.tabLabelActive]}>Map</Text>
-        </TouchableOpacity>
+        </BouncyPressable>
         
-        <TouchableOpacity
+        <BouncyPressable
           style={[styles.tabButton, activeTab === 'explore' && styles.tabButtonActive]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setActiveTab('explore');
           }}
-          activeOpacity={0.7}
         >
           <View style={[styles.tabIconContainer, activeTab === 'explore' && styles.tabIconContainerActive]}>
             <Ionicons 
@@ -2691,7 +2689,7 @@ export default function CountryBubbleScreen() {
             />
           </View>
           <Text style={[styles.tabLabel, activeTab === 'explore' && styles.tabLabelActive]}>Explore</Text>
-        </TouchableOpacity>
+        </BouncyPressable>
       </View>
 
       {/* Floating AI Orb - Always visible */}

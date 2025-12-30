@@ -36,50 +36,11 @@ import { useCompanionStore, CompanionMessage, PlaceResult } from '../../stores/c
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripStore } from '../../stores/tripStore';
 
-import { BlurView } from 'expo-blur';
+import { GlassCard } from '../../components/GlassCard';
+import { BouncyPressable } from '../../components/BouncyPressable';
+import theme from '../../config/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Midnight Discovery palette
-const colors = {
-  // Gradients
-  primaryGradientStart: '#22D3EE', // cyan-400
-  primaryGradientEnd: '#06B6D4',   // cyan-500
-  
-  // Glassmorphic backgrounds
-  panelBg: 'rgba(15, 17, 21, 0.98)',
-  panelBgSecondary: 'rgba(23, 25, 31, 0.95)',
-  
-  // Text
-  textPrimary: '#F8FAFC',    // slate-50
-  textSecondary: '#94A3B8',  // slate-400
-  textWhite: '#FFFFFF',
-  
-  // UI Elements
-  borderLight: 'rgba(255, 255, 255, 0.1)',
-  primaryBorder: 'rgba(6, 182, 212, 0.2)', // cyan-500/20
-  closeButtonBg: '#1E293B',        // slate-800
-  closeButtonHover: '#334155',     // slate-700
-  
-  // Messages
-  aiBubbleBg: '#1E293B',
-  userBubbleStart: '#06B6D4',  // cyan-500
-  userBubbleEnd: '#0891B2',    // cyan-600
-  
-  // Dots
-  typingDot: '#22D3EE', // cyan-400
-  onlineDot: '#10B981', // green-500
-  
-  // Places
-  categoryFood: '#22C55E',
-  categoryPlace: '#6366F1',
-  categoryShopping: '#EAB308',
-  categoryActivity: '#06B6D4',
-  
-  // Suggestions
-  suggestionBg: 'rgba(6, 182, 212, 0.1)',
-  suggestionBorder: '#06B6D4',
-};
 
 export default function AgentChatScreen() {
   const navigation = useNavigation<any>();
@@ -170,14 +131,14 @@ export default function AgentChatScreen() {
 
   const getCategoryColor = (category: string): string => {
     const categoryColors: Record<string, string> = {
-      food: colors.categoryFood,
-      place: colors.categoryPlace,
-      shopping: colors.categoryShopping,
-      activity: colors.categoryActivity,
+      food: theme.colors.food,
+      place: theme.colors.place,
+      shopping: theme.colors.shopping,
+      activity: theme.colors.activity,
       accommodation: '#6366F1',
-      tip: '#8B5CF6',
+      tip: '#F59E0B',
     };
-    return categoryColors[category] || colors.userBubbleStart;
+    return categoryColors[category] || theme.colors.primary;
   };
 
   const getCategoryIcon = (category: string): string => {
@@ -259,7 +220,7 @@ export default function AgentChatScreen() {
         
         {place.distance !== undefined && (
           <View style={styles.distanceBadge}>
-            <Ionicons name="navigate" size={10} color={colors.userBubbleStart} />
+            <Ionicons name="navigate" size={10} color={theme.colors.primary} />
             <Text style={styles.distanceText}>
               {place.distance < 1000
                 ? `${Math.round(place.distance)}m`
@@ -269,7 +230,7 @@ export default function AgentChatScreen() {
         )}
       </View>
       
-      <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+      <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
     </TouchableOpacity>
   );
 
@@ -316,7 +277,7 @@ export default function AgentChatScreen() {
         ]}>
           {isUser ? (
             <LinearGradient
-              colors={[colors.userBubbleStart, colors.userBubbleEnd]}
+              colors={theme.gradients.primary}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.userBubbleGradient}
@@ -362,17 +323,17 @@ export default function AgentChatScreen() {
   if (!tripId) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleClose} activeOpacity={0.7}>
-            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <BouncyPressable style={styles.backButton} onPress={handleClose}>
+            <Ionicons name="chevron-back" size={24} color={theme.colors.textInverse} />
+          </BouncyPressable>
           <View style={styles.headerCenter}>
             <LinearGradient
-              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+              colors={theme.gradients.primary}
               style={styles.aiIconBox}
             >
-              <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+              <Ionicons name="sparkles" size={20} color={theme.colors.textInverse} />
             </LinearGradient>
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>AI Travel Agent</Text>
@@ -399,28 +360,30 @@ export default function AgentChatScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
-      {/* Dimmed backdrop for the top 20% area */}
+      {/* Dimmed backdrop */}
       <Pressable style={styles.backdrop} onPress={handleClose} />
       
-      {/* Main Content Area (80% Height) */}
+      {/* Main Content Area */}
       <MotiView 
         from={{ translateY: SCREEN_HEIGHT }}
         animate={{ translateY: 0 }}
         transition={{ type: 'spring', damping: 20, stiffness: 150 }}
         style={styles.contentContainer}
       >
+        <GlassCard intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+        
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleClose} activeOpacity={0.7}>
-            <Ionicons name="close" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <BouncyPressable style={styles.backButton} onPress={handleClose}>
+            <Ionicons name="close" size={24} color={theme.colors.textInverse} />
+          </BouncyPressable>
           
           <View style={styles.headerCenter}>
             <LinearGradient
-              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+              colors={theme.gradients.primary}
               style={styles.aiIconBox}
             >
-              <Ionicons name="sparkles" size={20} color={colors.textWhite} />
+              <Ionicons name="sparkles" size={20} color={theme.colors.textInverse} />
             </LinearGradient>
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>AI Travel Agent</Text>
@@ -457,14 +420,14 @@ export default function AgentChatScreen() {
                 value={inputText}
                 onChangeText={setInputText}
                 placeholder="Ask me anything..."
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor={theme.colors.textTertiary}
                 multiline
                 maxLength={500}
                 editable={!isLoading}
               />
             </View>
             
-            <TouchableOpacity
+            <BouncyPressable
               style={[
                 styles.sendButton,
                 (!inputText.trim() || isLoading) && styles.sendButtonDisabled
@@ -473,22 +436,17 @@ export default function AgentChatScreen() {
               disabled={!inputText.trim() || isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color={colors.textWhite} size="small" />
+                <ActivityIndicator color={theme.colors.textInverse} size="small" />
               ) : (
                 <LinearGradient
-                  colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                  colors={theme.gradients.primary}
                   style={styles.sendButtonGradient}
                 >
-                  <Ionicons name="send" size={18} color={colors.textWhite} />
+                  <Ionicons name="send" size={18} color={theme.colors.textInverse} />
                 </LinearGradient>
               )}
-            </TouchableOpacity>
+            </BouncyPressable>
           </View>
-
-          {/* Footer text */}
-          <Text style={styles.footerText}>
-            Powered by AI · Always learning 🧠 ✨
-          </Text>
         </View>
       </MotiView>
     </View>
@@ -504,37 +462,32 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   contentContainer: {
-    height: '80%',
-    backgroundColor: '#0F1115',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    height: '85%',
+    backgroundColor: '#0F172A', // Slate-900 base
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 20,
+    ...theme.shadows.soft.lg,
   },
 
   // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: '#17191F',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -542,41 +495,44 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: 16,
   },
   headerRight: {
-    width: 40,
+    width: 36,
   },
   aiIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    ...theme.shadows.soft.sm,
   },
   headerText: {
-    marginLeft: 10,
+    marginLeft: 12,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textInverse,
+    letterSpacing: 0.5,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 1,
+    marginTop: 2,
   },
   onlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.onlineDot,
-    marginRight: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.success,
+    marginRight: 6,
   },
   statusText: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: theme.colors.textTertiary,
+    fontWeight: '600',
   },
 
   // Messages
@@ -584,85 +540,77 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesList: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     flexGrow: 1,
   },
   messageContainer: {
-    marginBottom: 16,
+    marginBottom: 20,
     alignItems: 'flex-start',
   },
   userMessageContainer: {
     alignItems: 'flex-end',
   },
   messageBubble: {
-    maxWidth: '75%',
-    borderRadius: 16,
+    maxWidth: '85%',
+    borderRadius: 24,
     overflow: 'hidden',
   },
   aiBubble: {
-    backgroundColor: colors.aiBubbleBg,
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    padding: 12,
-    paddingHorizontal: 16,
-    // Medium drop shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+    borderBottomLeftRadius: 4,
   },
   userBubble: {
-    // Shadow handled by gradient wrapper
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    borderBottomRightRadius: 4,
+    ...theme.shadows.soft.md,
   },
   userBubbleGradient: {
-    padding: 12,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    padding: 14,
+    paddingHorizontal: 18,
+    borderRadius: 24,
   },
   aiMessageText: {
-    fontSize: 14,
-    color: colors.textPrimary,
-    lineHeight: 20,
+    fontSize: 15,
+    color: theme.colors.textInverse,
+    lineHeight: 22,
+    fontWeight: '500',
   },
   userMessageText: {
-    fontSize: 14,
-    color: colors.textWhite,
-    lineHeight: 20,
+    fontSize: 15,
+    color: theme.colors.textInverse,
+    lineHeight: 22,
+    fontWeight: '600',
   },
 
   // Typing Indicator
   typingContainer: {
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   typingBubble: {
     flexDirection: 'row',
-    backgroundColor: colors.aiBubbleBg,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderRadius: 16,
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   typingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.typingDot,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.primaryLight,
   },
 
-  // Places (New Horizontal Style)
+  // Places (Horizontal)
   horizontalPlacesContainer: {
-    marginTop: 12,
-    marginLeft: -16, // Bleed out of bubble
+    marginTop: 16,
+    marginLeft: -16,
     marginRight: -16,
   },
   horizontalPlacesScroll: {
@@ -670,22 +618,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   miniPlaceCard: {
-    width: 160,
-    backgroundColor: 'rgba(15, 17, 21, 0.95)',
-    borderRadius: 16,
+    width: 180,
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    ...theme.shadows.soft.md,
   },
   miniCardImageContainer: {
-    height: 100,
+    height: 110,
     width: '100%',
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    backgroundColor: '#0F172A',
   },
   miniCardImage: {
     width: '100%',
@@ -698,30 +642,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   miniCardPlaceholderEmoji: {
-    fontSize: 32,
+    fontSize: 36,
   },
   miniCardCategory: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 10,
+    width: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
   miniCardCategoryEmoji: {
-    fontSize: 12,
+    fontSize: 14,
   },
   miniCardInfo: {
-    padding: 10,
+    padding: 12,
   },
   miniCardName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 6,
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.textInverse,
+    marginBottom: 8,
   },
   miniCardFooter: {
     flexDirection: 'row',
@@ -734,69 +678,23 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   miniCardRatingText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textTertiary,
   },
   miniCardGo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   miniCardGoText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#06B6D4',
-  },
-
-  // Legacy Places style
-  placesContainer: {
-    marginTop: 12,
-    gap: 8,
-  },
-  placeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-  },
-  placeCategoryDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  placeCategoryIcon: {
-    fontSize: 18,
-  },
-  placeInfo: {
-    flex: 1,
-  },
-  placeName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  placeLocation: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  distanceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  distanceText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.userBubbleStart,
+    color: theme.colors.primaryLight,
   },
 
   // Suggestions
@@ -804,34 +702,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 12,
+    marginTop: 16,
   },
   suggestionButton: {
-    backgroundColor: colors.suggestionBg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.suggestionBorder,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
   },
   suggestionText: {
     fontSize: 13,
-    color: colors.userBubbleStart,
-    fontWeight: '500',
+    color: theme.colors.primaryLight,
+    fontWeight: '700',
   },
 
   // Input
   inputArea: {
     backgroundColor: '#17191F',
+    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.05)',
-    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
   },
   inputContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    alignItems: 'flex-end',
+    paddingHorizontal: 20,
+    alignItems: 'center',
   },
   inputWrapper: {
     flex: 1,
@@ -839,14 +737,16 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-    marginRight: 8,
+    marginRight: 12,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   input: {
     paddingHorizontal: 18,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.textPrimary,
-    maxHeight: 100,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: theme.colors.textInverse,
+    fontWeight: '500',
   },
   sendButton: {
     width: 48,
@@ -861,15 +761,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    opacity: 0.5,
-  },
-
-  // Footer
-  footerText: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: colors.textSecondary,
-    paddingTop: 8,
+    opacity: 0.4,
   },
 
   // Empty state
@@ -886,12 +778,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: theme.colors.textInverse,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: colors.textSecondary,
+    color: theme.colors.textTertiary,
     textAlign: 'center',
     lineHeight: 22,
   },

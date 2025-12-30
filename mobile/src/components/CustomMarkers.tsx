@@ -2,38 +2,39 @@ import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { SavedItem } from '../types';
 import { MotiView } from 'moti';
+import theme from '../config/theme';
 
 // 3D Neon-style marker icons with BREATHING animation
 const MARKER_ICONS_NEON = {
   food: {
     emoji: '🍜',
-    color: '#F472B6',
-    glowColor: '#F472B6',
+    color: theme.colors.food,
+    glowColor: theme.colors.food,
   },
   shopping: {
     emoji: '🛍️',
-    color: '#FBBF24',
-    glowColor: '#FBBF24',
+    color: theme.colors.shopping,
+    glowColor: theme.colors.shopping,
   },
   place: {
     emoji: '📍',
-    color: '#06B6D4',
-    glowColor: '#06B6D4',
+    color: theme.colors.place,
+    glowColor: theme.colors.place,
   },
   activity: {
     emoji: '🎯',
-    color: '#84CC16',
-    glowColor: '#84CC16',
+    color: theme.colors.activity,
+    glowColor: theme.colors.activity,
   },
   accommodation: {
     emoji: '🏨',
-    color: '#A78BFA',
-    glowColor: '#A78BFA',
+    color: theme.colors.accommodation,
+    glowColor: theme.colors.accommodation,
   },
   tip: {
     emoji: '💡',
-    color: '#FCD34D',
-    glowColor: '#FCD34D',
+    color: theme.colors.tip,
+    glowColor: theme.colors.tip,
   },
 };
 

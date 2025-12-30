@@ -8,10 +8,10 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Image,
   Dimensions,
   ScrollView as RNScrollView,
+  Platform,
 } from 'react-native';
 import BottomSheet, { 
   BottomSheetScrollView, 
@@ -21,18 +21,11 @@ import BottomSheet, {
 import { Ionicons } from '@expo/vector-icons';
 import { SavedItem } from '../types';
 import { getGooglePhotoUrl } from '../config/maps';
+import theme from '../config/theme';
+import { BouncyPressable } from './BouncyPressable';
+import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Dark theme colors (matching Midnight Discovery palette)
-const COLORS = {
-  background: '#0F1115',
-  surface: '#17191F',
-  text: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  accent: '#06B6D4',
-  border: 'rgba(148, 163, 184, 0.1)',
-};
 
 export interface PlaceDetailSheetRef {
   expand: () => void;
@@ -59,42 +52,35 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 }, ref) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // Snap points: Peek (18%) and Default (55%)
-  // Peek: shows handle + place name + buttons
-  // Default: shows everything (name, rating, photos, insights, buttons)
-  const snapPoints = useMemo(() => ['25%', '55%'], []);
-
+  // Snap points: Peek (25%) and Default (55%)
+  const snapPoints = useMemo(() => ['25%', '55%', '90%'], []);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
     expand: () => bottomSheetRef.current?.expand(),
     collapse: () => bottomSheetRef.current?.collapse(),
     close: () => bottomSheetRef.current?.close(),
-    peek: () => bottomSheetRef.current?.snapToIndex(0), // Snap to 25% (peek)
+    peek: () => bottomSheetRef.current?.snapToIndex(0),
     snapToIndex: (index: number) => bottomSheetRef.current?.snapToIndex(index),
   }), []);
 
-  // Track if sheet is ready (mounted with snap points)
   const isSheetReady = useRef(false);
 
-  // Open/close based on visibility - with safety check
+  // Open/close based on visibility
   useEffect(() => {
     if (isVisible && place) {
-      // Only snap if sheet is ready, otherwise wait for it to mount
       if (isSheetReady.current) {
-        bottomSheetRef.current?.snapToIndex(1); // Start at 50% (default view)
+        bottomSheetRef.current?.snapToIndex(1);
       } else {
-        // Sheet not ready yet, will be opened via initial index
         setTimeout(() => {
           bottomSheetRef.current?.snapToIndex(1);
-        }, 100);
+        }, 50);
       }
     } else {
       bottomSheetRef.current?.close();
     }
   }, [isVisible, place]);
 
-  // Mark sheet as ready when it changes
   const handleSheetChange = useCallback((index: number) => {
     isSheetReady.current = true;
     if (index === -1) {
@@ -102,7 +88,6 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
     }
   }, [onClose]);
 
-  // Parse photos
   const photoUrls = useMemo(() => {
     if (!place?.photos_json) return [];
     try {
@@ -121,54 +106,49 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
     return [];
   }, [place?.photos_json]);
 
-  // FIXED FOOTER with action buttons - no bottom inset for flush appearance
   const renderFooter = useCallback(
     (props: BottomSheetFooterProps) => (
       <BottomSheetFooter {...props} bottomInset={0}>
         <View style={styles.footerContainer}>
-          <TouchableOpacity 
+          <BouncyPressable 
             style={styles.actionButton}
             onPress={() => place && onDirections?.(place)}
           >
             <View style={styles.actionIconWrap}>
-              <Ionicons name="navigate" size={20} color="#4285F4" />
+              <Ionicons name="navigate" size={20} color={theme.colors.primary} />
             </View>
             <Text style={styles.actionText}>Directions</Text>
-          </TouchableOpacity>
+          </BouncyPressable>
 
-          <TouchableOpacity 
+          <BouncyPressable 
             style={styles.actionButton}
             onPress={() => place && onCheckIn?.(place)}
           >
-            <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(52, 168, 83, 0.15)' }]}>
-              <Ionicons name="checkmark-circle" size={20} color="#34A853" />
+            <View style={[styles.actionIconWrap, { backgroundColor: theme.colors.success + '15' }]}>
+              <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
             </View>
             <Text style={styles.actionText}>Visited</Text>
-          </TouchableOpacity>
+          </BouncyPressable>
 
-          <TouchableOpacity style={styles.actionButton}>
+          <BouncyPressable style={styles.actionButton}>
             <View style={styles.actionIconWrap}>
-              <Ionicons name="share-outline" size={20} color="#4285F4" />
+              <Ionicons name="share-outline" size={20} color={theme.colors.primary} />
             </View>
             <Text style={styles.actionText}>Share</Text>
-          </TouchableOpacity>
+          </BouncyPressable>
 
-          <TouchableOpacity style={styles.actionButton}>
+          <BouncyPressable style={styles.actionButton}>
             <View style={styles.actionIconWrap}>
-              <Ionicons name="bookmark-outline" size={20} color="#4285F4" />
+              <Ionicons name="bookmark-outline" size={20} color={theme.colors.primary} />
             </View>
             <Text style={styles.actionText}>Save</Text>
-          </TouchableOpacity>
+          </BouncyPressable>
         </View>
       </BottomSheetFooter>
     ),
     [place, onDirections, onCheckIn]
   );
 
-  // NO BACKDROP - Google Maps style: map stays interactive while drawer is open
-  // Removing backdrop allows users to pan/zoom map and tap other pins
-
-  // Always render BottomSheet but hide content when no place
   return (
     <BottomSheet
       ref={bottomSheetRef}
@@ -182,23 +162,20 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
       handleIndicatorStyle={styles.handleIndicator}
       handleStyle={styles.handleStyle}
     >
-      {/* FIXED HEADER - Always visible even in peek state */}
       {place && (
         <View style={styles.fixedHeader}>
           <View style={styles.headerRow}>
             <Text style={styles.placeName} numberOfLines={1}>{place.name}</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-            </TouchableOpacity>
+            <BouncyPressable style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+            </BouncyPressable>
           </View>
         </View>
       )}
 
-      {/* SCROLLABLE CONTENT - Hidden in peek, visible in default */}
       <BottomSheetScrollView style={styles.scrollContent}>
         {place ? (
           <>
-            {/* Meta: Rating · Category · Cuisine */}
             <View style={styles.metaRow}>
               {place.rating && (
                 <>
@@ -220,15 +197,13 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
               )}
             </View>
 
-            {/* Location */}
             <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
+              <Ionicons name="location-outline" size={16} color={theme.colors.textSecondary} />
               <Text style={styles.locationText}>
                 {place.area_name || place.location_name || 'Unknown location'}
               </Text>
             </View>
 
-            {/* Photo Carousel */}
             <RNScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false} 
@@ -246,16 +221,15 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
                 ))
               ) : (
                 <View style={styles.photoPlaceholder}>
-                  <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
+                  <Ionicons name="image-outline" size={40} color={theme.colors.textSecondary} />
                 </View>
               )}
             </RNScrollView>
 
-            {/* Creator Insights */}
             {place.description && (
               <View style={styles.insights}>
                 <View style={styles.insightsHeader}>
-                  <Ionicons name="bookmark" size={16} color={COLORS.accent} />
+                  <Ionicons name="bookmark" size={16} color={theme.colors.primary} />
                   <Text style={styles.insightsLabel}>
                     {place.source_title ? `Saved from ${place.source_title}` : 'Why you saved this'}
                   </Text>
@@ -264,8 +238,7 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
               </View>
             )}
 
-            {/* Extra bottom padding for footer */}
-            <View style={{ height: 100 }} />
+            <View style={{ height: 120 }} />
           </>
         ) : null}
       </BottomSheetScrollView>
@@ -275,27 +248,27 @@ export const PlaceDetailSheet = forwardRef<PlaceDetailSheetRef, PlaceDetailSheet
 
 const styles = StyleSheet.create({
   sheetBackground: {
-    backgroundColor: COLORS.background,
+    backgroundColor: theme.colors.background,
   },
   handleIndicator: {
-    backgroundColor: '#5F6368',
+    backgroundColor: theme.colors.border,
     width: 40,
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
   },
   handleStyle: {
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
   },
   fixedHeader: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 4,
     paddingBottom: 8,
-    backgroundColor: COLORS.background,
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   headerRow: {
     flexDirection: 'row',
@@ -305,125 +278,131 @@ const styles = StyleSheet.create({
   },
   placeName: {
     fontSize: 24,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
     flex: 1,
     marginRight: 12,
   },
   closeButton: {
     padding: 4,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderRadius: 20,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
     flexWrap: 'wrap',
   },
   rating: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
     marginRight: 4,
   },
   metaDot: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+    fontSize: 15,
+    color: theme.colors.textTertiary,
     marginHorizontal: 6,
   },
   metaText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+    fontSize: 15,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   locationText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: theme.colors.textSecondary,
     marginLeft: 6,
+    fontWeight: '500',
   },
   photoCarousel: {
-    marginBottom: 16,
-    marginHorizontal: -16,
+    marginBottom: 20,
+    marginHorizontal: -20,
   },
   photoCarouselContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   photo: {
-    width: 180,
-    height: 130,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    width: 200,
+    height: 140,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundAlt,
   },
   photoFirst: {
-    width: 220,
+    width: 240,
   },
   photoPlaceholder: {
-    width: 220,
-    height: 130,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    width: 240,
+    height: 140,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundAlt,
     justifyContent: 'center',
     alignItems: 'center',
   },
   insights: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 14,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.accent,
+    backgroundColor: theme.colors.backgroundAlt,
+    borderRadius: 24,
+    padding: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
   },
   insightsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   insightsLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginLeft: 8,
-    fontWeight: '500',
+    fontSize: 14,
+    color: theme.colors.textPrimary,
+    marginLeft: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   insightsQuote: {
-    fontSize: 14,
-    color: '#CBD5E1',
+    fontSize: 15,
+    color: theme.colors.textSecondary,
     fontStyle: 'italic',
-    lineHeight: 20,
+    lineHeight: 22,
+    fontWeight: '500',
   },
-  // Footer styles
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    paddingBottom: 12, // Small safe area padding
-    backgroundColor: COLORS.background,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    backgroundColor: theme.colors.background,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: theme.colors.border,
   },
   actionButton: {
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    minWidth: 70,
+    minWidth: 80,
   },
   actionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(66, 133, 244, 0.15)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.backgroundAlt,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   actionText: {
     fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
   },
 });
 
