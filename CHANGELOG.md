@@ -5,6 +5,19 @@ All notable changes to the Travel Research Companion project will be documented 
 ## [Unreleased]
 
 ### Added
+- **3D Globe Experience (Zenly-Inspired)** - Transformed the flat world map into an interactive 3D globe:
+  - `projection="globe"` enabled for a full spherical world view
+  - Atmospheric effects with `Atmosphere` and `SkyLayer` for a "space" feel
+  - Custom 3D lighting for depth on the globe surface
+- **3D Landmark Markers** - Replaced flat cyan dots with "pop-out" 3D-style landmarks:
+  - Using `MarkerView` with React Native Views for proper emoji rendering
+  - Mapping for 50+ countries (e.g., Statue of Liberty 🗽 for USA, Mt. Fuji 🗻 for Japan, Eiffel Tower 🗼 for France)
+  - Glowing cyan orb behind each landmark with pulsing animation
+  - Country name labels with text shadow for visibility
+  - Tappable markers with bounce feedback
+- **Epic Camera Fly-in** - New cinematic 3D fly-in animation (pitch + bearing) when entering the world map
+
+### Added
 - **Zustand Trip Data Store (Scalable Architecture)** - New centralized state management for trip data:
   - `useTripDataStore` - Caches saved places per trip (survives screen navigation)
   - `pendingAction` pattern - Cross-screen communication without prop drilling
@@ -12,7 +25,57 @@ All notable changes to the Travel Research Companion project will be documented 
   - `TransitionOverlay` component - Beautiful animated overlay during transitions
   - **Result**: Clicking a chat place card now instantly flies to it (no 2-3s reload!)
 
+### Added
+- **Premium PNG Charm Icons** - Replaced emojis with high-quality illustrated icons:
+  - Added `Images` component to register PNG icons with Mapbox
+  - Icons stored in `mobile/assets/charms/{country}.png`
+  - Smart fallback: Shows PNG icon if available, emoji if not
+  - GPU-accelerated rendering via native SymbolLayer
+  - **53 countries with custom icons!** Including:
+    - Americas: USA, Canada, Mexico, Brazil, Argentina, Chile, Colombia, Peru, Dominican Republic
+    - Europe: France, Italy, Spain, UK, Germany, Greece, Portugal, Netherlands, Switzerland, Belgium, Austria, Iceland, Ireland, Poland, Czech Republic, Hungary, Romania, Bulgaria, Croatia, Estonia, Lithuania, Latvia, Russia
+    - Asia: China, India, Thailand, Vietnam, Singapore, Malaysia, Philippines, South Korea, Bali
+    - Middle East: UAE, Saudi Arabia, Turkey, Bahrain
+    - Africa: Egypt, South Africa, Morocco, Kenya, Tanzania, Ethiopia
+    - Oceania: Australia, New Zealand
+
+- **Zenly Cartoon Globe Mode** - Complete visual overhaul to match Zenly's playful style:
+  - Switched from satellite to `outdoors-v12` cartoon-friendly map style
+  - **Midnight Navy sky** (`#001F3F`) - Classic arcade neon glow aesthetic
+  - Floating animated clouds (☁️) around the globe
+  - Flying decorations: birds (🕊️), plane (✈️), rocket (🚀)
+  - Zenly-signature lime green glow rings and label halos
+  - Bright yellow middle ring for "toy-like" feel
+  - Complementary blue/yellow palette for maximum "pop"
+
+- **Candy Effects on Globe** - Magical Zenly-style visual effects:
+  - 3-layer neon glow rings around landmarks (pink → cyan → white hot center)
+  - Candy pink text halos on country labels
+  - Purple/pink atmospheric horizon glow
+  - Sparkly stars in deep purple-tinted space
+  - Lavender-blush lighting for dreamy feel
+  - GPU-native CircleLayers with blur for smooth 60fps glow
+
+### Changed
+- **Satellite Globe View** - Switched from muted gray map to stunning satellite imagery:
+  - Changed map style to `mapbox://styles/mapbox/satellite-streets-v12`
+  - Realistic Earth-from-space atmosphere with blue glow
+  - Enhanced lighting for satellite clarity
+  - Deep space background with visible stars
+
 ### Fixed
+- **Globe Gesture Smoothness** - Fixed janky/locked rotation feel:
+  - Removed pulsing interval that caused constant React re-renders
+  - Throttled `handleCameraChanged` to max 4 times/second (was every frame)
+  - Skip haptic calculations when zoomed out (zoom < 2)
+  - Camera now starts at pitch 0 for unrestricted initial feel
+  - Added `animationMode="flyTo"` for smooth programmatic transitions
+
+- **Globe Vertical Pan Gesture** - Fixed inability to pan the globe up/down:
+  - Added `pointerEvents: 'none'` to overlay elements (`hintOverlay`, `selectedLabel`)
+  - Overlays were intercepting vertical swipe gestures intended for the map
+  - Globe now responds to vertical drag to see poles/equator
+
 - **AI Chat Place Cards UX** - Fixed broken chat card display:
   - Backend now returns `photos_json`, `rating`, `user_ratings_total` for rich UI cards
   - Place cards now show photos properly (was only showing emoji placeholders)

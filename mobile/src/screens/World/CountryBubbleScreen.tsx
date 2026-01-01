@@ -40,7 +40,9 @@ import Mapbox, {
   FillExtrusionLayer, 
   SkyLayer, 
   Atmosphere,
-  Light
+  Light,
+  BackgroundLayer,
+  FillLayer
 } from '@rnmapbox/maps';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
@@ -342,8 +344,8 @@ const CATEGORY_FILTERS: CategoryFilterConfig[] = [
   { key: 'accommodation', label: 'Stay', icon: '🏨', color: '#F43F5E' },
 ];
 
-// Mapbox style - navigation night for dark Zenly aesthetic
-const MAPBOX_STYLE = 'mapbox://styles/mapbox/dark-v11';
+// Mapbox style - Standard style for native 3D lighting and atmosphere
+const MAPBOX_STYLE = 'mapbox://styles/mapbox/standard';
 
 type ViewMode = 'macro' | 'micro';
 type FilterMode = 'all' | 'nearMe' | 'area';
@@ -710,6 +712,16 @@ export default function CountryBubbleScreen() {
   const [isAITyping, setIsAITyping] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
+  // Zenly-style floating animation offset (Phase 2.2)
+  const [floatOffset, setFloatOffset] = useState(0);
+
+  useEffect(() => {
+    const bobInterval = setInterval(() => {
+      setFloatOffset(Math.sin(Date.now() / 800) * 4);
+    }, 50);
+    return () => clearInterval(bobInterval);
+  }, []);
+
   // Bottom Sheet State (Clusters/Pins use this)
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
   const [bottomSheetItems, setBottomSheetItems] = useState<SavedItem[]>([]);
@@ -856,9 +868,12 @@ export default function CountryBubbleScreen() {
     
     // Use requestAnimationFrame to ensure touch event is finished
     requestAnimationFrame(() => {
-      // DYNAMIC PITCH: Tilt the map as we zoom in for a 3D effect (World Class Interaction)
+      // DYNAMIC PITCH: Zenly-style aggressive tilt for 3D perspective
       const targetZoom = options.zoom ?? currentZoomRef.current;
-      const dynamicPitch = targetZoom >= 16 ? 60 : targetZoom >= 14 ? 45 : targetZoom >= 12 ? 35 : 0;
+      const dynamicPitch = targetZoom < 3 ? 0 : 
+                          targetZoom < 5 ? 20 : 
+                          targetZoom < 10 ? 35 : 
+                          targetZoom < 14 ? 45 : 60;
 
       cameraRef.current?.setCamera({
         centerCoordinate: options.center,
@@ -1297,6 +1312,48 @@ export default function CountryBubbleScreen() {
 
   // Handle map idle (when user stops panning/zooming)
   // Updates drawer items based on what's visible on screen
+  const lastHapticPinId = useRef<string | null>(null);
+  const lastHapticTime = useRef(0);
+
+  /**
+   * Handle camera changes - used for proximity haptics (Phase 4.1)
+   */
+  const handleCameraChanged = useCallback((event: any) => {
+    // Only trigger haptics if we are zoomed in enough to see individual pins
+    const zoom = event.properties?.zoomLevel || 10;
+    if (zoom < 12) return;
+
+    const center = event.properties?.center;
+    if (!center || !Array.isArray(center) || center.length < 2) return;
+
+    // Throttle haptic checks to every 100ms
+    const now = Date.now();
+    if (now - lastHapticTime.current < 100) return;
+    lastHapticTime.current = now;
+
+    // Find nearest pin to camera center
+    let nearestItem: SavedItem | null = null;
+    let minDist = 0.15; // Proximity threshold in km (approx 150m)
+
+    itemsRef.current.forEach(item => {
+      if (item.location_lat && item.location_lng) {
+        const dist = getDistanceKm(center[1], center[0], item.location_lat, item.location_lng);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestItem = item;
+        }
+      }
+    });
+
+    if (nearestItem && nearestItem.id !== lastHapticPinId.current) {
+      // HAPTIC PULSE: Feels like "snapping" onto a landmark
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      lastHapticPinId.current = nearestItem.id;
+    } else if (!nearestItem) {
+      lastHapticPinId.current = null;
+    }
+  }, []);
+
   const handleMapIdle = useCallback((event: any) => {
     // 1. Extract zoom and bounds from the event (Push model)
     const zoom = event.properties?.zoomLevel 
@@ -1420,6 +1477,7 @@ export default function CountryBubbleScreen() {
   }), []);
 
   // Remote PNG icons for map pins (white icons from icons8)
+  // TODO: Replace with "High-End 2D Charms" (512x512 transparent PNGs)
   const PIN_ICONS = useMemo(() => ({
     'icon-food': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/restaurant.png' },
     'icon-activity': { uri: 'https://img.icons8.com/ios-filled/50/FFFFFF/star--v1.png' },
@@ -2084,35 +2142,53 @@ export default function CountryBubbleScreen() {
         compassEnabled={false}
         scaleBarEnabled={false}
         onMapIdle={handleMapIdle}
+        onCameraChanged={handleCameraChanged}
         onPress={handleMapPress}
         projection="globe"
         pitchEnabled={true} // Allow 3D tilt
       >
-        {/* ATMOSPHERE & SKY - Makes the map feel like a real world */}
+        {/* ZENLY ATMOSPHERE - Deep space with glowing Earth halo */}
         <Atmosphere style={{
-          color: 'rgba(30, 41, 59, 0.8)',
+          color: 'rgb(10, 10, 30)',           // Deep space black
+          highColor: 'rgb(70, 50, 120)',      // Vibrant purple/blue glow at horizon
+          horizonBlend: 0.1,                  // Soft blend
+          spaceColor: 'rgb(5, 5, 15)',        // True space
+          starIntensity: 0.8                  // Visible stars
         }} />
         <SkyLayer id="sky" style={{
           skyType: 'atmosphere',
-          skyAtmosphereColor: 'rgba(99, 102, 241, 0.5)',
+          skyAtmosphereColor: 'rgba(70, 50, 120, 0.5)', 
           skyAtmosphereSun: [0, 0],
-          skyAtmosphereSunIntensity: 15,
+          skyAtmosphereSunIntensity: 20,
         }} />
 
         {/* 3D LIGHTING - Essential for seeing depth on extrusions */}
         <Light style={{
           anchor: 'viewport',
           color: '#FFFFFF',
-          intensity: 0.4,
-          position: [1.15, 210, 30], // [radial, azimuthal, polar] - creates nice highlights
+          intensity: 0.5,
+          position: [1.15, 210, 30], 
         }} />
+
+        {/* ZENLY LAND/WATER STYLING - High contrast space look */}
+        <BackgroundLayer id="map-background" style={{ backgroundColor: '#05070a' }} />
+        <FillLayer
+          id="water-glow"
+          sourceID="composite"
+          sourceLayerID="water"
+          style={{
+            fillColor: '#0d1b2a',
+            fillOpacity: 0.9,
+            fillOutlineColor: '#0ea5e9', 
+          }}
+        />
 
         {/* 3D BUILDINGS LAYER - Performance Optimized Glass City */}
         <FillExtrusionLayer
           id="3d-buildings"
           sourceID="composite"
           sourceLayerID="building"
-          minZoomLevel={14.5} // Only render when close to keep FPS high
+          minZoomLevel={14} // Earlier visibility for smoother LOD
           maxZoomLevel={22}
           style={{
             // Dynamic Glass Color: Slate base with Candy top
@@ -2120,9 +2196,9 @@ export default function CountryBubbleScreen() {
               'interpolate',
               ['linear'],
               ['get', 'height'],
-              0, 'rgba(30, 41, 59, 0.5)',   // Opaque slate base
-              50, 'rgba(99, 102, 241, 0.4)', // Glassy Indigo mid
-              100, 'rgba(168, 85, 247, 0.3)' // Translucent Purple top
+              0, 'rgba(30, 41, 59, 0.7)',   // Darker base for X-Ray
+              50, 'rgba(99, 102, 241, 0.5)', // Indigo
+              100, 'rgba(6, 182, 212, 0.4)'  // Cyan top
             ],
             // Vertical Gradient: Makes walls darker at bottom (realistic depth)
             fillExtrusionVerticalGradient: true,
@@ -2132,8 +2208,8 @@ export default function CountryBubbleScreen() {
               'interpolate',
               ['linear'],
               ['zoom'],
-              14.5, 0,
-              16, ['*', ['coalesce', ['get', 'height'], 20], 1.1]
+              14, 0,
+              16, ['*', ['coalesce', ['get', 'height'], 20], 1.2] // More height
             ],
             fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
             
@@ -2142,8 +2218,8 @@ export default function CountryBubbleScreen() {
               'interpolate',
               ['linear'],
               ['zoom'],
-              14.5, 0,
-              15, 0.85
+              14, 0,
+              15.5, 0.95 // Full "Glass City" mode
             ],
           }}
         />
@@ -2161,7 +2237,7 @@ export default function CountryBubbleScreen() {
             zoomLevel: initialCameraConfig.zoomLevel,
           }}
           followUserLocation={false}
-          minZoomLevel={1}
+          minZoomLevel={0}
           maxZoomLevel={20}
         />
 
@@ -2222,7 +2298,7 @@ export default function CountryBubbleScreen() {
               }
             }}
           >
-            {/* PIN SHADOW - For "Premium" feel */}
+            {/* PIN SHADOW - For "Premium" feel (Zenly Style) */}
             <CircleLayer
               id="pin-shadow"
               style={{
@@ -2236,8 +2312,8 @@ export default function CountryBubbleScreen() {
                 ],
                 circleColor: '#000000',
                 circleOpacity: 0.4,
-                circleBlur: 0.5,
-                circleTranslate: [0, 2],
+                circleBlur: 0.6,
+                circleTranslate: [0, 6], // Fixed shadow on ground
                 circleSortKey: ['get', 'rank'],
               }}
             />
@@ -2251,11 +2327,12 @@ export default function CountryBubbleScreen() {
                 circleColor: '#06B6D4',
                 circleOpacity: 0.5,
                 circleBlur: 0.8,
+                circleTranslate: [0, floatOffset],
                 circleSortKey: ['+', ['get', 'rank'], 100], // Always on top of other pins
               }}
             />
 
-            {/* INTELLIGENT PINS - Solid circles with colored stroke */}
+            {/* ENAMEL PINS - Core circle with glossy border (Zenly Style) */}
             <CircleLayer
               id="unclustered-pins"
               style={{
@@ -2263,25 +2340,52 @@ export default function CountryBubbleScreen() {
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 8,
-                  12, 12,
-                  16, 16
+                  8, 10,
+                  12, 14,
+                  16, 18
                 ],
                 circleColor: ['get', 'color'],
-                circleOpacity: 1.0,
-                circleStrokeWidth: [
-                  'case',
-                  ['==', ['get', 'id'], selectedPlaceId || '__none__'],
-                  4,
-                  2
+                circleOpacity: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  4, 0,    // LOD: Hide at globe level
+                  5, 1,    // LOD: Show at regional level
+                  15, 1,   // LOD: Stay visible
+                  16, 0.2  // LOD: Fade out when buildings appear (X-Ray mode)
                 ],
-                circleStrokeColor: [
-                  'case',
-                  ['==', ['get', 'id'], selectedPlaceId || '__none__'],
-                  '#06B6D4',
-                  '#FFFFFF'
+                circleStrokeWidth: 2,
+                circleStrokeColor: 'rgba(255, 255, 255, 0.8)',
+                circleSortKey: ['get', 'rank'],
+                circleTranslate: [0, floatOffset], // Bobbing effect
+              }}
+            />
+
+            {/* GLOSSY HIGHLIGHT - Makes them look like "Candy" pins */}
+            <CircleLayer
+              id="pin-gloss"
+              style={{
+                circleRadius: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  8, 5,
+                  12, 7,
+                  16, 9
                 ],
-                circleSortKey: ['get', 'rank'], // Higher rank = on top
+                circleColor: '#FFFFFF',
+                circleOpacity: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  4, 0,
+                  5, 0.4,
+                  15, 0.4,
+                  16, 0.1
+                ],
+                circleTranslate: [0, floatOffset - 4], // Bobbing + offset
+                circleBlur: 0.4,
+                circleSortKey: ['+', ['get', 'rank'], 1],
               }}
             />
 
@@ -2294,13 +2398,41 @@ export default function CountryBubbleScreen() {
                   'interpolate',
                   ['linear'],
                   ['zoom'],
-                  8, 0.25,
-                  12, 0.35,
-                  16, 0.45
+                  8, 0.3,
+                  12, 0.4,
+                  16, 0.5
                 ],
+                iconTranslate: [0, floatOffset],
                 iconAllowOverlap: true,
                 iconIgnorePlacement: true,
                 iconAnchor: 'center',
+                symbolSortKey: ['get', 'rank'],
+              }}
+            />
+
+            {/* PIN LABELS - Zenly style "Embossed" text (Phase 2.1) */}
+            <SymbolLayer
+              id="pin-labels"
+              style={{
+                textField: ['get', 'name'],
+                textSize: 11,
+                textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+                textColor: '#FFFFFF',
+                textHaloColor: 'rgba(31, 32, 34, 0.9)', // Match background for "cutout" look
+                textHaloWidth: 2,
+                textOffset: [0, 1.8],
+                textAnchor: 'top',
+                textOpacity: [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  13, 0,
+                  14, 1,
+                  15.5, 0.4 // Fade labels slightly in X-Ray mode to favor buildings
+                ],
+                textTranslate: [0, floatOffset],
+                textAllowOverlap: false,
+                textIgnorePlacement: false,
                 symbolSortKey: ['get', 'rank'],
               }}
             />
@@ -2845,59 +2977,61 @@ export default function CountryBubbleScreen() {
         </>
       )}
 
-            {/* Bottom Tab Bar - Always visible */}
-      <View style={styles.bottomTabBar}>
-        <BouncyPressable
-          style={[styles.tabButton, activeTab === 'map' && styles.tabButtonActive]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setActiveTab('map');
-          }}
-        >
-          <View style={[styles.tabIconContainer, activeTab === 'map' && styles.tabIconContainerActive]}>
-            <Ionicons 
-              name={activeTab === 'map' ? 'map' : 'map-outline'} 
-              size={20} 
-              color={activeTab === 'map' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
-            />
-          </View>
-          <Text style={[styles.tabLabel, activeTab === 'map' && styles.tabLabelActive]}>Map</Text>
-        </BouncyPressable>
-        
-        <BouncyPressable
-          style={[styles.tabButton, activeTab === 'explore' && styles.tabButtonActive]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setActiveTab('explore');
-          }}
-        >
-          <View style={[styles.tabIconContainer, activeTab === 'explore' && styles.tabIconContainerActive]}>
-            <Ionicons 
-              name={activeTab === 'explore' ? 'compass' : 'compass-outline'} 
-              size={20} 
-              color={activeTab === 'explore' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
-            />
-          </View>
-          <Text style={[styles.tabLabel, activeTab === 'explore' && styles.tabLabelActive]}>Explore</Text>
-        </BouncyPressable>
+      {/* Bottom Tab Bar - Frosted Glass Zenly Style (Phase 5.1) */}
+      <BlurView intensity={80} tint="dark" style={styles.bottomTabBarBlur}>
+        <View style={styles.bottomTabBar}>
+          <BouncyPressable
+            style={[styles.tabButton, activeTab === 'map' && styles.tabButtonActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('map');
+            }}
+          >
+            <View style={[styles.tabIconContainer, activeTab === 'map' && styles.tabIconContainerActive]}>
+              <Ionicons 
+                name={activeTab === 'map' ? 'map' : 'map-outline'} 
+                size={20} 
+                color={activeTab === 'map' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
+              />
+            </View>
+            <Text style={[styles.tabLabel, activeTab === 'map' && styles.tabLabelActive]}>Map</Text>
+          </BouncyPressable>
+          
+          <BouncyPressable
+            style={[styles.tabButton, activeTab === 'explore' && styles.tabButtonActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('explore');
+            }}
+          >
+            <View style={[styles.tabIconContainer, activeTab === 'explore' && styles.tabIconContainerActive]}>
+              <Ionicons 
+                name={activeTab === 'explore' ? 'compass' : 'compass-outline'} 
+                size={20} 
+                color={activeTab === 'explore' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
+              />
+            </View>
+            <Text style={[styles.tabLabel, activeTab === 'explore' && styles.tabLabelActive]}>Explore</Text>
+          </BouncyPressable>
 
-        <BouncyPressable
-          style={[styles.tabButton, activeTab === 'journey' && styles.tabButtonActive]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setActiveTab('journey');
-          }}
-        >
-          <View style={[styles.tabIconContainer, activeTab === 'journey' && styles.tabIconContainerActive]}>
-            <Ionicons 
-              name={activeTab === 'journey' ? 'sparkles' : 'sparkles-outline'} 
-              size={20} 
-              color={activeTab === 'journey' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
-            />
-          </View>
-          <Text style={[styles.tabLabel, activeTab === 'journey' && styles.tabLabelActive]}>Journey</Text>
-        </BouncyPressable>
-      </View>
+          <BouncyPressable
+            style={[styles.tabButton, activeTab === 'journey' && styles.tabButtonActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('journey');
+            }}
+          >
+            <View style={[styles.tabIconContainer, activeTab === 'journey' && styles.tabIconContainerActive]}>
+              <Ionicons 
+                name={activeTab === 'journey' ? 'sparkles' : 'sparkles-outline'} 
+                size={20} 
+                color={activeTab === 'journey' ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} 
+              />
+            </View>
+            <Text style={[styles.tabLabel, activeTab === 'journey' && styles.tabLabelActive]}>Journey</Text>
+          </BouncyPressable>
+        </View>
+      </BlurView>
 
       {/* Floating AI Orb - Always visible */}
       <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen && activeTab !== 'journey'} />
@@ -3276,23 +3410,24 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   
-  // Bottom Tab Bar
-  bottomTabBar: {
+  // Bottom Tab Bar - Frosted Glass (Phase 5.1)
+  bottomTabBarBlur: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    zIndex: 500,
+  },
+  bottomTabBar: {
     flexDirection: 'row',
-    backgroundColor: '#1F2022', // Charcoal grey
+    backgroundColor: 'rgba(31, 32, 34, 0.7)', // Semi-transparent charcoal
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
-    paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 12,
     paddingHorizontal: 40,
     justifyContent: 'space-around',
     alignItems: 'center',
-    zIndex: 500,
-    elevation: 20,
   },
   tabButton: {
     alignItems: 'center',

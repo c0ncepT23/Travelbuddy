@@ -366,9 +366,14 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
-      {/* Glow removed - it was causing the "frosted" look on Android */}
+      <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill}>
+        {/* Top Gradient Glow - For premium depth */}
+        <LinearGradient
+          colors={['rgba(255, 255, 255, 0.1)', 'transparent']}
+          style={styles.topGlow}
+        />
 
-      <GestureDetector gesture={panGesture}>
+        <GestureDetector gesture={panGesture}>
         <Animated.View style={styles.header}>
           <View style={styles.handleIndicator} />
           <View style={styles.headerContent}>
@@ -419,6 +424,7 @@ export const PersistentPlacesDrawer = forwardRef<PersistentPlacesDrawerRef, Pers
           ListEmptyComponent={renderEmpty}
         />
       </Animated.View>
+      </BlurView>
     </Animated.View>
   );
 });
@@ -431,7 +437,7 @@ const styles = StyleSheet.create({
     bottom: TAB_BAR_HEIGHT,
     height: SCREEN_HEIGHT - TAB_BAR_HEIGHT,
     zIndex: 100,
-    backgroundColor: '#1F2022', // Charcoal grey
+    backgroundColor: 'transparent', // Handled by BlurView
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     elevation: 25,

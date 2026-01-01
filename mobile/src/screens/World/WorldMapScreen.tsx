@@ -1,10 +1,10 @@
 /**
  * World Map Screen - V2 Home
  * 
- * Interactive flat world map showing saved countries
- * - Highlights countries with saved places in neon glow
- * - Tap country → CountryBubbleScreen
- * - Clean, minimal design
+ * Interactive 3D globe showing saved countries
+ * - Highlights countries with 3D landmarks (Statue of Liberty, Mt. Fuji, etc.)
+ * - Tap landmark → CountryBubbleScreen
+ * - Clean, minimal "Zenly" style design
  */
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
@@ -24,6 +24,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
+import { BlurView } from 'expo-blur';
 
 // COLOR PALETTE - Lighter for visibility
 const COLORS = {
@@ -222,29 +223,31 @@ export default function WorldMapScreen() {
         >
           <Text style={styles.logo}>yori</Text>
           <Text style={styles.tagline}>
-            your saved places, everywhere
+            your world, visualized
           </Text>
         </MotiView>
         
         <View style={styles.headerRight}>
-          {/* Profile button */}
+          {/* Profile button - Frosted Glass */}
           <TouchableOpacity 
-            style={styles.profileButton}
             onPress={handleProfilePress}
+            activeOpacity={0.8}
           >
-            {user?.avatar_url ? (
-              <View style={styles.avatarContainer}>
-                <Text style={styles.avatarText}>
-                  {user.name?.charAt(0).toUpperCase() || '?'}
-                </Text>
-              </View>
-            ) : (
-              <Ionicons 
-                name="person-circle-outline" 
-                size={32} 
-                color="#ffffff"
-              />
-            )}
+            <BlurView intensity={40} tint="light" style={styles.profileButton}>
+              {user?.avatar_url ? (
+                <View style={styles.avatarContainer}>
+                  <Text style={styles.avatarText}>
+                    {user.name?.charAt(0).toUpperCase() || '?'}
+                  </Text>
+                </View>
+              ) : (
+                <Ionicons 
+                  name="person" 
+                  size={22} 
+                  color="#ffffff"
+                />
+              )}
+            </BlurView>
           </TouchableOpacity>
         </View>
       </View>
@@ -277,31 +280,38 @@ export default function WorldMapScreen() {
         </MotiView>
       )}
 
-      {/* Stats bar at bottom */}
+      {/* Stats bar at bottom - Zenly style frosted glass */}
       {countryMarkers.length > 0 && (
         <MotiView
           from={{ opacity: 0, translateY: 50 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'spring', delay: 200 }}
-          style={styles.statsBar}
+          style={styles.statsBarContainer}
         >
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {countryMarkers.length}
-            </Text>
-            <Text style={styles.statLabel}>
-              {countryMarkers.length === 1 ? 'Country' : 'Countries'}
-            </Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {totalPlacesSaved}
-            </Text>
-            <Text style={styles.statLabel}>
-              Places Saved
-            </Text>
-          </View>
+          <BlurView intensity={60} tint="dark" style={styles.statsBarBlur}>
+            <LinearGradient
+              colors={['rgba(99, 102, 241, 0.15)', 'rgba(6, 182, 212, 0.1)']}
+              style={styles.statsGradient}
+            >
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>
+                  {countryMarkers.length}
+                </Text>
+                <Text style={styles.statLabel}>
+                  {countryMarkers.length === 1 ? 'Country' : 'Countries'}
+                </Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>
+                  {totalPlacesSaved}
+                </Text>
+                <Text style={styles.statLabel}>
+                  Places Saved
+                </Text>
+              </View>
+            </LinearGradient>
+          </BlurView>
         </MotiView>
       )}
 
@@ -376,11 +386,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.3)',
+    overflow: 'hidden',
   },
   avatarContainer: {
     width: 36,
@@ -446,23 +457,24 @@ const styles = StyleSheet.create({
     color: COLORS.electricBlue,
     marginLeft: 8,
   },
-  statsBar: {
+  statsBarContainer: {
     position: 'absolute',
     bottom: 40,
     left: 20,
     right: 20,
-    backgroundColor: COLORS.surfaceCard + 'F0',
-    borderRadius: 16,
-    padding: 16,
+    zIndex: 20,
+  },
+  statsBarBlur: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  statsGradient: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.primaryGlow + '30',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 5,
+    padding: 20,
   },
   statItem: {
     alignItems: 'center',
