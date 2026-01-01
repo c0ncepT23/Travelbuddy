@@ -65,6 +65,8 @@ import { GlassCard } from '../../components/GlassCard';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripDataStore } from '../../stores/tripDataStore';
+import { useTripStore } from '../../stores/tripStore';
+import { Alert } from 'react-native';
 
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { ScoutCarousel, ScoutResult } from '../../components/ScoutCarousel';
@@ -713,14 +715,9 @@ export default function CountryBubbleScreen() {
   const [showConfetti, setShowConfetti] = useState(false);
 
   // Zenly-style floating animation offset (Phase 2.2)
-  const [floatOffset, setFloatOffset] = useState(0);
-
-  useEffect(() => {
-    const bobInterval = setInterval(() => {
-      setFloatOffset(Math.sin(Date.now() / 800) * 4);
-    }, 50);
-    return () => clearInterval(bobInterval);
-  }, []);
+  // Note: Static value - Mapbox layers don't animate on React state changes
+  // For actual animation, would need Mapbox expressions or native animations
+  const floatOffset = 0;
 
   // Bottom Sheet State (Clusters/Pins use this)
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
@@ -743,6 +740,7 @@ export default function CountryBubbleScreen() {
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
   const { location, startTracking } = useLocationStore();
+  const { currentTrip, fetchTripDetails, markTripCompleted } = useTripStore();
   const { 
     fetchSavedPlaces, 
     getSavedPlaces, 
@@ -905,6 +903,7 @@ export default function CountryBubbleScreen() {
   useEffect(() => {
     if (tripId) {
       fetchItems();
+      fetchTripDetails(tripId); // Load trip details for is_completed status
     } else {
       setIsLoading(false);
     }
@@ -938,7 +937,7 @@ export default function CountryBubbleScreen() {
         // Mark the scout intent as resolved if we have an ID
         if (scoutId) {
           try {
-            await api.patch(`/share/scouts/${scoutId}/status`, { status: 'resolved' });
+            await api.post(`/share/discovery-queue/${scoutId}/saved`);
             setDiscoveryIntent(null);
             setScoutId(null);
           } catch (e) {
@@ -1024,7 +1023,7 @@ export default function CountryBubbleScreen() {
       }
 
       try {
-        const clustersResponse = await api.get(`/trips/${tripId}/items/sub-clusters`);
+        const clustersResponse = await api.get(`/trips/${tripId}/items/clusters`);
         setSubClusters(clustersResponse.data.data || clustersResponse.data);
       } catch (e) {
         setSubClusters(null);
@@ -1032,7 +1031,7 @@ export default function CountryBubbleScreen() {
 
       // Also fetch active scouts for this trip
       try {
-        const scoutsResponse = await api.get(`/share/scouts/${tripId}`);
+        const scoutsResponse = await api.get(`/share/discovery-queue/${tripId}`);
         if (scoutsResponse.data.success && scoutsResponse.data.scouts?.length > 0) {
           // For now, let's just use the most recent active scout
           const activeScout = scoutsResponse.data.scouts[0];
@@ -1345,11 +1344,14 @@ export default function CountryBubbleScreen() {
       }
     });
 
-    if (nearestItem && nearestItem.id !== lastHapticPinId.current) {
-      // HAPTIC PULSE: Feels like "snapping" onto a landmark
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      lastHapticPinId.current = nearestItem.id;
-    } else if (!nearestItem) {
+    if (nearestItem) {
+      const itemId = (nearestItem as SavedItem).id;
+      if (itemId !== lastHapticPinId.current) {
+        // HAPTIC PULSE: Feels like "snapping" onto a landmark
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        lastHapticPinId.current = itemId;
+      }
+    } else {
       lastHapticPinId.current = null;
     }
   }, []);
@@ -2439,7 +2441,7 @@ export default function CountryBubbleScreen() {
 
             {/* PIN LABELS - Names only at high zoom (zoom 15+) */}
             <SymbolLayer
-              id="pin-labels"
+              id="pin-labels-xray"
               style={{
                 textField: [
                   'step',
@@ -2748,20 +2750,57 @@ export default function CountryBubbleScreen() {
               </TouchableOpacity>
             </MotiView>
 
-            {/* Near Me Button - Top Right */}
-            <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-              <TouchableOpacity
-                style={[styles.headerActionButton, filterMode === 'nearMe' && styles.headerActionButtonActive]}
-                onPress={handleNearMePress}
-                activeOpacity={0.8}
-              >
-                <Ionicons 
-                  name="locate" 
-                  size={22} 
-                  color={filterMode === 'nearMe' ? '#FFFFFF' : '#06B6D4'} 
-                />
-              </TouchableOpacity>
-            </MotiView>
+            {/* Right side buttons */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Mark as Completed Button */}
+              <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                <TouchableOpacity
+                  style={[styles.headerActionButton, currentTrip?.is_completed && { backgroundColor: '#22C55E20', borderColor: '#22C55E' }]}
+                  onPress={async () => {
+                    try {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      const newStatus = !currentTrip?.is_completed;
+                      await markTripCompleted(tripId, newStatus);
+                      
+                      if (newStatus) {
+                        setShowConfetti(true);
+                        setTimeout(() => setShowConfetti(false), 5000);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      }
+
+                      Alert.alert(
+                        newStatus ? '🏆 Trip Completed!' : '✈️ Trip Reactivated',
+                        newStatus 
+                          ? 'This trip will appear as a trophy on your globe!' 
+                          : 'Trip is now active again.'
+                      );
+                    } catch (error) {
+                      Alert.alert('Error', 'Failed to update trip status');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 18 }}>
+                    {currentTrip?.is_completed ? '🏆' : '✓'}
+                  </Text>
+                </TouchableOpacity>
+              </MotiView>
+
+              {/* Near Me Button */}
+              <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                <TouchableOpacity
+                  style={[styles.headerActionButton, filterMode === 'nearMe' && styles.headerActionButtonActive]}
+                  onPress={handleNearMePress}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons 
+                    name="locate" 
+                    size={22} 
+                    color={filterMode === 'nearMe' ? '#FFFFFF' : '#06B6D4'} 
+                  />
+                </TouchableOpacity>
+              </MotiView>
+            </View>
           </View>
 
           {/* Filter Chip - shows for explicit filters */}

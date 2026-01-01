@@ -546,10 +546,10 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
       >
         {/* 🌊 MIDNIGHT NAVY SKY - Classic Arcade Neon Glow ✨ */}
         <Atmosphere style={{
-          highColor: 'rgb(20, 60, 120)',       // Deep blue horizon glow
-          horizonBlend: 0.12,                  // Soft horizon blend
-          spaceColor: 'rgb(0, 31, 63)',        // #001F3F Midnight Navy!
-          starIntensity: 0.8                   // Sparkly stars for arcade feel
+          highColor: 'rgb(70, 50, 120)',       // Vibrant Purple/Blue horizon glow
+          horizonBlend: 0.08,                  // Soft horizon blend
+          spaceColor: 'rgb(5, 5, 20)',         // Deep space midnight
+          starIntensity: 0.7                   // Sparkly stars for arcade feel
         }} />
         <SkyLayer id="sky" style={{
           skyType: 'atmosphere',
@@ -574,18 +574,14 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           onPress={(e) => {
             const feature = e.features?.[0];
             if (feature?.properties?.id) {
-              // Don't navigate for completed trips (trophy mode - view only)
-              if (feature.properties.isCompleted === 1) {
-                return; // Completed trips are not clickable
-              }
+              // All trips are clickable (users can revisit countries!)
               handleMarkerPress(feature.properties.name, feature.properties.id);
             }
           }}
         >
-          {/* CARTOON GLOW RING - Lime Green for Active, Grey for Completed */}
+          {/* CARTOON GLOW RING - Lime Green */}
           <CircleLayer
             id="glow-outer"
-            filter={['==', ['get', 'isCompleted'], 0]}  // Only show glow for ACTIVE trips
             style={{
               circleRadius: [
                 'interpolate',
@@ -609,100 +605,45 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
 
 
           {/* LANDMARK CHARM - PNG Icon (if available) or Emoji fallback */}
-          {/* Active trips: Full size, full color | Completed trips: 50% size, greyed out */}
           <SymbolLayer
             id="landmark-charms"
             style={{
               // Use PNG icon if available - compact for dense regions like Asia
               iconImage: ['get', 'icon'],
               iconSize: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                // COMPLETED: 50% smaller (trophy mode)
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  0, 0.035,
-                  3, 0.05,
-                  6, 0.08
-                ],
-                // ACTIVE: Normal size
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  0, 0.06,
-                  3, 0.09,
-                  6, 0.14
-                ]
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 0.06,
+                3, 0.09,
+                6, 0.14
               ],
               iconAllowOverlap: true,
               iconIgnorePlacement: true,
               iconAnchor: 'center',
               iconOpacity: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                // COMPLETED: Greyed out (40% opacity)
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  5.5, 0.4,
-                  6.5, 0
-                ],
-                // ACTIVE: Full opacity
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  5.5, 1,
-                  6.5, 0
-                ]
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                5.5, 1,
+                6.5, 0
               ],
               // Show emoji from 'landmark' field (empty string if icon exists)
               textField: ['get', 'landmark'],
               textSize: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                // COMPLETED: Smaller text
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  0, 18,
-                  3, 24,
-                  6, 32
-                ],
-                // ACTIVE: Normal text
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  0, 28,
-                  3, 36,
-                  6, 52
-                ]
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 28,
+                3, 36,
+                6, 52
               ],
               textOpacity: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                // COMPLETED: Greyed out
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  5.5, 0.4,
-                  6.5, 0
-                ],
-                // ACTIVE: Full opacity
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  5.5, 1,
-                  6.5, 0
-                ]
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                5.5, 1,
+                6.5, 0
               ],
               textAllowOverlap: true,
               textIgnorePlacement: true,
@@ -710,73 +651,31 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
             }}
           />
 
-          {/* CARTOON LABEL - Zenly Green Halo (greyed for completed) */}
+          {/* CARTOON LABEL - Zenly Green Halo */}
           <SymbolLayer
             id="landmark-labels"
             style={{
               textField: ['get', 'name'],
               textSize: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                // COMPLETED: Smaller label
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  0, 8,
-                  3, 10,
-                  6, 11
-                ],
-                // ACTIVE: Normal label
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  0, 11,
-                  3, 13,
-                  6, 15
-                ]
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 11,
+                3, 13,
+                6, 15
               ],
-              textColor: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                '#888888',  // COMPLETED: Grey text
-                '#FFFFFF'   // ACTIVE: White text
-              ],
-              textHaloColor: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                '#444444',  // COMPLETED: Dark grey halo
-                '#32CD32'   // ACTIVE: Lime green halo (Zenly signature!)
-              ],
-              textHaloWidth: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                1.5,  // COMPLETED: Thinner halo
-                3     // ACTIVE: Normal halo
-              ],
+              textColor: '#FFFFFF',
+              textHaloColor: '#32CD32',  // Lime green halo (Zenly signature!)
+              textHaloWidth: 3,
               textHaloBlur: 0.5,
               textOffset: [0, 3.2],
               textAnchor: 'top',
               textOpacity: [
-                'case',
-                ['==', ['get', 'isCompleted'], 1],
-                // COMPLETED: Greyed out
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  5.5, 0.5,
-                  6.5, 0
-                ],
-                // ACTIVE: Full opacity
-                [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  5.5, 1,
-                  6.5, 0
-                ]
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                5.5, 1,
+                6.5, 0
               ],
               textTransform: 'uppercase',
               textLetterSpacing: 0.12,

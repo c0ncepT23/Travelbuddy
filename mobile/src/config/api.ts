@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 // API Base URL - Using Railway (permanent cloud deployment!)
 export const API_BASE_URL = Platform.OS === 'web' 
   ? 'http://localhost:3000/api'
-  : 'https://travelbuddy-production-1d2c.up.railway.app/api';
+  : 'https://travelbuddy-production-1d2c.up.railway.app/api'; // Ensure /api is at the end for local testing too!
 
 // Create axios instance
 const api = axios.create({

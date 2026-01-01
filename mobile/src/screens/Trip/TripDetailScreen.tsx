@@ -51,7 +51,7 @@ const BOTTOM_SHEET_MAX_HEIGHT = screenHeight * 0.75;
 
 export default function TripDetailScreen({ route, navigation }: any) {
   const { tripId } = route.params;
-  const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
+  const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers, markTripCompleted } = useTripStore();
   const { items, fetchTripItems, toggleFavorite, toggleMustVisit, deleteItem, assignItemToDay, fetchItemsByDay, updateNotes, fetchSubClusters, subClusters } = useItemStore();
   const { sendQuery, getMessages, isLoading: chatLoading } = useCompanionStore();
   const { initializeNotifications, startBackgroundTracking, stopBackgroundTracking, location } = useLocationStore();
@@ -760,6 +760,36 @@ export default function TripDetailScreen({ route, navigation }: any) {
                 }}
               >
                 <Text style={styles.headerButtonIcon}>↗</Text>
+              </TouchableOpacity>
+
+              {/* Mark as Completed Button */}
+              <TouchableOpacity 
+                style={[styles.headerButton, currentTrip?.is_completed && { backgroundColor: '#22C55E20' }]}
+                onPress={async () => {
+                  try {
+                    HapticFeedback.medium();
+                    const newStatus = !currentTrip?.is_completed;
+                    await markTripCompleted(tripId, newStatus);
+                    
+                    if (newStatus && confettiRef.current) {
+                      confettiRef.current.start();
+                      HapticFeedback.success();
+                    }
+
+                    Alert.alert(
+                      newStatus ? '🏆 Trip Completed!' : '✈️ Trip Reactivated',
+                      newStatus 
+                        ? 'This trip will appear as a trophy on your globe!' 
+                        : 'Trip is now active again.'
+                    );
+                  } catch (error) {
+                    Alert.alert('Error', 'Failed to update trip status');
+                  }
+                }}
+              >
+                <Text style={styles.headerButtonIcon}>
+                  {currentTrip?.is_completed ? '🏆' : '✓'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}

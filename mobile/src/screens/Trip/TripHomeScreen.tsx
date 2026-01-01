@@ -26,6 +26,7 @@ import { PlaceListDrawer } from '../../components/PlaceListDrawer';
 import { ImportModalData, MorningBriefing, SavedItem } from '../../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HapticFeedback } from '../../utils/haptics';
+import ConfettiCannon from 'react-native-confetti-cannon';
 import { format, isToday, isYesterday } from 'date-fns';
 import theme from '../../config/theme';
 
@@ -111,6 +112,7 @@ export default function TripHomeScreen({ route, navigation }: any) {
   const { items, fetchTripItems } = useItemStore();
 
   const [inputText, setInputText] = useState('');
+  const [showConfetti, setShowConfetti] = useState(false);
   const [showBriefingCard, setShowBriefingCard] = useState(true);
   const [importModalData, setImportModalData] = useState<ImportModalData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -684,6 +686,13 @@ export default function TripHomeScreen({ route, navigation }: any) {
               HapticFeedback.medium();
               const newStatus = !currentTrip?.is_completed;
               await markTripCompleted(tripId, newStatus);
+
+              if (newStatus) {
+                setShowConfetti(true);
+                setTimeout(() => setShowConfetti(false), 5000);
+                HapticFeedback.success();
+              }
+
               Alert.alert(
                 newStatus ? '🏆 Trip Completed!' : '✈️ Trip Reactivated',
                 newStatus 
@@ -795,6 +804,14 @@ export default function TripHomeScreen({ route, navigation }: any) {
           onClose={handleDrawerClose}
           onCheckIn={(place) => handleTopPickPress(place.id)}
           trip={currentTrip || undefined}
+        />
+      )}
+      {showConfetti && (
+        <ConfettiCannon
+          count={200}
+          origin={{ x: Dimensions.get('window').width / 2, y: -20 }}
+          fadeOut={true}
+          fallSpeed={3000}
         />
       )}
     </KeyboardAvoidingView>
