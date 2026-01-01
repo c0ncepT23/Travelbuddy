@@ -68,6 +68,7 @@ const CHARM_ICONS: Record<string, any> = {
   russia: require('../../assets/charms/russia.png'),
   
   // Asia
+  japan: require('../../assets/charms/japan.png'),
   china: require('../../assets/charms/china.png'),
   india: require('../../assets/charms/india.png'),
   thailand: require('../../assets/charms/thailand.png'),
@@ -315,7 +316,7 @@ const LANDMARKS: Record<string, string> = {
 
 interface MapboxFlatMapProps {
   onCountryPress: (countryName: string, tripId: string) => void;
-  countries: { destination: string; tripId: string }[];
+  countries: { destination: string; tripId: string; isCompleted?: boolean }[];
   style?: any;
 }
 
@@ -430,17 +431,24 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
   // Removed pulsing interval - was causing constant re-renders and jank
   // Pulse effect is now handled by Mapbox expressions (GPU-native)
 
+  // Display name mapping (e.g., "Bali" → "Indonesia")
+  const DISPLAY_NAMES: Record<string, string> = {
+    'bali': 'Indonesia',
+  };
+
   // Prepare country marker data for MarkerViews
   const countryMarkersData = useMemo(() => {
     return countries
       .filter(c => COUNTRY_CENTERS[c.destination.toLowerCase()])
       .map((c, index) => {
         const dest = c.destination.toLowerCase();
+        const displayName = DISPLAY_NAMES[dest] || c.destination;  // Map Bali → Indonesia
         return {
-          destination: c.destination,
+          destination: displayName,
           tripId: c.tripId,
           coordinates: COUNTRY_CENTERS[dest],
           landmark: LANDMARKS[dest] || '📍',
+          isCompleted: c.isCompleted ?? false,  // Trophy mode for completed trips
         };
       });
   }, [countries]);
@@ -480,6 +488,7 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           id: m.tripId, 
           name: m.destination, 
           landmark: hasIcon ? '' : m.landmark,  // Hide emoji if we have icon
+          isCompleted: m.isCompleted ? 1 : 0,   // 1 = trophy mode (greyed, smaller)
         };
         
         if (hasIcon) {
@@ -565,13 +574,18 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           onPress={(e) => {
             const feature = e.features?.[0];
             if (feature?.properties?.id) {
+              // Don't navigate for completed trips (trophy mode - view only)
+              if (feature.properties.isCompleted === 1) {
+                return; // Completed trips are not clickable
+              }
               handleMarkerPress(feature.properties.name, feature.properties.id);
             }
           }}
         >
-          {/* CARTOON GLOW RING 1 - Outer Lime Green Aura */}
+          {/* CARTOON GLOW RING - Lime Green for Active, Grey for Completed */}
           <CircleLayer
             id="glow-outer"
+            filter={['==', ['get', 'isCompleted'], 0]}  // Only show glow for ACTIVE trips
             style={{
               circleRadius: [
                 'interpolate',
@@ -593,94 +607,102 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
             }}
           />
 
-          {/* CARTOON GLOW RING 2 - Middle Yellow Ring */}
-          <CircleLayer
-            id="glow-middle"
-            style={{
-              circleRadius: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                0, 28,
-                3, 40,
-                6, 55
-              ],
-              circleColor: '#FFE135',  // Bright banana yellow
-              circleOpacity: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                5.5, 0.35,
-                6.5, 0
-              ],
-              circleBlur: 0.6,
-            }}
-          />
-
-          {/* CARTOON GLOW RING 3 - Inner White Shine */}
-          <CircleLayer
-            id="glow-inner"
-            style={{
-              circleRadius: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                0, 16,
-                3, 24,
-                6, 35
-              ],
-              circleColor: '#FFFFFF',  // Pure white shine
-              circleOpacity: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                5.5, 0.5,
-                6.5, 0
-              ],
-              circleBlur: 0.4,
-            }}
-          />
 
           {/* LANDMARK CHARM - PNG Icon (if available) or Emoji fallback */}
+          {/* Active trips: Full size, full color | Completed trips: 50% size, greyed out */}
           <SymbolLayer
             id="landmark-charms"
             style={{
               // Use PNG icon if available - compact for dense regions like Asia
               iconImage: ['get', 'icon'],
               iconSize: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                0, 0.06,   // Tiny at full zoom out (Japan/Korea won't overlap)
-                3, 0.09,   // Small at medium zoom
-                6, 0.14    // Moderate when closer
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                // COMPLETED: 50% smaller (trophy mode)
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  0, 0.035,
+                  3, 0.05,
+                  6, 0.08
+                ],
+                // ACTIVE: Normal size
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  0, 0.06,
+                  3, 0.09,
+                  6, 0.14
+                ]
               ],
               iconAllowOverlap: true,
               iconIgnorePlacement: true,
               iconAnchor: 'center',
               iconOpacity: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                5.5, 1,
-                6.5, 0
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                // COMPLETED: Greyed out (40% opacity)
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5.5, 0.4,
+                  6.5, 0
+                ],
+                // ACTIVE: Full opacity
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5.5, 1,
+                  6.5, 0
+                ]
               ],
               // Show emoji from 'landmark' field (empty string if icon exists)
               textField: ['get', 'landmark'],
               textSize: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                0, 28,
-                3, 36,
-                6, 52
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                // COMPLETED: Smaller text
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  0, 18,
+                  3, 24,
+                  6, 32
+                ],
+                // ACTIVE: Normal text
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  0, 28,
+                  3, 36,
+                  6, 52
+                ]
               ],
               textOpacity: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                5.5, 1,
-                6.5, 0
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                // COMPLETED: Greyed out
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5.5, 0.4,
+                  6.5, 0
+                ],
+                // ACTIVE: Full opacity
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5.5, 1,
+                  6.5, 0
+                ]
               ],
               textAllowOverlap: true,
               textIgnorePlacement: true,
@@ -688,31 +710,73 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
             }}
           />
 
-          {/* CARTOON LABEL - Zenly Green Halo */}
+          {/* CARTOON LABEL - Zenly Green Halo (greyed for completed) */}
           <SymbolLayer
             id="landmark-labels"
             style={{
               textField: ['get', 'name'],
               textSize: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                0, 11,
-                3, 13,
-                6, 15
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                // COMPLETED: Smaller label
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  0, 8,
+                  3, 10,
+                  6, 11
+                ],
+                // ACTIVE: Normal label
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  0, 11,
+                  3, 13,
+                  6, 15
+                ]
               ],
-              textColor: '#FFFFFF',
-              textHaloColor: '#32CD32',  // Lime green halo (Zenly signature!)
-              textHaloWidth: 3,
+              textColor: [
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                '#888888',  // COMPLETED: Grey text
+                '#FFFFFF'   // ACTIVE: White text
+              ],
+              textHaloColor: [
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                '#444444',  // COMPLETED: Dark grey halo
+                '#32CD32'   // ACTIVE: Lime green halo (Zenly signature!)
+              ],
+              textHaloWidth: [
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                1.5,  // COMPLETED: Thinner halo
+                3     // ACTIVE: Normal halo
+              ],
               textHaloBlur: 0.5,
               textOffset: [0, 3.2],
               textAnchor: 'top',
               textOpacity: [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                5.5, 1,
-                6.5, 0
+                'case',
+                ['==', ['get', 'isCompleted'], 1],
+                // COMPLETED: Greyed out
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5.5, 0.5,
+                  6.5, 0
+                ],
+                // ACTIVE: Full opacity
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  5.5, 1,
+                  6.5, 0
+                ]
               ],
               textTransform: 'uppercase',
               textLetterSpacing: 0.12,

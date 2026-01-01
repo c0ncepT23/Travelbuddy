@@ -249,5 +249,34 @@ export class TripGroupService {
       throw error;
     }
   }
+
+  /**
+   * Mark trip as completed (for trophy display on globe)
+   */
+  static async markAsCompleted(
+    tripId: string,
+    userId: string,
+    isCompleted: boolean = true
+  ): Promise<TripGroup> {
+    try {
+      // Check if user is member (any member can mark as completed)
+      const isMember = await TripGroupModel.isMember(tripId, userId);
+      if (!isMember) {
+        throw new Error('Only trip members can update trip status');
+      }
+
+      const trip = await TripGroupModel.markAsCompleted(tripId, isCompleted);
+      
+      if (!trip) {
+        throw new Error('Trip not found');
+      }
+
+      logger.info(`Trip ${tripId} marked as ${isCompleted ? 'completed' : 'active'} by user ${userId}`);
+      return trip;
+    } catch (error: any) {
+      logger.error('Error marking trip as completed:', error);
+      throw error;
+    }
+  }
 }
 

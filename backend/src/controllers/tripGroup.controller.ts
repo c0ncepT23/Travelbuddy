@@ -295,5 +295,35 @@ export class TripGroupController {
       });
     }
   }
+
+  /**
+   * Mark trip as completed (for trophy display on globe)
+   */
+  static async markAsCompleted(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { id } = req.params;
+      const { isCompleted } = req.body;
+
+      const trip = await TripGroupService.markAsCompleted(id, req.user.id, isCompleted ?? true);
+
+      res.status(200).json({
+        success: true,
+        data: trip,
+        message: isCompleted ? 'Trip marked as completed' : 'Trip marked as active',
+      });
+    } catch (error: any) {
+      logger.error('Mark as completed error:', error);
+      const statusCode = error.message.includes('member') ? 403 : 400;
+      res.status(statusCode).json({
+        success: false,
+        error: error.message || 'Failed to update trip status',
+      });
+    }
+  }
 }
 

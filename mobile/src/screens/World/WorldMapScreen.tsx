@@ -184,10 +184,11 @@ export default function WorldMapScreen() {
     navigation.navigate('Profile');
   };
 
-  // Get countries for flat map
+  // Get countries for flat map (include is_completed for trophy display)
   const flatMapCountries = trips.map(trip => ({
     destination: trip.destination,
     tripId: trip.id,
+    isCompleted: trip.is_completed ?? false,
   }));
 
   // Calculate total places saved

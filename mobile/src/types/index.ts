@@ -23,6 +23,7 @@ export interface Trip {
   created_at: string;
   updated_at: string;
   places_count?: number;
+  is_completed?: boolean;  // True when user marks trip as done (trophy on globe)
 }
 
 export interface TripMember {

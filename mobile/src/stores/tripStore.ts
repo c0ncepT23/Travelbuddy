@@ -24,6 +24,7 @@ interface TripState {
   joinTrip: (inviteCode: string) => Promise<Trip>;
   leaveTrip: (tripId: string) => Promise<void>;
   setCurrentTrip: (trip: Trip | null) => void;
+  markTripCompleted: (tripId: string, isCompleted?: boolean) => Promise<void>;
 }
 
 export const useTripStore = create<TripState>((set, get) => ({
@@ -159,6 +160,19 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   setCurrentTrip: (trip) => {
     set({ currentTrip: trip });
+  },
+
+  markTripCompleted: async (tripId, isCompleted = true) => {
+    try {
+      const response = await api.put<{ data: Trip }>(`/trips/${tripId}/complete`, { isCompleted });
+      const updatedTrip = response.data.data;
+      set((state) => ({
+        trips: state.trips.map((t) => (t.id === tripId ? updatedTrip : t)),
+        currentTrip: state.currentTrip?.id === tripId ? updatedTrip : state.currentTrip,
+      }));
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to update trip status');
+    }
   },
 }));
 

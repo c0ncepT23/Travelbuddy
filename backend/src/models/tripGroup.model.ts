@@ -233,5 +233,23 @@ export class TripGroupModel {
 
     return result.rows[0] || null;
   }
+
+  /**
+   * Mark trip as completed (for trophy display on globe)
+   */
+  static async markAsCompleted(
+    tripGroupId: string,
+    isCompleted: boolean = true
+  ): Promise<TripGroup | null> {
+    const result = await query(
+      `UPDATE trip_groups 
+       SET is_completed = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $2 
+       RETURNING *, (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = id) as places_count`,
+      [isCompleted, tripGroupId]
+    );
+
+    return result.rows[0] || null;
+  }
 }
 
