@@ -29,7 +29,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 
 // Components
-import { FloatingAIOrb } from '../../components/FloatingAIOrb';
+import { YoriMascot } from '../../components/YoriMascot/YoriMascot';
 import { CompactAIChat } from '../../components/CompactAIChat';
 import api from '../../config/api';
 
@@ -38,6 +38,7 @@ import { useTripStore } from '../../stores/tripStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripDataStore } from '../../stores/tripDataStore';
+import { useYoriStore } from '../../stores/yoriStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -182,6 +183,7 @@ export default function WorldMapScreen() {
   const { user } = useAuthStore();
   const { requestPermission, startTracking } = useLocationStore();
   const { fetchSavedPlaces } = useTripDataStore();
+  const { setYoriState, resetToIdle } = useYoriStore();
   
   const [countryMarkers, setCountryMarkers] = useState<CountryMarkerData[]>([]);
   const [selectedCountryName, setSelectedCountryName] = useState<string | null>(null);
@@ -216,6 +218,7 @@ export default function WorldMapScreen() {
     const url = urls[0];
     setChatMessages(prev => [...prev, { id: `user-${Date.now()}`, type: 'user', content: message, timestamp: new Date() }]);
     setIsAITyping(true);
+    setYoriState('THINKING', "Yori-san is watching the reel...");
 
     try {
       const response = await api.post('/share/process', { url });
@@ -225,6 +228,8 @@ export default function WorldMapScreen() {
         const countryName = trip.destination;
         const placeCount = places?.length || 0;
 
+        setYoriState('CELEBRATING', "Found it! Yori-san marked it on the map.");
+        
         setChatMessages(prev => [...prev, {
           id: `ai-${Date.now()}`,
           type: 'ai',
@@ -250,12 +255,16 @@ export default function WorldMapScreen() {
           setSelectedCountryName(countryName);
         }
 
-        setTimeout(() => setIsChatOpen(false), 3000);
+        setTimeout(() => {
+          setIsChatOpen(false);
+          resetToIdle();
+        }, 3000);
       } else {
         throw new Error('Failed to process link');
       }
     } catch (error) {
       console.error('Smart paste error:', error);
+      setYoriState('ANNOYED', "Yori-san dropped the map. Try again?");
       setChatMessages(prev => [...prev, {
         id: `ai-${Date.now()}`,
         type: 'ai',
@@ -263,6 +272,7 @@ export default function WorldMapScreen() {
         timestamp: new Date(),
       }]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setTimeout(resetToIdle, 3000);
     } finally {
       setIsAITyping(false);
     }
@@ -392,7 +402,7 @@ export default function WorldMapScreen() {
 
       {/* 🚀 GLOBAL AI AGENT - Always on Top */}
       <View style={[styles.aiAgentContainer, { zIndex: 9999 }]}>
-        <FloatingAIOrb onPress={() => setIsChatOpen(true)} visible={!isChatOpen} />
+        <YoriMascot onPress={() => setIsChatOpen(true)} visible={!isChatOpen} />
         <CompactAIChat
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}

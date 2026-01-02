@@ -53,7 +53,7 @@ const MAPBOX_TOKEN = Constants.expoConfig?.extra?.mapboxAccessToken ||
                      process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 import { SavedItem, ItemCategory, SubClusters } from '../../types';
-import { FloatingAIOrb } from '../../components/FloatingAIOrb';
+import { YoriMascot } from '../../components/YoriMascot/YoriMascot';
 import { CompactAIChat } from '../../components/CompactAIChat';
 import { GameBottomSheet, GameBottomSheetRef } from '../../components/GameBottomSheet';
 import { PlaceDetailSheet, PlaceDetailSheetRef } from '../../components/PlaceDetailSheet';
@@ -65,6 +65,7 @@ import { GlassCard } from '../../components/GlassCard';
 import { useCompanionStore } from '../../stores/companionStore';
 import { useLocationStore } from '../../stores/locationStore';
 import { useTripDataStore } from '../../stores/tripDataStore';
+import { useYoriStore } from '../../stores/yoriStore';
 import { useTripStore } from '../../stores/tripStore';
 import { Alert } from 'react-native';
 
@@ -765,6 +766,7 @@ export default function CountryBubbleScreen() {
     setTransition,
     savedPlacesByTrip,
   } = useTripDataStore();
+  const { setYoriState, resetToIdle } = useYoriStore();
 
   const allItems = useMemo(() => savedPlacesByTrip[tripId] || [], [savedPlacesByTrip, tripId]);
 
@@ -2063,6 +2065,7 @@ export default function CountryBubbleScreen() {
 
     // Send to AI backend
     setIsAITyping(true);
+    setYoriState('THINKING', "Yori-san is thinking...");
     try {
       const locationData = location ? { lat: location.coords.latitude, lng: location.coords.longitude } : undefined;
       await sendQuery(tripId, message, locationData);
@@ -2073,10 +2076,13 @@ export default function CountryBubbleScreen() {
         content: latestAIMessage?.content || "I found some great places! Tap expand to see details 🗺️",
         timestamp: new Date(),
       }]);
+      resetToIdle();
     } catch (error) {
+      setYoriState('ANNOYED', "Yori-san is confused. Try again?");
       setChatMessages(prev => [...prev, {
         id: `ai-${Date.now()}`, type: 'ai', content: "Oops! Something went wrong. Try again? 😅", timestamp: new Date(),
       }]);
+      setTimeout(resetToIdle, 3000);
     } finally {
       setIsAITyping(false);
     }
@@ -3062,8 +3068,8 @@ export default function CountryBubbleScreen() {
         </View>
       </BlurView>
 
-      {/* Floating AI Orb - Always visible */}
-      <FloatingAIOrb onPress={handleOrbPress} visible={!isCompactChatOpen && activeTab !== 'journey'} />
+      {/* Yori-san Mascot - Always visible */}
+      <YoriMascot onPress={handleOrbPress} visible={!isCompactChatOpen && activeTab !== 'journey'} />
 
       {/* Compact AI Chat - Always visible */}
       {activeTab !== 'journey' && (

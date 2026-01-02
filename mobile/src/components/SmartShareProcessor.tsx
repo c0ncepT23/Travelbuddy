@@ -24,6 +24,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { HapticFeedback } from '../utils/haptics';
 import api from '../config/api';
+import { useYoriStore } from '../stores/yoriStore';
+import { Image } from 'react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -132,10 +134,10 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const { setYoriState, resetToIdle } = useYoriStore();
 
   // Animation values
   const orbScale = useRef(new Animated.Value(1)).current;
-  const orbRotate = useRef(new Animated.Value(0)).current;
   const ring1Scale = useRef(new Animated.Value(1)).current;
   const ring1Opacity = useRef(new Animated.Value(0.5)).current;
   const ring2Scale = useRef(new Animated.Value(1)).current;
@@ -180,16 +182,6 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
           useNativeDriver: true,
         }),
       ])
-    ).start();
-
-    // Orb rotation
-    Animated.loop(
-      Animated.timing(orbRotate, {
-        toValue: 1,
-        duration: 8000,
-        easing: RNEasing.linear,
-        useNativeDriver: true,
-      })
     ).start();
 
     // Ring 1 pulse outward
@@ -254,19 +246,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
     processUrl();
   }, [url]); // Re-run if URL changes
 
-  // Stop rotation on complete/error
-  useEffect(() => {
-    if (stage === 'complete' || stage === 'error') {
-      orbRotate.stopAnimation();
-    }
-  }, [stage]);
-
   const processUrl = async (retryCount = 0) => {
     try {
       // Stage 1: Detecting
       if (retryCount === 0) {
         HapticFeedback.light();
         setStage('detecting');
+        setYoriState('THINKING', "Yori-san is watching the reel...");
       }
       
       // Minimal delay - just enough for UI to render
@@ -307,6 +293,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       setStage('complete');
       setResult(response.data);
       HapticFeedback.success();
+      setYoriState('CELEBRATING', "Found it! Yori-san marked it on the map.");
 
       // If discovery was queued (food/activity intent but no places), 
       // show the "I'll remember this!" UI and wait for user to acknowledge
@@ -346,6 +333,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       setStage('error');
       setErrorMessage(msg);
       HapticFeedback.error();
+      setYoriState('ANNOYED', "Yori-san dropped the map. Try again?");
       
       setTimeout(() => {
         onError(msg);
@@ -354,11 +342,6 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   };
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-  const orbRotation = orbRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   // If minimized, show small indicator with actual status
   if (isMinimized) {
@@ -507,7 +490,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
             ]}
           />
 
-          {/* Main orb with gradient */}
+          {/* Main orb - Transparent container for Yori-san */}
           <Animated.View
             style={[
               styles.mainOrb,
@@ -518,43 +501,27 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
               }
             ]}
           >
-            {/* Rotating background gradient */}
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  transform: [{ rotate: orbRotation }],
-                }
-              ]}
-            >
-              <LinearGradient
-                colors={['#22D3EE', '#A78BFA', '#F472B6']}
-                style={styles.orbGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+            {/* Yori-san Mascot Image */}
+            <View style={styles.mascotImageContainer}>
+              <Image 
+                source={require('../../assets/yori-san.gif')} 
+                style={styles.mascotImage}
+                resizeMode="contain"
               />
-            </Animated.View>
+            </View>
 
-            {/* Inner glow */}
-            <Animated.View style={[styles.innerGlow, { opacity: glowOpacity }]} />
-            
-            {/* Stage indicator - STABLE (Doesn't rotate) */}
+            {/* Stage indicator overlay (subtle) */}
             <View style={styles.stageIconContainer}>
               <AnimatePresence exitBeforeEnter>
                 <MotiView
                   key={stage}
-                  from={{ opacity: 0, scale: 0.5, rotate: '-45deg' }}
-                  animate={{ opacity: 1, scale: 1, rotate: '0deg' }}
-                  transition={{ type: 'spring', damping: 15 }}
+                  from={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 0.6, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5 }}
                   style={styles.stageIconMoti}
                 >
-                  {stage === 'complete' ? (
-                    <Ionicons name="checkmark" size={54} color="#FFFFFF" />
-                  ) : stage === 'error' ? (
-                    <Ionicons name="close" size={54} color="#FFFFFF" />
-                  ) : (
-                    <Ionicons name="sparkles" size={48} color="#FFFFFF" />
-                  )}
+                  {stage === 'complete' && <Ionicons name="checkmark" size={60} color="#7FFF00" />}
+                  {stage === 'error' && <Ionicons name="close" size={60} color="#FF4500" />}
                 </MotiView>
               </AnimatePresence>
             </View>
@@ -852,37 +819,27 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   ring2: {
     borderColor: 'rgba(167, 139, 250, 0.4)',
   },
   mainOrb: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    overflow: 'hidden',
-    shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 60,
-    elevation: 20,
-  },
-  orbGradient: {
-    width: '100%',
-    height: '100%',
+    width: 160,
+    height: 160,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  innerGlow: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    right: 16,
-    bottom: 16,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  mascotImageContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  mascotImage: {
+    width: 140, 
+    height: 140,
   },
   stageIconContainer: {
     ...StyleSheet.absoluteFillObject,
