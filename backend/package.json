@@ -1,6 +1,6 @@
 {
   "name": "travel-agent-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Backend API for Travel Research Companion App",
   "main": "dist/server.js",
   "scripts": {
