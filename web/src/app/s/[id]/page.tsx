@@ -114,32 +114,21 @@ export default async function Page({ params }: Props) {
         </div>
 
         {/* THE FEAR OF MISSING OUT (FOMO) BLUR */}
-        <div className="absolute bottom-0 left-0 right-0 h-[500px] bg-gradient-to-t from-[#0F1115] via-[#0F1115]/98 to-transparent z-10 flex flex-col items-center justify-end pb-20 px-6">
+        <div className="absolute bottom-0 left-0 right-0 h-[500px] bg-gradient-to-t from-[#0F1115] via-[#0F1115]/98 to-transparent z-10 flex flex-col items-center justify-end pb-24 px-6">
           <div className="backdrop-blur-xl bg-[#1A1D23]/80 border border-slate-700/50 p-8 rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] text-center max-w-sm w-full">
              <div className="w-16 h-16 bg-[#7FFF00] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(127,255,0,0.3)] rotate-3">
                 <span className="text-[#0F1115] text-3xl font-black italic">Y</span>
              </div>
              <h2 className="text-2xl font-black text-white mb-3 tracking-tight">Unlock the Full Journey</h2>
-             <p className="text-slate-400 mb-8 leading-relaxed font-medium">
+             <p className="text-slate-400 mb-2 leading-relaxed font-medium text-sm">
                Vamsi has saved {trip.memoryCount - 3} more spots and notes on their personal map.
              </p>
-             <Link 
-               href="https://play.google.com/store/apps/details?id=travel.yori.app"
-               className="block w-full bg-[#7FFF00] text-[#0F1115] py-4 rounded-2xl font-black text-lg shadow-lg hover:scale-105 transition-transform active:scale-95"
-             >
-               Get Yori Free
-             </Link>
-             <p className="mt-4 text-slate-500 text-xs font-bold uppercase tracking-[0.2em]">
+             <p className="mt-4 text-[#7FFF00] text-[10px] font-black uppercase tracking-[0.2em]">
                Available for iOS & Android
              </p>
           </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="py-12 text-center text-slate-600">
-        <p className="text-xs font-bold tracking-widest uppercase">MADE WITH LOVE BY YORI-SAN 🌏</p>
-      </footer>
     </div>
   );
 }
