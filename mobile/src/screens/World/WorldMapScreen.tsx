@@ -347,7 +347,9 @@ export default function WorldMapScreen() {
       {/* Header overlay */}
       <View style={styles.header}>
         <MotiView from={{ opacity: 0, translateY: -20 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 400 }}>
-          <Text style={styles.logo}>yori</Text>
+          <Text style={styles.logo}>
+            Yori<Text style={styles.logoDot}>.</Text>
+          </Text>
           <Text style={styles.tagline}>your world, visualized</Text>
         </MotiView>
         
@@ -456,8 +458,23 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logo: { fontSize: 32, fontWeight: '900', color: '#ffffff', letterSpacing: -1 },
-  tagline: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  logo: { 
+    fontSize: 38, 
+    fontWeight: '900', 
+    color: '#ffffff', 
+    letterSpacing: -2.5,
+    fontFamily: Platform.OS === 'ios' ? 'Inter-Black' : 'sans-serif-condensed', // Aiming for that heavy weight
+  },
+  logoDot: {
+    color: '#7FFF00', // Signature Zenly Green
+  },
+  tagline: { 
+    fontSize: 13, 
+    color: 'rgba(255,255,255,0.6)', 
+    marginTop: -4,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
   profileButton: {
     width: 44,
     height: 44,
