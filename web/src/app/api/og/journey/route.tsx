@@ -35,12 +35,12 @@ export async function GET(req: NextRequest) {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#F8FAFC',
+            backgroundColor: '#0F1115',
             position: 'relative',
           }}
         >
-          {/* Background Grid Pattern (Simplified for OG) */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.05, backgroundImage: 'radial-gradient(#1e293b 1px, transparent 0)', backgroundSize: '40px 40px' }} />
+          {/* Background Grid Pattern */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.1, backgroundImage: 'radial-gradient(#7FFF00 1px, transparent 0)', backgroundSize: '40px 40px' }} />
 
           {/* THE POLAROID STACK */}
           <div style={{ display: 'flex', position: 'relative', width: '900px', height: '450px', alignItems: 'center', justifyContent: 'center' }}>
@@ -50,8 +50,8 @@ export async function GET(req: NextRequest) {
               <div style={{
                 display: 'flex', position: 'absolute',
                 transform: 'rotate(12deg) translate(180px, 30px)',
-                background: 'white', padding: '12px 12px 48px 12px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0'
+                background: '#1A1D23', padding: '12px 12px 48px 12px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.3)', border: '1px solid #334155'
               }}>
                 <img src={photoUrls[2]} width="280" height="280" style={{ objectFit: 'cover' }} />
               </div>
@@ -62,8 +62,8 @@ export async function GET(req: NextRequest) {
               <div style={{
                 display: 'flex', position: 'absolute',
                 transform: 'rotate(-8deg) translate(-180px, -30px)',
-                background: 'white', padding: '12px 12px 48px 12px',
-                boxShadow: '0 15px 35px rgba(0,0,0,0.12)', border: '1px solid #E2E8F0'
+                background: '#1A1D23', padding: '12px 12px 48px 12px',
+                boxShadow: '0 15px 35px rgba(0,0,0,0.4)', border: '1px solid #334155'
               }}>
                 <img src={photoUrls[1]} width="300" height="300" style={{ objectFit: 'cover' }} />
               </div>
@@ -73,12 +73,12 @@ export async function GET(req: NextRequest) {
             <div style={{
               display: 'flex', position: 'absolute',
               transform: 'rotate(2deg) translateY(-20px)',
-              background: 'white', padding: '16px 16px 72px 16px',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0',
+              background: '#1A1D23', padding: '16px 16px 72px 16px',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.5)', border: '1px solid #334155',
             }}>
               <img src={photoUrls[0] || 'https://yorisan.com/placeholder.png'} width="380" height="380" style={{ objectFit: 'cover' }} />
               {/* "Tape" Decoration */}
-              <div style={{ position: 'absolute', top: -15, left: '50%', marginLeft: -50, width: 100, height: 35, background: 'rgba(254, 249, 195, 0.7)', transform: 'rotate(-3deg)' }} />
+              <div style={{ position: 'absolute', top: -15, left: '50%', marginLeft: -50, width: 100, height: 35, background: 'rgba(127, 255, 0, 0.4)', transform: 'rotate(-3deg)' }} />
             </div>
           </div>
 
@@ -88,14 +88,14 @@ export async function GET(req: NextRequest) {
             padding: '0 80px', alignItems: 'flex-end', justifyContent: 'space-between'
           }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: 64, fontWeight: 'bold', color: '#1E293B' }}>{title}</span>
-              <span style={{ fontSize: 28, color: '#64748B', marginTop: 5 }}>{memoryCount} Unforgettable Memories • {country}</span>
+              <span style={{ fontSize: 64, fontWeight: 'bold', color: 'white' }}>{title}</span>
+              <span style={{ fontSize: 28, color: '#94A3B8', marginTop: 5 }}>{memoryCount} Unforgettable Memories • {country}</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontSize: 20, color: '#94A3B8', fontWeight: 'bold' }}>CREATED WITH</span>
-                <span style={{ fontSize: 36, color: '#3B82F6', fontWeight: '900' }}>YORI</span>
+                <span style={{ fontSize: 20, color: '#64748B', fontWeight: 'bold' }}>CREATED WITH</span>
+                <span style={{ fontSize: 36, color: '#7FFF00', fontWeight: '900' }}>YORI</span>
               </div>
               <img src={`https://yorisan.com/mascot-${mascotType || 'happy'}.png`} width="110" height="110" />
             </div>
