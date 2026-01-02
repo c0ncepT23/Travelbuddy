@@ -28,10 +28,10 @@ export class GeminiService {
    * UPDATED: Amnesic Agent - ONLY uses extracted context, zero external knowledge
    */
   private static getTravelAgentSystemPrompt(context: AgentContext): string {
-    const startDateStr = context.startDate
+    const _startDateStr = context.startDate
       ? new Date(context.startDate).toLocaleDateString()
       : 'Not set';
-    const endDateStr = context.endDate 
+    const _endDateStr = context.endDate 
       ? new Date(context.endDate).toLocaleDateString() 
       : 'Not set';
 

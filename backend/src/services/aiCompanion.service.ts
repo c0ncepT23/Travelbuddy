@@ -1207,7 +1207,7 @@ export class AICompanionService {
   private static async generateAIBriefingMessage(
     context: CompanionContext,
     topPicks: Array<{ name: string; category: string; rating?: number }>,
-    nearbyHotel: Array<{ name: string; category: string; distance: number }>
+    _nearbyHotel: Array<{ name: string; category: string; distance: number }>
   ): Promise<string> {
     const prompt = `You are TravelPal, a contextual travel co-pilot. Generate a brief, friendly greeting (2 sentences max).
 
