@@ -38,45 +38,45 @@ export default function Home() {
       </main>
 
       {/* Featured Destinations Teaser */}
-      <div className="mt-20 flex gap-4 md:gap-8 px-6 overflow-hidden max-w-full justify-center">
+      <div className="mt-12 md:mt-20 flex gap-4 md:gap-8 px-6 overflow-hidden max-w-full justify-center relative z-20 pb-20">
         {/* Japan */}
-        <div className="group relative w-32 h-44 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 -rotate-6 hover:rotate-0 transition-all duration-500 hover:scale-110 z-10">
-          <div className="w-full h-full relative overflow-hidden rounded-lg">
+        <div className="group relative w-28 h-40 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 -rotate-6 hover:rotate-0 transition-all duration-500 hover:scale-110 z-10">
+          <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-900">
             <img 
-              src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&q=80&w=600" 
+              src="https://images.unsplash.com/photo-1528360983277-13d401cdc186?auto=format&fit=crop&q=80&w=600" 
               alt="Japan"
-              className="object-cover w-full h-full"
+              className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
             />
-            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded text-[10px] md:text-xs text-white font-bold uppercase tracking-widest">Japan</div>
+            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] md:text-xs text-white font-bold uppercase tracking-widest">Japan</div>
           </div>
         </div>
 
         {/* Thailand */}
-        <div className="group relative w-32 h-44 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 rotate-3 hover:rotate-0 transition-all duration-500 hover:scale-110 z-20">
-          <div className="w-full h-full relative overflow-hidden rounded-lg">
+        <div className="group relative w-28 h-40 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 rotate-3 hover:rotate-0 transition-all duration-500 hover:scale-110 z-30">
+          <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-900">
             <img 
-              src="https://images.unsplash.com/photo-1528181304800-2f140819898f?auto=format&fit=crop&q=80&w=600" 
+              src="https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?auto=format&fit=crop&q=80&w=600" 
               alt="Thailand"
-              className="object-cover w-full h-full"
+              className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
             />
-            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded text-[10px] md:text-xs text-white font-bold uppercase tracking-widest">Thailand</div>
+            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] md:text-xs text-white font-bold uppercase tracking-widest">Thailand</div>
           </div>
         </div>
 
         {/* Switzerland */}
-        <div className="group relative w-32 h-44 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 -rotate-12 hover:rotate-0 transition-all duration-500 hover:scale-110 z-10">
-          <div className="w-full h-full relative overflow-hidden rounded-lg">
+        <div className="group relative w-28 h-40 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 -rotate-12 hover:rotate-0 transition-all duration-500 hover:scale-110 z-10">
+          <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-900">
             <img 
-              src="https://images.unsplash.com/photo-1530122037265-a5f1f91d3b99?auto=format&fit=crop&q=80&w=600" 
+              src="https://images.unsplash.com/photo-1516466723207-f17de7f17b95?auto=format&fit=crop&q=80&w=600" 
               alt="Switzerland"
-              className="object-cover w-full h-full"
+              className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
             />
-            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded text-[10px] md:text-xs text-white font-bold uppercase tracking-widest">Switzerland</div>
+            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] md:text-xs text-white font-bold uppercase tracking-widest">Switzerland</div>
           </div>
         </div>
       </div>
 
-      <footer className="absolute bottom-10 text-slate-500 text-sm font-bold tracking-tighter">
+      <footer className="mt-auto mb-10 text-slate-500 text-sm font-bold tracking-tighter z-10">
         MADE WITH LOVE BY YORI-SAN 🌏
       </footer>
     </div>
