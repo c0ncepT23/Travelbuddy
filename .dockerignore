@@ -1,0 +1,17 @@
+node_modules
+web/node_modules
+backend/node_modules
+mobile/node_modules
+.git
+.next
+web/.next
+backend/dist
+mobile/android
+mobile/ios
+builds/
+*.apk
+*.aab
+*.ipa
+*.mp4
+*.mov
+
