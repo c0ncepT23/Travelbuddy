@@ -43,7 +43,7 @@ export default function Home() {
         <div className="group relative w-28 h-40 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 -rotate-6 hover:rotate-0 transition-all duration-500 hover:scale-110 z-10">
           <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-900">
             <img 
-              src="https://images.unsplash.com/photo-1528360983277-13d401cdc186?auto=format&fit=crop&q=80&w=600" 
+              src="/destinations/japan.png" 
               alt="Japan"
               className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
             />
@@ -55,7 +55,7 @@ export default function Home() {
         <div className="group relative w-28 h-40 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 rotate-3 hover:rotate-0 transition-all duration-500 hover:scale-110 z-30">
           <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-900">
             <img 
-              src="https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?auto=format&fit=crop&q=80&w=600" 
+              src="/destinations/thailand.png" 
               alt="Thailand"
               className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
             />
@@ -67,7 +67,7 @@ export default function Home() {
         <div className="group relative w-28 h-40 md:w-48 md:h-64 bg-[#1A1D23] rounded-2xl shadow-2xl p-2 md:p-3 border border-slate-800 -rotate-12 hover:rotate-0 transition-all duration-500 hover:scale-110 z-10">
           <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-900">
             <img 
-              src="https://images.unsplash.com/photo-1516466723207-f17de7f17b95?auto=format&fit=crop&q=80&w=600" 
+              src="/destinations/switzerland.png" 
               alt="Switzerland"
               className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
             />
