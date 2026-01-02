@@ -63,7 +63,7 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
     if (!currentStory) return;
 
     HapticFeedback.medium();
-    const storyUrl = `https://yori.travel/story/${currentStory.share_code}`;
+    const storyUrl = `https://yorisan.com/story/${currentStory.share_code}`;
     const message = `Check out my ${destination} journey! 🗺️✨\n\n📍 ${stats?.unique_places || 0} places · ✅ ${stats?.total_checkins || 0} check-ins\n\nView my timeline: ${storyUrl}`;
 
     try {
@@ -80,7 +80,7 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
     if (!currentStory) return;
     
     HapticFeedback.medium();
-    const storyUrl = `https://yori.travel/story/${currentStory.share_code}`;
+    const storyUrl = `https://yorisan.com/story/${currentStory.share_code}`;
     await Clipboard.setStringAsync(storyUrl);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
@@ -139,7 +139,7 @@ export const ShareStoryModal: React.FC<ShareStoryModalProps> = ({
               <Text style={styles.linkLabel}>Your Story Link</Text>
               <View style={styles.linkContainer}>
                 <Text style={styles.linkText} numberOfLines={1}>
-                  yori.travel/story/{currentStory.share_code}
+                  yorisan.com/story/{currentStory.share_code}
                 </Text>
                 <TouchableOpacity 
                   style={[styles.copyButton, linkCopied && styles.copyButtonSuccess]}

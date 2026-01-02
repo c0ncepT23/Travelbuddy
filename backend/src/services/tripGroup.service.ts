@@ -209,7 +209,7 @@ export class TripGroupService {
       }
 
       // Generate share link (you'd customize this with your app's deep link)
-      const shareLink = `https://travelagent.app/join/${trip.invite_code}`;
+      const shareLink = `https://yorisan.com/join/${trip.invite_code}`;
 
       return {
         inviteCode: trip.invite_code,

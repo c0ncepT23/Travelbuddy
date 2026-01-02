@@ -37,7 +37,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const inviteLink = `https://yori.travel/join/${inviteCode}`;
+  const inviteLink = `https://yorisan.com/join/${inviteCode}`;
   
   const shareMessage = `Join my trip "${tripName}" to ${destination}! 🌍✈️\n\n📱 Invite Code: ${inviteCode}\n\n🔗 Or tap: ${inviteLink}`;
 

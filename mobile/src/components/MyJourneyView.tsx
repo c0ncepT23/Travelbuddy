@@ -160,7 +160,7 @@ export const MyJourneyView: React.FC<MyJourneyViewProps> = ({ items, tripName, t
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       
-      const shareUrl = `https://yori.travel/s/${tripId}`;
+      const shareUrl = `https://yorisan.com/s/${tripId}`;
       const message = `Check out my Travel Story in ${tripName}! 🌍✨\n\nSee my full journey and notes here: ${shareUrl}\n\nCreated with Yori - Your Travel Note Keeper`;
 
       const result = await Share.share({

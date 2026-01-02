@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
               background: 'white', padding: '16px 16px 72px 16px',
               boxShadow: '0 25px 60px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0',
             }}>
-              <img src={photoUrls[0] || 'https://yori.travel/placeholder.png'} width="380" height="380" style={{ objectFit: 'cover' }} />
+              <img src={photoUrls[0] || 'https://yorisan.com/placeholder.png'} width="380" height="380" style={{ objectFit: 'cover' }} />
               {/* "Tape" Decoration */}
               <div style={{ position: 'absolute', top: -15, left: '50%', marginLeft: -50, width: 100, height: 35, background: 'rgba(254, 249, 195, 0.7)', transform: 'rotate(-3deg)' }} />
             </div>
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
                 <span style={{ fontSize: 20, color: '#94A3B8', fontWeight: 'bold' }}>CREATED WITH</span>
                 <span style={{ fontSize: 36, color: '#3B82F6', fontWeight: '900' }}>YORI</span>
               </div>
-              <img src={`https://yori.travel/mascot-${mascotType || 'happy'}.png`} width="110" height="110" />
+              <img src={`https://yorisan.com/mascot-${mascotType || 'happy'}.png`} width="110" height="110" />
             </div>
           </div>
         </div>
