@@ -5,6 +5,17 @@ All notable changes to the Travel Research Companion project will be documented 
 ## [Unreleased]
 
 ### Added
+- **Journey Sharing (Viral Loop)** - Implemented a high-conversion sharing experience:
+  - Added "Share Story" FAB in `MyJourneyView.tsx` with haptic feedback.
+  - New Next.js project in `/web` for public journey teasers.
+  - Vercel OG (Satori) integration for dynamic, tilted Polaroid collage previews.
+  - Public backend endpoint for trip summaries.
+- **Next.js Teaser Page** - Mobile-optimized landing page for shared journeys with a "FOMO" blur effect to drive app downloads.
+
+### Fixed
+- **Railway Build Unblocked** - Fixed TypeScript errors in `gemini.service.ts` and `tripGroup.model.ts` caused by unused variables and implicit any types.
+
+### Added
 - **3D Globe Experience (Zenly-Inspired)** - Transformed the flat world map into an interactive 3D globe:
   - `projection="globe"` enabled for a full spherical world view
   - Atmospheric effects with `Atmosphere` and `SkyLayer` for a "space" feel
@@ -24,19 +35,6 @@ All notable changes to the Travel Research Companion project will be documented 
   - `transitionState` - Global UI feedback during navigation
   - `TransitionOverlay` component - Beautiful animated overlay during transitions
   - **Result**: Clicking a chat place card now instantly flies to it (no 2-3s reload!)
-
-### Added
-- **Trip Completion / Trophy Mode** - Mark trips as completed for achievement display:
-  - Backend: New `is_completed` column in `trip_groups` table
-  - Backend: New `PUT /trips/:id/complete` endpoint
-  - Frontend: `markTripCompleted()` action in tripStore
-  - Globe: Completed trips show as trophies:
-    - 50% smaller icons
-    - 40% opacity (greyed out)
-    - Grey text labels
-    - No glow ring
-    - Non-clickable (view only)
-  - Active trips remain vibrant and interactive
 
 - **Premium PNG Charm Icons** - Replaced emojis with high-quality illustrated icons:
   - Added `Images` component to register PNG icons with Mapbox

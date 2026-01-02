@@ -2103,6 +2103,7 @@ export default function CountryBubbleScreen() {
         <MyJourneyView 
           items={allItems} 
           tripName={countryName}
+          tripId={tripId}
         />
       )}
       

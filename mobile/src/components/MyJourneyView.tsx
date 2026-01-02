@@ -6,11 +6,14 @@ import {
   Dimensions,
   ScrollView,
   Platform,
+  Share,
 } from 'react-native';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import FastImage from 'react-native-fast-image';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 import { SavedItem } from '../types';
 import { BouncyPressable } from './BouncyPressable';
 import { getPlacePhotoUrl } from '../config/maps';
@@ -20,6 +23,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 interface MyJourneyViewProps {
   items: SavedItem[];
   tripName: string;
+  tripId: string;
 }
 
 // Polaroid Card Component
@@ -145,12 +149,33 @@ const PolaroidCard = ({
   );
 };
 
-export const MyJourneyView: React.FC<MyJourneyViewProps> = ({ items, tripName }) => {
+export const MyJourneyView: React.FC<MyJourneyViewProps> = ({ items, tripName, tripId }) => {
   const visitedItems = useMemo(() => {
     return items
       .filter(item => item.status === 'visited')
       .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
   }, [items]);
+
+  const handleShare = async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      const shareUrl = `https://yori.travel/s/${tripId}`;
+      const message = `Check out my Travel Story in ${tripName}! 🌍✨\n\nSee my full journey and notes here: ${shareUrl}\n\nCreated with Yori - Your Travel Note Keeper`;
+
+      const result = await Share.share({
+        message,
+        url: shareUrl, // iOS only
+        title: `My ${tripName} Journey`,
+      });
+
+      if (result.action === Share.sharedAction) {
+        console.log('Shared successfully');
+      }
+    } catch (error) {
+      console.error('Error sharing journey:', error);
+    }
+  };
 
   if (visitedItems.length === 0) {
     return (
@@ -176,89 +201,117 @@ export const MyJourneyView: React.FC<MyJourneyViewProps> = ({ items, tripName })
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Hero Header */}
-      <MotiView
-        from={{ opacity: 0, translateY: -20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        style={styles.hero}
+    <View style={{ flex: 1 }}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
+        {/* Hero Header */}
         <MotiView
-          animate={{ rotate: ['0deg', '10deg', '-10deg', '0deg'] }}
-          transition={{ duration: 3000, loop: true, type: 'timing' }}
-          style={styles.planeIcon}
+          from={{ opacity: 0, translateY: -20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          style={styles.hero}
         >
-          <Ionicons name="airplane" size={48} color="rgba(96, 165, 250, 0.2)" />
+          <MotiView
+            animate={{ rotate: ['0deg', '10deg', '-10deg', '0deg'] }}
+            transition={{ duration: 3000, loop: true, type: 'timing' }}
+            style={styles.planeIcon}
+          >
+            <Ionicons name="airplane" size={48} color="rgba(96, 165, 250, 0.2)" />
+          </MotiView>
+          
+          <Text style={styles.heroTitle}>My Travel Story</Text>
+          <Text style={styles.heroSubtitle}>{visitedItems.length} Unforgettable Adventures</Text>
+          
+          <View style={styles.emojiRow}>
+            {['🌍', '✈️', '📸', '❤️'].map((emoji, i) => (
+              <MotiView
+                key={i}
+                from={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: i * 100, type: 'spring' }}
+              >
+                <Text style={styles.emoji}>{emoji}</Text>
+              </MotiView>
+            ))}
+          </View>
         </MotiView>
-        
-        <Text style={styles.heroTitle}>My Travel Story</Text>
-        <Text style={styles.heroSubtitle}>{visitedItems.length} Unforgettable Adventures</Text>
-        
-        <View style={styles.emojiRow}>
-          {['🌍', '✈️', '📸', '❤️'].map((emoji, i) => (
-            <MotiView
-              key={i}
-              from={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: i * 100, type: 'spring' }}
-            >
-              <Text style={styles.emoji}>{emoji}</Text>
-            </MotiView>
+
+        {/* Timeline Content */}
+        <View style={styles.timelineContainer}>
+          {/* Vertical Line */}
+          <LinearGradient
+            colors={['#93C5FD', '#C084FC', '#F472B6']}
+            style={styles.timelineLine}
+          />
+
+          {/* Cards */}
+          {visitedItems.map((item, index) => (
+            <PolaroidCard
+              key={item.id}
+              item={item}
+              index={index}
+              isLeft={index % 2 === 0}
+            />
           ))}
         </View>
-      </MotiView>
 
-      {/* Timeline Content */}
-      <View style={styles.timelineContainer}>
-        {/* Vertical Line */}
-        <LinearGradient
-          colors={['#93C5FD', '#C084FC', '#F472B6']}
-          style={styles.timelineLine}
-        />
-
-        {/* Cards */}
-        {visitedItems.map((item, index) => (
-          <PolaroidCard
-            key={item.id}
-            item={item}
-            index={index}
-            isLeft={index % 2 === 0}
-          />
-        ))}
-      </View>
-
-      {/* Celebratory Footer */}
-      <MotiView
-        from={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: visitedItems.length * 100 + 500 }}
-        style={styles.footer}
-      >
-        <LinearGradient
-          colors={['#2563EB', '#9333EA', '#DB2777']}
-          style={styles.footerBorder}
+        {/* Celebratory Footer */}
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: visitedItems.length * 100 + 500 }}
+          style={styles.footer}
         >
-          <View style={styles.footerInner}>
-            <MotiView
-              animate={{ translateY: [0, -10, 0] }}
-              transition={{ duration: 2000, loop: true, type: 'timing' }}
-              style={styles.footerSparkles}
+          <LinearGradient
+            colors={['#2563EB', '#9333EA', '#DB2777']}
+            style={styles.footerBorder}
+          >
+            <View style={styles.footerInner}>
+              <MotiView
+                animate={{ translateY: [0, -10, 0] }}
+                transition={{ duration: 2000, loop: true, type: 'timing' }}
+                style={styles.footerSparkles}
+              >
+                <Ionicons name="sparkles" size={40} color="#9333EA" />
+              </MotiView>
+              <Text style={styles.footerTitle}>What an incredible journey!</Text>
+              <Text style={styles.footerText}>
+                You've created {visitedItems.length} beautiful {visitedItems.length === 1 ? 'memory' : 'memories'} across {tripName}. 
+                Each destination is a chapter in your unique adventure story. Keep exploring! 🌟
+              </Text>
+            </View>
+          </LinearGradient>
+        </MotiView>
+      </ScrollView>
+
+      {/* Share FAB */}
+      <MotiView
+        from={{ scale: 0, opacity: 0, translateY: 20 }}
+        animate={{ scale: 1, opacity: 1, translateY: 0 }}
+        transition={{ 
+          delay: 800, 
+          type: 'spring',
+          damping: 15
+        }}
+        style={styles.fabContainer}
+      >
+        <BouncyPressable onPress={handleShare}>
+          <BlurView intensity={80} tint="light" style={styles.fabBlur}>
+            <LinearGradient
+              colors={['#3B82F6', '#9333EA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fabGradient}
             >
-              <Ionicons name="sparkles" size={40} color="#9333EA" />
-            </MotiView>
-            <Text style={styles.footerTitle}>What an incredible journey!</Text>
-            <Text style={styles.footerText}>
-              You've created {visitedItems.length} beautiful {visitedItems.length === 1 ? 'memory' : 'memories'} across {tripName}. 
-              Each destination is a chapter in your unique adventure story. Keep exploring! 🌟
-            </Text>
-          </View>
-        </LinearGradient>
+              <Ionicons name="share-social" size={24} color="#FFFFFF" />
+              <Text style={styles.fabText}>Share Story</Text>
+            </LinearGradient>
+          </BlurView>
+        </BouncyPressable>
       </MotiView>
-    </ScrollView>
+    </View>
   );
 };
 
@@ -583,6 +636,35 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    zIndex: 100,
+    borderRadius: 32,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  fabBlur: {
+    borderRadius: 32,
+  },
+  fabGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });
 
