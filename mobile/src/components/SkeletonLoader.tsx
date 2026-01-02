@@ -36,7 +36,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
 const styles = StyleSheet.create({
   skeleton: {
-    backgroundColor: '#1E293B', // Slate-800
+    backgroundColor: '#2A2B2E', // Darker slate for midnight theme
   },
 });
 

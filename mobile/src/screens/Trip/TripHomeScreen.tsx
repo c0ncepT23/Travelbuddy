@@ -91,7 +91,7 @@ const getAvatarColor = (name: string): string => {
 export default function TripHomeScreen({ route, navigation }: any) {
   const { tripId } = route.params;
   const { user } = useAuthStore();
-  const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers, markTripCompleted } = useTripStore();
+  const { currentTrip, currentTripMembers, fetchTripDetails, fetchTripMembers } = useTripStore();
   const { 
     messages, 
     isLoading: chatLoading, 
@@ -644,9 +644,6 @@ export default function TripHomeScreen({ route, navigation }: any) {
         <View style={styles.headerInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={styles.headerTitle}>{currentTrip?.name || 'Trip'}</Text>
-            {currentTrip?.is_completed && (
-              <Text style={{ marginLeft: 6, fontSize: 14 }}>✅</Text>
-            )}
           </View>
           <Text style={styles.headerSubtitle}>
             {currentTrip?.destination}
@@ -677,36 +674,6 @@ export default function TripHomeScreen({ route, navigation }: any) {
           onPress={() => navigation.navigate('TripDetail', { tripId })}
         >
           <Text style={styles.mapButtonText}>🗺️</Text>
-        </TouchableOpacity>
-        {/* Mark as Completed toggle */}
-        <TouchableOpacity 
-          style={[styles.mapButton, currentTrip?.is_completed && { backgroundColor: '#22C55E20' }]}
-          onPress={async () => {
-            try {
-              HapticFeedback.medium();
-              const newStatus = !currentTrip?.is_completed;
-              await markTripCompleted(tripId, newStatus);
-
-              if (newStatus) {
-                setShowConfetti(true);
-                setTimeout(() => setShowConfetti(false), 5000);
-                HapticFeedback.success();
-              }
-
-              Alert.alert(
-                newStatus ? '🏆 Trip Completed!' : '✈️ Trip Reactivated',
-                newStatus 
-                  ? 'This trip will appear as a trophy on your globe.' 
-                  : 'This trip is now active again.'
-              );
-            } catch (error: any) {
-              Alert.alert('Error', error.message);
-            }
-          }}
-        >
-          <Text style={styles.mapButtonText}>
-            {currentTrip?.is_completed ? '🏆' : '✓'}
-          </Text>
         </TouchableOpacity>
       </View>
 

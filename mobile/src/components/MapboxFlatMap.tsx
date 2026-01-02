@@ -101,6 +101,8 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -316,14 +318,35 @@ const LANDMARKS: Record<string, string> = {
 
 interface MapboxFlatMapProps {
   onCountryPress: (countryName: string, tripId: string) => void;
-  countries: { destination: string; tripId: string; isCompleted?: boolean }[];
+  countries: { destination: string; tripId: string }[];
   style?: any;
+  cameraRef?: React.RefObject<Camera>;
+  selectedCountry?: string | null;
+  onSelectedCountryChange?: (countryName: string | null) => void;
 }
 
-export default function MapboxFlatMap({ onCountryPress, countries, style }: MapboxFlatMapProps) {
+export default function MapboxFlatMap({ 
+  onCountryPress, 
+  countries, 
+  style, 
+  cameraRef: externalCameraRef,
+  selectedCountry: externalSelectedCountry,
+  onSelectedCountryChange
+}: MapboxFlatMapProps) {
   const mapRef = useRef<MapView>(null);
-  const cameraRef = useRef<Camera>(null);
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const internalCameraRef = useRef<Camera>(null);
+  const cameraRef = externalCameraRef || internalCameraRef;
+  const [internalSelectedCountry, setInternalSelectedCountry] = useState<string | null>(null);
+  
+  const selectedCountry = externalSelectedCountry !== undefined ? externalSelectedCountry : internalSelectedCountry;
+  const setSelectedCountry = (name: string | null) => {
+    if (onSelectedCountryChange) {
+      onSelectedCountryChange(name);
+    } else {
+      setInternalSelectedCountry(name);
+    }
+  };
+
   const [showHint, setShowHint] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [hasInitialCentered, setHasInitialCentered] = useState(false);
@@ -331,6 +354,8 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
   
   // Remove React-side floatOffset and currentZoom state to stop re-renders
   const currentZoomRef = useRef(1.5);
+
+  const navigation = useNavigation<any>();
 
   /**
    * Proximity haptics (Phase 4.1) - HEAVILY throttled for smooth 60fps gestures
@@ -448,7 +473,6 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           tripId: c.tripId,
           coordinates: COUNTRY_CENTERS[dest],
           landmark: LANDMARKS[dest] || '📍',
-          isCompleted: c.isCompleted ?? false,  // Trophy mode for completed trips
         };
       });
   }, [countries]);
@@ -488,7 +512,6 @@ export default function MapboxFlatMap({ onCountryPress, countries, style }: Mapb
           id: m.tripId, 
           name: m.destination, 
           landmark: hasIcon ? '' : m.landmark,  // Hide emoji if we have icon
-          isCompleted: m.isCompleted ? 1 : 0,   // 1 = trophy mode (greyed, smaller)
         };
         
         if (hasIcon) {

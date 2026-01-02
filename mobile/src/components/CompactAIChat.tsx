@@ -48,7 +48,7 @@ interface CompactAIChatProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   isTyping: boolean;
-  suggestions?: string[];
+  placeholder?: string;
 }
 
 export const CompactAIChat: React.FC<CompactAIChatProps> = ({
@@ -58,7 +58,7 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
   messages,
   onSendMessage,
   isTyping,
-  suggestions = [],
+  placeholder = "Ask me anything...",
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showResponse, setShowResponse] = useState(false);
@@ -127,32 +127,6 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
         { bottom: TAB_BAR_HEIGHT + 10 } // Sit just above the tab bar since drawer is hidden
       ]}
     >
-      {/* Map-Aware Suggestions */}
-      {suggestions.length > 0 && !isTyping && (
-        <MotiView
-          from={{ opacity: 0, translateY: 10 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          exit={{ opacity: 0, translateY: 10 }}
-          style={styles.suggestionsContainer}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.suggestionsScroll}
-          >
-            {suggestions.map((suggestion, index) => (
-              <BouncyPressable
-                key={index}
-                style={styles.suggestionChip}
-                onPress={() => onSendMessage(suggestion)}
-              >
-                <Text style={styles.suggestionText}>{suggestion}</Text>
-              </BouncyPressable>
-            ))}
-          </ScrollView>
-        </MotiView>
-      )}
-
       {/* Latest AI Response Bubble (auto-hides after 10s) */}
       {showResponse && latestAIMessage && hasUserSentMessage && !isTyping && (
         <MotiView
@@ -236,7 +210,7 @@ export const CompactAIChat: React.FC<CompactAIChatProps> = ({
           style={styles.input}
           value={inputValue}
           onChangeText={setInputValue}
-          placeholder="Ask me anything..."
+          placeholder={placeholder}
           placeholderTextColor="#9CA3AF"
           returnKeyType="send"
           onSubmitEditing={handleSend}
@@ -286,30 +260,6 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 500, // Above everything
-  },
-
-  // Suggestions
-  suggestionsContainer: {
-    marginBottom: 16,
-  },
-  suggestionsScroll: {
-    gap: 10,
-    paddingRight: 20,
-  },
-  suggestionChip: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadows.soft.sm,
-  },
-  suggestionText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.3,
   },
 
   // Response Bubble
@@ -377,17 +327,17 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF', // Guaranteed opaque
     borderRadius: 28,
     paddingHorizontal: 6,
     paddingVertical: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4, // Stronger shadow for depth
     shadowRadius: 12,
-    elevation: 15,
+    elevation: 25, // Max elevation for Android stacking
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderColor: 'rgba(0, 0, 0, 0.15)',
   },
   minimizeButton: {
     width: 40,

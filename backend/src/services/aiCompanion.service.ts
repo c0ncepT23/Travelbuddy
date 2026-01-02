@@ -638,80 +638,17 @@ export class AICompanionService {
         .sort((a, b) => (a.distance || 0) - (b.distance || 0));
     }
     
-    // 4. Take top 3 from saved items
-    const savedAlternatives = alternatives.slice(0, 3);
+    // 4. Take top 5 from saved items
+    const savedAlternatives = alternatives.slice(0, 5);
     
-    // 5. If < 3 saved alternatives, supplement with Google Places
-    let googleAlternatives: Array<{
-      name: string;
-      address: string;
-      rating?: number;
-      distance?: number;
-      isGoogleResult: boolean;
-    }> = [];
-    
-    const needGoogleSupport = savedAlternatives.length < 3 && searchLat && searchLng;
-    
-    if (needGoogleSupport) {
-      logger.info(`[Alternatives] Saved items insufficient (${savedAlternatives.length}), querying Google Places`);
-      
-      try {
-        const { GooglePlacesService } = await import('./googlePlaces.service');
-        
-        // Map category to Google type
-        const googleType = GooglePlacesService.categoryToGoogleType(referencedPlace.category || 'place');
-        
-        // Extract keyword from place name (e.g., "Ichiran Ramen" → "ramen")
-        const keywords = referencedPlace.name.toLowerCase().split(' ').filter(w => 
-          !['the', 'a', 'an', 'restaurant', 'cafe', 'shop', 'store'].includes(w) && w.length > 2
-        );
-        const keyword = keywords.length > 0 ? keywords[keywords.length - 1] : undefined;
-        
-        const googleResults = await GooglePlacesService.searchNearby({
-          lat: searchLat,
-          lng: searchLng,
-          type: googleType,
-          keyword: keyword,
-          radius: 1500, // 1.5km
-          openNow: true, // Prioritize open places since user needs alternative NOW
-          maxResults: 3 - savedAlternatives.length, // Only get what we need
-        });
-        
-        logger.info(`[Alternatives] Google returned ${googleResults.length} places`);
-        
-        // Filter out places already in saved items
-        const savedNames = savedPlaces.map(p => p.name.toLowerCase());
-        
-        googleAlternatives = googleResults
-          .filter(g => !savedNames.some(name => 
-            name.includes(g.name.toLowerCase()) || g.name.toLowerCase().includes(name)
-          ))
-          .map(g => ({
-            name: g.name,
-            address: g.vicinity,
-            rating: g.rating,
-            distance: searchLat && searchLng && g.geometry?.location 
-              ? this.calculateDistance(searchLat, searchLng, g.geometry.location.lat, g.geometry.location.lng)
-              : undefined,
-            isGoogleResult: true,
-          }));
-          
-        logger.info(`[Alternatives] After filtering, ${googleAlternatives.length} Google suggestions`);
-      } catch (error) {
-        logger.error('[Alternatives] Google Places error:', error);
-        // Continue without Google results
-      }
-    }
-    
-    // 6. Build response
+    // 5. Build response
     const reasonText = reason ? ` (${reason})` : '';
-    let message = `No worries! Since you can't visit **${referencedPlace.name}**${reasonText}, here are some similar alternatives:\n\n`;
+    let message = `No worries! Since you can't visit **${referencedPlace.name}**${reasonText}, here are some similar alternatives from your saved notes:\n\n`;
     
     let placeIndex = 1;
     
-    // Show saved alternatives first
+    // Show saved alternatives
     if (savedAlternatives.length > 0) {
-      message += `**From your saved places:**\n`;
       savedAlternatives.forEach((place) => {
         const distanceText = place.distance 
           ? ` (${place.distance < 1000 ? `${Math.round(place.distance)}m` : `${(place.distance / 1000).toFixed(1)}km`})`
@@ -724,28 +661,9 @@ export class AICompanionService {
         message += '\n';
         placeIndex++;
       });
-    }
-    
-    // Show Google alternatives
-    if (googleAlternatives.length > 0) {
-      message += `**New discoveries nearby:**\n`;
-      googleAlternatives.forEach((place) => {
-        const distanceText = place.distance 
-          ? ` (${place.distance < 1000 ? `${Math.round(place.distance)}m` : `${(place.distance / 1000).toFixed(1)}km`})`
-          : '';
-        const ratingText = place.rating ? ` ⭐ ${place.rating.toFixed(1)}` : '';
-        const openText = ' 🟢 Open now';
-        message += `${placeIndex}. **${place.name}**${distanceText}${ratingText}${openText}\n`;
-        message += `   📍 ${place.address}\n`;
-        message += `   _Say "add ${place.name}" to save it!_\n\n`;
-        placeIndex++;
-      });
-    }
-    
-    // No results at all
-    if (savedAlternatives.length === 0 && googleAlternatives.length === 0) {
-      message = `I couldn't find similar ${referencedPlace.category || 'places'} nearby right now. `;
-      message += `Try asking "find ${referencedPlace.category || 'places'} near me" and I'll search for you! 🔍`;
+    } else {
+      // No saved alternatives
+      message = `I checked your map, but I don't have any other ${referencedPlace.category || 'places'} saved nearby that match **${referencedPlace.name}**. 🗺️`;
     }
     
     return {
@@ -1291,26 +1209,22 @@ export class AICompanionService {
     topPicks: Array<{ name: string; category: string; rating?: number }>,
     nearbyHotel: Array<{ name: string; category: string; distance: number }>
   ): Promise<string> {
-    const prompt = `You are an enthusiastic travel companion AI. Generate a brief, friendly morning briefing message (2-3 sentences max).
+    const prompt = `You are TravelPal, a contextual travel co-pilot. Generate a brief, friendly greeting (2 sentences max).
+
+**AMNESIC CO-PILOT RULE:** Only use the context provided. Do not use external knowledge.
 
 Context:
 - User: ${context.userName}
 - Time: ${context.timeOfDay}
 ${context.currentSegment ? `- Location: Day ${context.currentSegment.dayNumber} of ${context.currentSegment.totalDays} in ${context.currentSegment.city}` : ''}
 ${context.currentSegment?.daysRemaining === 0 ? '- This is their LAST DAY in this city!' : ''}
-- Unvisited places in city: ${context.savedPlaces.unvisitedInCity}
-- Top picks: ${topPicks.slice(0, 3).map(p => p.name).join(', ')}
-${nearbyHotel.length > 0 ? `- Near hotel: ${nearbyHotel.slice(0, 2).map(p => `${p.name} (${p.distance}m)`).join(', ')}` : ''}
+- Top picks they saved: ${topPicks.slice(0, 3).map(p => p.name).join(', ')}
 
 Guidelines:
-- Be enthusiastic but concise
-- Use 1-2 relevant emojis
-- Mention a specific place if highly rated
-- If last day, create urgency
-- If morning, suggest breakfast; if afternoon, activities; if evening, dinner
-- Keep it under 150 characters
-
-Generate ONLY the message text, no JSON:`;
+- Be enthusiastic but concise.
+- Mention one of their saved top picks.
+- Keep it under 150 characters.
+- Generate ONLY the message text.`;
 
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');

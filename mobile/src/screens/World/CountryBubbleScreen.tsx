@@ -322,6 +322,15 @@ const CATEGORY_COLORS: Record<string, string> = {
   default: '#06B6D4',     // Cyan
 };
 
+// VIBRANT COLOR PALETTE - Syncing with MapboxFlatMap
+const ZENLY_COLORS = {
+  spaceColor: 'rgb(5, 5, 20)',         // Deep space midnight
+  horizonGlow: 'rgb(70, 50, 120)',     // Vibrant Purple/Blue glow
+  zenlyGreen: '#7FFF00',               // Chartreuse/Lime Green (Zenly signature)
+  primaryGlow: '#06B6D4',              // Electric Cyan
+  background: '#0F1115',               // Deep Midnight Slate
+};
+
 const SUBCATEGORY_COLORS: ('green' | 'blue' | 'yellow' | 'purple' | 'pink' | 'orange')[] = [
   'green', 'blue', 'pink', 'orange', 'purple', 'yellow'
 ];
@@ -346,8 +355,8 @@ const CATEGORY_FILTERS: CategoryFilterConfig[] = [
   { key: 'accommodation', label: 'Stay', icon: '🏨', color: '#F43F5E' },
 ];
 
-// Mapbox style - Standard style for native 3D lighting and atmosphere
-const MAPBOX_STYLE = 'mapbox://styles/mapbox/standard';
+// Mapbox style - Switched to Outdoors V12 for that "Cartoon Globe" arcade look
+const MAPBOX_STYLE = 'mapbox://styles/mapbox/outdoors-v12';
 
 type ViewMode = 'macro' | 'micro';
 type FilterMode = 'all' | 'nearMe' | 'area';
@@ -670,7 +679,11 @@ export default function CountryBubbleScreen() {
   
   const params = route.params || {};
   const tripId = params.tripId || '';
-  const countryName = params.countryName || 'Unknown';
+  const countryNameRaw = params.countryName || 'Unknown';
+  const countryName = countryNameRaw
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
   // Legacy support: highlightPlaceId from params (new: use pendingAction)
   const highlightPlaceIdFromParams = params.highlightPlaceId as string | undefined;
 
@@ -740,7 +753,7 @@ export default function CountryBubbleScreen() {
   // Stores
   const { sendQuery, isLoading: companionLoading, getMessages } = useCompanionStore();
   const { location, startTracking } = useLocationStore();
-  const { currentTrip, fetchTripDetails, markTripCompleted } = useTripStore();
+  const { currentTrip, fetchTripDetails } = useTripStore();
   const { 
     fetchSavedPlaces, 
     getSavedPlaces, 
@@ -903,7 +916,6 @@ export default function CountryBubbleScreen() {
   useEffect(() => {
     if (tripId) {
       fetchItems();
-      fetchTripDetails(tripId); // Load trip details for is_completed status
     } else {
       setIsLoading(false);
     }
@@ -988,64 +1000,62 @@ export default function CountryBubbleScreen() {
       return;
     }
     
-    setIsLoading(true);
+    // FAST PATH: If we already have places in the store, show them immediately!
+    const cachedPlaces = getSavedPlaces(tripId);
+    if (cachedPlaces.length > 0) {
+      console.log(`⚡ [CountryBubbles] FAST PATH: Using ${cachedPlaces.length} cached places`);
+      // No need to show loading skeleton if we have data
+      setIsLoading(false);
+      
+      // Update camera immediately for cached data
+      const { center, zoomLevel } = calculateBoundsFromItems(filterUniqueItems(cachedPlaces));
+      flyToCamera({
+        center,
+        zoom: zoomLevel,
+        duration: 1000,
+        mode: 'easeTo',
+      });
+    } else {
+      setIsLoading(true);
+    }
+
     try {
-      // Use the centralized store for data fetching (with caching!)
-      // This avoids refetching when navigating back from chat
-      const fetchedItems = await fetchSavedPlaces(tripId);
+      // 🚀 PARALLEL FETCH: Load everything at once
+      const [fetchedItems, _] = await Promise.all([
+        fetchSavedPlaces(tripId),
+        fetchTripDetails(tripId),
+        api.get(`/trips/${tripId}/items/clusters`)
+          .then(res => setSubClusters(res.data.data || res.data))
+          .catch(() => setSubClusters(null)),
+        api.get(`/share/discovery-queue/${tripId}`)
+          .then(res => {
+            if (res.data.success && res.data.scouts?.length > 0) {
+              const activeScout = res.data.scouts[0];
+              setDiscoveryIntent(activeScout.intent);
+              setScoutResults(activeScout.results || []);
+              setScoutId(activeScout.id);
+            }
+          })
+          .catch(err => console.error('Error fetching scouts:', err))
+      ]);
       
       // Filter for unique items before setting state
       const uniqueItems = filterUniqueItems(fetchedItems);
-      console.log(`📦 Loaded ${fetchedItems.length} items, filtered to ${uniqueItems.length} unique places`);
       
-      // DEBUG: Log coordinate status
-      const withCoords = uniqueItems.filter(i => i.location_lat && i.location_lng);
-      const withoutCoords = uniqueItems.filter(i => !i.location_lat || !i.location_lng);
-      console.log(`   📍 With coordinates: ${withCoords.length}`);
-      console.log(`   ❌ Without coordinates: ${withoutCoords.length}`);
-      if (withoutCoords.length > 0) {
-        withoutCoords.forEach(i => console.log(`      - ${i.name} (no coords)`));
-      }
-      
-      // FIX: Center camera on actual places, not default country coords
-      if (uniqueItems.length > 0) {
+      // Update camera if it wasn't already updated by fast path
+      if (cachedPlaces.length === 0 && uniqueItems.length > 0) {
         const { center, zoomLevel } = calculateBoundsFromItems(uniqueItems);
-        console.log(`📍 Centering on ${uniqueItems.length} places: [${center[0].toFixed(2)}, ${center[1].toFixed(2)}] zoom ${zoomLevel.toFixed(1)}`);
-        // Use timeout to ensure camera ref is ready after initial render
-        setTimeout(() => {
-          flyToCamera({
-            center,
-            zoom: zoomLevel,
-            duration: 1000,
-            mode: 'easeTo',
-          });
-        }, 100);
-      }
-
-      try {
-        const clustersResponse = await api.get(`/trips/${tripId}/items/clusters`);
-        setSubClusters(clustersResponse.data.data || clustersResponse.data);
-      } catch (e) {
-        setSubClusters(null);
-      }
-
-      // Also fetch active scouts for this trip
-      try {
-        const scoutsResponse = await api.get(`/share/discovery-queue/${tripId}`);
-        if (scoutsResponse.data.success && scoutsResponse.data.scouts?.length > 0) {
-          // For now, let's just use the most recent active scout
-          const activeScout = scoutsResponse.data.scouts[0];
-          setDiscoveryIntent(activeScout.intent);
-          setScoutResults(activeScout.results || []);
-          setScoutId(activeScout.id);
-          console.log(`🔍 [Scout] Loaded active scout: ${activeScout.intent.item}`);
-        }
-      } catch (scoutError) {
-        console.error('Error fetching active scouts:', scoutError);
+        flyToCamera({
+          center,
+          zoom: zoomLevel,
+          duration: 1000,
+          mode: 'easeTo',
+        });
       }
     } catch (error) {
       console.error('[CountryBubbles] Fetch error:', error);
     } finally {
+      // Always stop loading at the end
       setIsLoading(false);
     }
   };
@@ -2076,41 +2086,6 @@ export default function CountryBubbleScreen() {
   // RENDER
   // ============================================================
 
-  // Dynamic suggestions based on map context - 100% Data-Driven
-  const dynamicSuggestions = useMemo(() => {
-    const suggestions = [];
-    
-    // 1. If we have active area filter (e.g. "Shibuya")
-    if (activeAreaFilter && activeAreaFilter !== 'Near You' && activeAreaFilter !== '0 in view') {
-      const areaItems = drawerItems.filter(item => 
-        item.area_name === activeAreaFilter || item.location_name?.includes(activeAreaFilter)
-      );
-      
-      if (areaItems.length > 0) {
-        suggestions.push(`🔍 Explore my ${areaItems.length} saved spots in ${activeAreaFilter}`);
-        
-        const foodCount = areaItems.filter(i => i.category === 'food').length;
-        if (foodCount > 0) {
-          suggestions.push(`🍔 My ${foodCount} food saves in ${activeAreaFilter}`);
-        }
-      }
-    } else if (drawerItems.length > 0) {
-      // 2. If we have items in view but no specific area filter
-      suggestions.push(`📍 Tell me about these ${drawerItems.length} spots`);
-      
-      const topRated = [...drawerItems].sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0))[0];
-      if (topRated) {
-        suggestions.push(`⭐ What's special about ${topRated.name}?`);
-      }
-    } else {
-      // 3. Default suggestions for the country based on total saves
-      suggestions.push(`🗺️ Show my top saves in ${countryName}`);
-      suggestions.push(`✈️ What's my next stop in ${countryName}?`);
-    }
-    
-    return suggestions;
-  }, [activeAreaFilter, drawerItems, countryName]);
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -2149,79 +2124,59 @@ export default function CountryBubbleScreen() {
         projection="globe"
         pitchEnabled={true} // Allow 3D tilt
       >
-        {/* ZENLY ATMOSPHERE - Deep space with glowing Earth halo */}
+        {/* 🌊 MIDNIGHT NAVY SKY - Classic Arcade Neon Glow ✨ */}
         <Atmosphere style={{
-          color: 'rgb(10, 10, 30)',           // Deep space black
-          highColor: 'rgb(70, 50, 120)',      // Vibrant purple/blue glow at horizon
-          horizonBlend: 0.1,                  // Soft blend
-          spaceColor: 'rgb(5, 5, 15)',        // True space
-          starIntensity: 0.8                  // Visible stars
+          highColor: ZENLY_COLORS.horizonGlow, // Vibrant Purple/Blue horizon glow
+          horizonBlend: 0.08,                  // Soft horizon blend
+          spaceColor: ZENLY_COLORS.spaceColor, // Deep space midnight
+          starIntensity: 0.7                   // Sparkly stars for arcade feel
         }} />
         <SkyLayer id="sky" style={{
           skyType: 'atmosphere',
-          skyAtmosphereColor: 'rgba(70, 50, 120, 0.5)', 
-          skyAtmosphereSun: [0, 0],
-          skyAtmosphereSunIntensity: 20,
+          skyAtmosphereColor: 'rgba(0, 100, 180, 0.35)', // Deep blue atmosphere
+          skyAtmosphereSun: [0, 60],           // Sun position
+          skyAtmosphereSunIntensity: 6,        // Subtle warm accent
         }} />
 
         {/* 3D LIGHTING - Essential for seeing depth on extrusions */}
         <Light style={{
           anchor: 'viewport',
-          color: '#FFFFFF',
-          intensity: 0.5,
-          position: [1.15, 210, 30], 
+          color: '#C0E0FF',                    // Cool blue-white light
+          intensity: 0.65,                     // Balanced lighting
+          position: [1.2, 190, 45],            // Angled for depth
         }} />
-
-        {/* ZENLY LAND/WATER STYLING - High contrast space look */}
-        <BackgroundLayer id="map-background" style={{ backgroundColor: '#05070a' }} />
-        <FillLayer
-          id="water-glow"
-          sourceID="composite"
-          sourceLayerID="water"
-          style={{
-            fillColor: '#0d1b2a',
-            fillOpacity: 0.9,
-            fillOutlineColor: '#0ea5e9', 
-          }}
-        />
 
         {/* 3D BUILDINGS LAYER - Performance Optimized Glass City */}
         <FillExtrusionLayer
           id="3d-buildings"
           sourceID="composite"
           sourceLayerID="building"
-          minZoomLevel={14} // Earlier visibility for smoother LOD
+          minZoomLevel={14}
           maxZoomLevel={22}
           style={{
-            // Dynamic Glass Color: Slate base with Candy top
             fillExtrusionColor: [
               'interpolate',
               ['linear'],
               ['get', 'height'],
-              0, 'rgba(30, 41, 59, 0.7)',   // Darker base for X-Ray
+              0, 'rgba(30, 41, 59, 0.7)',   // Darker base
               50, 'rgba(99, 102, 241, 0.5)', // Indigo
               100, 'rgba(6, 182, 212, 0.4)'  // Cyan top
             ],
-            // Vertical Gradient: Makes walls darker at bottom (realistic depth)
             fillExtrusionVerticalGradient: true,
-            
-            // Exaggerated height for "World View" feel
             fillExtrusionHeight: [
               'interpolate',
               ['linear'],
               ['zoom'],
               14, 0,
-              16, ['*', ['coalesce', ['get', 'height'], 20], 1.2] // More height
+              16, ['*', ['coalesce', ['get', 'height'], 20], 1.2]
             ],
             fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
-            
-            // Glass Opacity: High enough to see form, low enough to feel light
             fillExtrusionOpacity: [
               'interpolate',
               ['linear'],
               ['zoom'],
               14, 0,
-              15.5, 0.95 // Full "Glass City" mode
+              15.5, 0.95
             ],
           }}
         />
@@ -2326,7 +2281,7 @@ export default function CountryBubbleScreen() {
               filter={['==', ['get', 'id'], selectedPlaceId || '__none__']}
               style={{
                 circleRadius: 32,
-                circleColor: '#06B6D4',
+                circleColor: ZENLY_COLORS.zenlyGreen, // Zenly Green for selection!
                 circleOpacity: 0.5,
                 circleBlur: 0.8,
                 circleTranslate: [0, floatOffset],
@@ -2420,7 +2375,7 @@ export default function CountryBubbleScreen() {
                 textSize: 11,
                 textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
                 textColor: '#FFFFFF',
-                textHaloColor: 'rgba(31, 32, 34, 0.9)', // Match background for "cutout" look
+                textHaloColor: '#32CD32', // Zenly Lime Green Halo!
                 textHaloWidth: 2,
                 textOffset: [0, 1.8],
                 textAnchor: 'top',
@@ -2451,7 +2406,7 @@ export default function CountryBubbleScreen() {
                 ],
                 textSize: 12,
                 textColor: '#FFFFFF',
-                textHaloColor: 'rgba(10, 10, 26, 0.95)',
+                textHaloColor: '#32CD32', // Zenly Lime Green Halo!
                 textHaloWidth: 2,
                 textOffset: [0, 2.4],
                 textAnchor: 'top',
@@ -2732,62 +2687,61 @@ export default function CountryBubbleScreen() {
       {/* Floating Clouds - REMOVED (was part of bubble UI) */}
 
       {/* Header */}
+      {/* Header */}
       {!isCompactChatOpen && activeTab === 'map' && (
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
-            <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }}>
-              <TouchableOpacity style={styles.countryHeader} onPress={handleBack}>
-                <View style={styles.backButtonInner}>
-                  <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
-                </View>
-                <View style={styles.countryInfo}>
-                  <Text style={styles.countryTitle}>{countryFlag} {countryName}</Text>
-                  <Text style={styles.placeCount}>
-                    {discoveryIntent ? `🔍 Scouting ${discoveryIntent.item}...` : 
-                    filterMode !== 'all' ? `${items.length} spots nearby` : `${items.length} saved`}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </MotiView>
-
-            {/* Right side buttons */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {/* Mark as Completed Button */}
-              <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+            {/* Left: Back Button */}
+            <View style={styles.headerSideContainer}>
+              <MotiView 
+                from={{ opacity: 0, scale: 0.5 }} 
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', damping: 15 }}
+              >
                 <TouchableOpacity
-                  style={[styles.headerActionButton, currentTrip?.is_completed && { backgroundColor: '#22C55E20', borderColor: '#22C55E' }]}
-                  onPress={async () => {
-                    try {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      const newStatus = !currentTrip?.is_completed;
-                      await markTripCompleted(tripId, newStatus);
-                      
-                      if (newStatus) {
-                        setShowConfetti(true);
-                        setTimeout(() => setShowConfetti(false), 5000);
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      }
-
-                      Alert.alert(
-                        newStatus ? '🏆 Trip Completed!' : '✈️ Trip Reactivated',
-                        newStatus 
-                          ? 'This trip will appear as a trophy on your globe!' 
-                          : 'Trip is now active again.'
-                      );
-                    } catch (error) {
-                      Alert.alert('Error', 'Failed to update trip status');
-                    }
-                  }}
-                  activeOpacity={0.8}
+                  style={styles.headerActionButton}
+                  onPress={handleBack}
+                  activeOpacity={0.7}
                 >
-                  <Text style={{ fontSize: 18 }}>
-                    {currentTrip?.is_completed ? '🏆' : '✓'}
-                  </Text>
+                  <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
                 </TouchableOpacity>
               </MotiView>
+            </View>
 
-              {/* Near Me Button */}
-              <MotiView from={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+            {/* Center: Country Info */}
+            <View style={styles.headerCenterContainer}>
+              <MotiView 
+                from={{ opacity: 0, translateY: -20 }} 
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'spring', damping: 12 }}
+              >
+                <View style={styles.countryHeaderCenter}>
+                  <BlurView intensity={90} tint="dark" style={styles.headerBlurCenter}>
+                    <View style={styles.countryInfoCenter}>
+                      <Text style={styles.countryTitleCenter}>{countryFlag} {countryName}</Text>
+                      <View style={styles.statsRowCenter}>
+                        <View style={styles.statPill}>
+                          <Text style={styles.statPillText}>
+                            {discoveryIntent ? 'SCOUTING' : 'SAVED'}
+                          </Text>
+                        </View>
+                        <Text style={styles.statValue}>
+                          {discoveryIntent ? discoveryIntent.item : `${items.length} SPOTS`}
+                        </Text>
+                      </View>
+                    </View>
+                  </BlurView>
+                </View>
+              </MotiView>
+            </View>
+
+            {/* Right: Near Me Button */}
+            <View style={styles.headerSideContainer}>
+              <MotiView 
+                from={{ opacity: 0, scale: 0.5 }} 
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', damping: 15, delay: 100 }}
+              >
                 <TouchableOpacity
                   style={[styles.headerActionButton, filterMode === 'nearMe' && styles.headerActionButtonActive]}
                   onPress={handleNearMePress}
@@ -2985,28 +2939,63 @@ export default function CountryBubbleScreen() {
         <View style={styles.skeletonOverlay}>
           <View style={styles.header}>
             <View style={styles.headerTopRow}>
-              <SkeletonLoader width={180} height={48} borderRadius={24} />
-              <SkeletonLoader width={44} height={44} borderRadius={22} />
+              <SkeletonLoader 
+                width={150} 
+                height={40} 
+                borderRadius={20} 
+              />
+              <SkeletonLoader 
+                width={44} 
+                height={44} 
+                borderRadius={22} 
+              />
             </View>
           </View>
-          <View style={[styles.categoryChipsContainer, { marginTop: 10 }]}>
+          <View style={styles.categoryChipsContainer}>
             <View style={styles.categoryChipsScroll}>
               {[1, 2, 3, 4].map((i) => (
-                <SkeletonLoader key={i} width={80} height={36} borderRadius={18} style={{ marginRight: 8 }} />
+                <SkeletonLoader 
+                  key={i} 
+                  width={80} 
+                  height={36} 
+                  borderRadius={18} 
+                />
               ))}
             </View>
           </View>
           <View style={styles.drawerSkeleton}>
             <View style={styles.drawerSkeletonHeader}>
-              <SkeletonLoader width={120} height={20} borderRadius={10} />
-              <SkeletonLoader width={40} height={24} borderRadius={12} />
+              <SkeletonLoader 
+                width={120} 
+                height={20} 
+                borderRadius={10} 
+              />
+              <SkeletonLoader 
+                width={40} 
+                height={24} 
+                borderRadius={12} 
+              />
             </View>
             <View style={styles.drawerSkeletonContent}>
               {[1, 2, 3].map((i) => (
                 <View key={i} style={styles.drawerSkeletonCard}>
-                  <SkeletonLoader width={110} height={80} borderRadius={14} />
-                  <SkeletonLoader width={80} height={12} borderRadius={6} style={{ marginTop: 8 }} />
-                  <SkeletonLoader width={40} height={10} borderRadius={5} style={{ marginTop: 4 }} />
+                  <SkeletonLoader 
+                    width={110} 
+                    height={80} 
+                    borderRadius={14} 
+                  />
+                  <SkeletonLoader 
+                    width={80} 
+                    height={12} 
+                    borderRadius={6} 
+                    style={{ marginTop: 8 }} 
+                  />
+                  <SkeletonLoader 
+                    width={40} 
+                    height={10} 
+                    borderRadius={5} 
+                    style={{ marginTop: 4 }} 
+                  />
                 </View>
               ))}
             </View>
@@ -3089,7 +3078,6 @@ export default function CountryBubbleScreen() {
             messages={chatMessages}
             onSendMessage={handleSendMessage}
             isTyping={isAITyping || companionLoading}
-            suggestions={dynamicSuggestions}
           />
         </KeyboardAvoidingView>
       )}
@@ -3133,16 +3121,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    width: '100%',
+  },
+  headerSideContainer: {
+    width: 44,
+  },
+  headerCenterContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerActionButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(15, 17, 21, 0.85)',
+    backgroundColor: 'rgba(15, 17, 21, 0.9)', // Semi-transparent solid background
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(6, 182, 212, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -3153,39 +3150,59 @@ const styles = StyleSheet.create({
     backgroundColor: '#06B6D4',
     borderColor: '#22D3EE',
   },
-  countryHeader: {
+  countryHeaderCenter: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  headerBlurCenter: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(6, 182, 212, 0.4)', // Electric Cyan glow
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countryInfoCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countryTitleCenter: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    textAlign: 'center',
+  },
+  statsRowCenter: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 17, 21, 0.85)',
-    paddingVertical: 6,
-    paddingLeft: 6,
-    paddingRight: 16,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.2)',
-    alignSelf: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  backButtonInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  countryInfo: {
+    marginTop: 2,
+    gap: 6,
     justifyContent: 'center',
   },
-  countryTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  placeCount: { fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', marginTop: 1 },
-  
-  filterChipContainer: { marginTop: 10, marginLeft: 10 },
+  statPill: {
+    backgroundColor: '#7FFF00', // Zenly Lime Green
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  statPillText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#000000',
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  filterChipContainer: { marginTop: 12, alignSelf: 'center' },
   filterChip: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(6, 182, 212, 0.15)',

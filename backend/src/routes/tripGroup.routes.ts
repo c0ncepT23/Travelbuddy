@@ -115,15 +115,5 @@ router.put(
   TripGroupController.updateBanner
 );
 
-// Mark trip as completed (for trophy display on globe)
-router.put(
-  '/:id/complete',
-  validate([
-    param('id').isUUID().withMessage('Invalid trip ID'),
-    body('isCompleted').optional().isBoolean().withMessage('isCompleted must be boolean'),
-  ]),
-  TripGroupController.markAsCompleted
-);
-
 export default router;
 
