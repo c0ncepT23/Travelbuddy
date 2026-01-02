@@ -260,13 +260,27 @@ export class TripGroupModel {
     );
 
     const photoUrls: string[] = [];
+    const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
+
     photosResult.rows.forEach((item: any) => {
-      const photos = item.photos_json;
+      let photos = item.photos_json;
+      if (typeof photos === 'string') {
+        try {
+          photos = JSON.parse(photos);
+        } catch (e) {
+          photos = null;
+        }
+      }
+
       if (Array.isArray(photos) && photos.length > 0) {
         // Just take the first photo from each item
         const photo = photos[0];
-        if (photo.photo_reference || photo.url) {
-          photoUrls.push(photo.url || photo.photo_reference);
+        if (photo.url) {
+          photoUrls.push(photo.url);
+        } else if (photo.photo_reference) {
+          // Construct full Google Places photo URL
+          const fullUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_MAPS_API_KEY}`;
+          photoUrls.push(fullUrl);
         }
       }
     });
