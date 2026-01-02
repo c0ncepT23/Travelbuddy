@@ -53,16 +53,18 @@ import ItinerarySetupScreen from './src/screens/Trip/ItinerarySetupScreen';
 
 // Timeline
 import { TimelineScreen } from './src/screens/Trip/TimelineScreen';
+import { SharedJourneyScreen } from './src/screens/Trip/SharedJourneyScreen';
 
 const Stack = createStackNavigator();
 
 const linking = {
-  prefixes: ['https://travelagent.app', 'travelagent://'],
+  prefixes: ['https://travelagent.app', 'travelagent://', 'https://yorisan.com', 'yorisan://'],
   config: {
     screens: {
       WorldMap: '',
       JoinTrip: 'join/:inviteCode',
       CountryBubbles: 'country/:tripId',
+      SharedJourney: 's/:tripId',
     },
   },
 };
@@ -533,6 +535,11 @@ export default function App() {
                 <Stack.Screen
                   name="Timeline"
                   component={TimelineScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="SharedJourney"
+                  component={SharedJourneyScreen}
                   options={{ headerShown: false }}
                 />
               </>

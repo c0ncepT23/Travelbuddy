@@ -238,12 +238,14 @@ export class TripGroupModel {
    * Get trip summary for public sharing
    */
   static async getSummary(id: string): Promise<any | null> {
-    // 1. Get basic trip info and overall counts
+    // 1. Get basic trip info, overall counts, and owner name
     const tripResult = await query(
-      `SELECT tg.id, tg.name, tg.destination,
+      `SELECT tg.id, tg.name, tg.destination, u.name as owner_name,
         (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id) as total_saved_count,
         (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id AND status = 'visited') as visited_count
        FROM trip_groups tg 
+       INNER JOIN trip_members tm ON tg.id = tm.trip_group_id AND tm.role = 'owner'
+       INNER JOIN users u ON tm.user_id = u.id
        WHERE tg.id = $1`, 
       [id]
     );
@@ -288,6 +290,7 @@ export class TripGroupModel {
       id: row.id,
       title: row.name,
       country: row.destination,
+      ownerName: row.owner_name,
       memoryCount: row.visited_count, // Use visited count for "Memories" label
       totalSavedCount: row.total_saved_count,
       visitedCount: row.visited_count,

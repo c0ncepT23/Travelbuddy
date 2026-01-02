@@ -23,5 +23,26 @@ export class PublicController {
       });
     }
   }
+
+  /**
+   * Get all items for a public trip
+   */
+  static async getTripItems(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const items = await TripGroupService.getPublicItems(id);
+
+      res.status(200).json({
+        success: true,
+        data: items,
+      });
+    } catch (error: any) {
+      logger.error('Public get trip items error:', error);
+      res.status(404).json({
+        success: false,
+        error: error.message || 'Trip items not found',
+      });
+    }
+  }
 }
 

@@ -34,7 +34,9 @@ export class SavedItemModel {
     tags?: string[],
     cuisineType?: string,
     placeType?: string,
-    destination?: string
+    destination?: string,
+    clonedFromJourneyId?: string,
+    clonedFromOwnerName?: string
   ): Promise<SavedItem> {
     const result = await query(
       `INSERT INTO saved_items 
@@ -42,8 +44,8 @@ export class SavedItemModel {
         location_lat, location_lng, original_source_type, original_source_url, source_title, original_content,
         location_confidence, location_confidence_score, google_place_id, rating, user_ratings_total, 
         price_level, formatted_address, area_name, photos_json, opening_hours_json,
-        tags, cuisine_type, place_type, destination)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+        tags, cuisine_type, place_type, destination, cloned_from_journey_id, cloned_from_owner_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
        RETURNING *`,
       [
         tripGroupId,
@@ -72,6 +74,8 @@ export class SavedItemModel {
         cuisineType,
         placeType,
         destination,
+        clonedFromJourneyId,
+        clonedFromOwnerName,
       ]
     );
 
@@ -246,6 +250,16 @@ export class SavedItemModel {
     if (updates.opening_hours_json !== undefined) {
       fields.push(`opening_hours_json = $${paramCount++}`);
       values.push(updates.opening_hours_json);
+    }
+
+    if (updates.cloned_from_journey_id !== undefined) {
+      fields.push(`cloned_from_journey_id = $${paramCount++}`);
+      values.push(updates.cloned_from_journey_id);
+    }
+
+    if (updates.cloned_from_owner_name !== undefined) {
+      fields.push(`cloned_from_owner_name = $${paramCount++}`);
+      values.push(updates.cloned_from_owner_name);
     }
 
     if (fields.length === 0) {

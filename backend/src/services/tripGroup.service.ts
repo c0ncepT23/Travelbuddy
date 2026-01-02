@@ -1,4 +1,5 @@
 import { TripGroupModel } from '../models/tripGroup.model';
+import { SavedItemModel } from '../models/savedItem.model';
 import { TripGroup } from '../types';
 import logger from '../config/logger';
 
@@ -262,6 +263,21 @@ export class TripGroupService {
       return summary;
     } catch (error: any) {
       logger.error('Error fetching public trip summary:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all items for a public trip
+   */
+  static async getPublicItems(tripId: string): Promise<any[]> {
+    try {
+      // No auth check, just return all items for this trip
+      // We assume if someone has the trip UUID, they can see the items
+      const items = await SavedItemModel.findByTrip(tripId);
+      return items;
+    } catch (error: any) {
+      logger.error('Error fetching public trip items:', error);
       throw error;
     }
   }

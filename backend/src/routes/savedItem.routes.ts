@@ -118,5 +118,15 @@ router.post(
   SavedItemController.enrichWithGoogle
 );
 
+// Clone trip items
+router.post(
+  '/clone',
+  validate([
+    body('sourceTripId').isUUID().withMessage('Invalid source trip ID'),
+    body('targetTripId').isUUID().withMessage('Invalid target trip ID'),
+  ]),
+  SavedItemController.cloneTrip
+);
+
 export default router;
 

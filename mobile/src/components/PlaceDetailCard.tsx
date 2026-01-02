@@ -200,6 +200,16 @@ export const PlaceDetailCard: React.FC<PlaceDetailCardProps> = ({
           </View>
         )}
 
+        {/* Cloned From Badge */}
+        {place.cloned_from_owner_name && (
+          <View style={styles.clonedFromBadge}>
+            <Text style={styles.clonedFromIcon}>🔗</Text>
+            <Text style={styles.clonedFromText}>
+              From {place.cloned_from_owner_name}'s Journey
+            </Text>
+          </View>
+        )}
+
         {/* Rating Row - PROMINENT like reference */}
         {place.rating ? (
           <View style={styles.ratingRow}>
@@ -480,6 +490,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: theme.colors.success,
+  },
+  
+  // Cloned From Badge
+  clonedFromBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 6,
+    marginBottom: 12,
+  },
+  clonedFromIcon: {
+    fontSize: 12,
+    marginRight: 6,
+  },
+  clonedFromText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
   },
   
   // Rating Row - NeoPOP style

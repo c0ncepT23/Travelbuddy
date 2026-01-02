@@ -21,6 +21,9 @@ export class SavedItemService {
       sourceUrl?: string;
       sourceTitle?: string;
       originalContent?: any;
+      clonedFromJourneyId?: string;
+      clonedFromOwnerName?: string;
+      destination?: string;
     }
   ): Promise<SavedItem> {
     try {
@@ -42,7 +45,23 @@ export class SavedItemService {
         itemData.locationLng,
         itemData.sourceUrl,
         itemData.sourceTitle,
-        itemData.originalContent
+        itemData.originalContent,
+        undefined, // locationConfidence
+        undefined, // locationConfidenceScore
+        undefined, // googlePlaceId
+        undefined, // rating
+        undefined, // userRatingsTotal
+        undefined, // priceLevel
+        undefined, // formattedAddress
+        undefined, // areaName
+        undefined, // photosJson
+        undefined, // openingHoursJson
+        undefined, // tags
+        undefined, // cuisineType
+        undefined, // placeType
+        itemData.destination,
+        itemData.clonedFromJourneyId,
+        itemData.clonedFromOwnerName
       );
 
       logger.info(`Item created: ${item.id} by user ${userId}`);
@@ -436,6 +455,82 @@ export class SavedItemService {
       logger.info(`Items reordered in day ${day} for trip ${tripGroupId} by user ${userId}`);
     } catch (error: any) {
       logger.error('Error reordering items:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clone items from a shared journey into user's own collection
+   */
+  static async cloneJourneyItems(
+    userId: string,
+    targetTripGroupId: string,
+    sourceTripGroupId: string
+  ): Promise<SavedItem[]> {
+    try {
+      // 1. Verify target trip exists and user is member
+      const isMember = await TripGroupModel.isMember(targetTripGroupId, userId);
+      if (!isMember) {
+        throw new Error('Access denied to target trip');
+      }
+
+      // 2. Get source trip info (for owner name)
+      const sourceTrip = await TripGroupModel.findById(sourceTripGroupId);
+      if (!sourceTrip) {
+        throw new Error('Source trip not found');
+      }
+
+      // Get source trip owner name
+      const members = await TripGroupModel.getMembers(sourceTripGroupId);
+      const owner = members.find(m => m.role === 'owner');
+      const ownerName = owner ? owner.name : 'A Friend';
+
+      // 3. Get all items from source trip
+      const sourceItems = await SavedItemModel.findByTrip(sourceTripGroupId);
+      
+      // 4. Clone each item
+      const clonedItems: SavedItem[] = [];
+      for (const item of sourceItems) {
+        // Skip items without names (shouldn't happen but good to be safe)
+        if (!item.name) continue;
+
+        const clonedItem = await SavedItemModel.create(
+          targetTripGroupId,
+          userId,
+          item.name,
+          item.category,
+          item.description,
+          item.original_source_type,
+          item.location_name,
+          item.location_lat,
+          item.location_lng,
+          item.original_source_url,
+          item.source_title,
+          item.original_content,
+          'high',
+          100,
+          item.google_place_id,
+          item.rating,
+          item.user_ratings_total,
+          item.price_level,
+          item.formatted_address,
+          item.area_name,
+          item.photos_json,
+          item.opening_hours_json,
+          item.tags,
+          item.cuisine_type,
+          item.place_type,
+          item.destination,
+          sourceTripGroupId,
+          ownerName
+        );
+        clonedItems.push(clonedItem);
+      }
+
+      logger.info(`Cloned ${clonedItems.length} items from trip ${sourceTripGroupId} to ${targetTripGroupId} for user ${userId}`);
+      return clonedItems;
+    } catch (error: any) {
+      logger.error('Error cloning journey items:', error);
       throw error;
     }
   }

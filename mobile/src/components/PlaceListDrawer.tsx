@@ -338,7 +338,12 @@ export const PlaceListDrawer: React.FC<PlaceListDrawerProps> = ({
               </View>
             )}
             <View style={styles.placeInfo}>
-              <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
+              <View style={styles.placeNameRow}>
+                <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
+                {item.cloned_from_owner_name && (
+                  <Text style={styles.clonedIcon}>🔗</Text>
+                )}
+              </View>
               <Text style={styles.placeDescription} numberOfLines={2}>
                 {item.description || `A ${item.category} spot to visit`}
               </Text>
@@ -700,11 +705,21 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  placeNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
   placeName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 4,
+    flexShrink: 1,
+  },
+  clonedIcon: {
+    fontSize: 12,
+    opacity: 0.5,
   },
   placeDescription: {
     fontSize: 13,

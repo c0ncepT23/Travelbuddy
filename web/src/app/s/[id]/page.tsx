@@ -125,9 +125,15 @@ export default async function Page({ params }: Props) {
              <p className="text-slate-400 mb-2 leading-relaxed font-medium text-sm">
                The creator has visited {trip.visitedCount} spots and discovered {trip.discoveriesCount} more hidden gems.
              </p>
-             <p className="mt-4 text-[#7FFF00] text-[10px] font-black uppercase tracking-[0.2em]">
+             <p className="mt-4 text-[#7FFF00] text-[10px] font-black uppercase tracking-[0.2em] mb-6">
                Available for iOS & Android
              </p>
+             <Link 
+               href={`travelagent://s/${id}`}
+               className="inline-block bg-white text-[#0F1115] px-8 py-4 rounded-2xl font-black text-sm hover:scale-105 transition-transform active:scale-95 w-full shadow-xl"
+             >
+               Open in App ↗
+             </Link>
           </div>
         </div>
       </main>

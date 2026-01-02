@@ -677,5 +677,45 @@ export class SavedItemController {
       });
     }
   }
+
+  /**
+   * Clone all items from one trip to another
+   */
+  static async cloneTrip(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { sourceTripId, targetTripId } = req.body;
+
+      if (!sourceTripId || !targetTripId) {
+        res.status(400).json({
+          success: false,
+          error: 'sourceTripId and targetTripId are required',
+        });
+        return;
+      }
+
+      const clonedItems = await SavedItemService.cloneJourneyItems(
+        req.user.id,
+        targetTripId,
+        sourceTripId
+      );
+
+      res.status(201).json({
+        success: true,
+        data: clonedItems,
+        message: `Successfully cloned ${clonedItems.length} items`,
+      });
+    } catch (error: any) {
+      logger.error('Clone trip error:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to clone trip',
+      });
+    }
+  }
 }
 

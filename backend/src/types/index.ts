@@ -137,6 +137,8 @@ export interface SavedItem {
   place_type?: string;          // For places: "temple", "shrine", "market"
   destination?: string;         // Auto-detected destination: "Tokyo", "Japan"
   destination_id?: string;      // Link to destinations table
+  cloned_from_journey_id?: string;
+  cloned_from_owner_name?: string;
 }
 
 // Destination for auto-grouping (replaces mandatory trip creation)

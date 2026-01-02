@@ -17,5 +17,17 @@ router.get(
   PublicController.getTripSummary
 );
 
+/**
+ * GET /api/public/trips/:id/items
+ * 
+ * Get all items for a public trip.
+ * No authentication required.
+ */
+router.get(
+  '/trips/:id/items',
+  validate([param('id').isUUID().withMessage('Invalid trip ID')]),
+  PublicController.getTripItems
+);
+
 export default router;
 

@@ -169,6 +169,8 @@ export interface SavedItem {
   place_type?: string;          // For places: "temple", "shrine", "market", etc.
   destination?: string;         // Auto-detected: "Tokyo", "Japan"
   destination_id?: string;      // Link to destinations table
+  cloned_from_journey_id?: string;
+  cloned_from_owner_name?: string;
   // Extra info from source (e.g., guide videos)
   extra_info?: {
     video_type?: 'guide' | 'places' | 'howto';
@@ -502,5 +504,6 @@ export type RootStackParamList = {
   ItemDetail: { itemId: string };
   BrowseItems: { tripId: string };
   Settings: undefined;
+  SharedJourney: { tripId: string };
 };
 
