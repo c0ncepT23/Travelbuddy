@@ -251,11 +251,12 @@ export class TripGroupModel {
     const row = result.rows[0];
     
     // Get up to 3 photos and names from across all items in the trip
+    // Removed strict jsonb check to handle both TEXT and JSONB column types safely
     const photosResult = await query(
       `SELECT name, photos_json FROM saved_items 
-       WHERE trip_group_id = $1 AND photos_json IS NOT NULL AND jsonb_array_length(photos_json) > 0
+       WHERE trip_group_id = $1 AND photos_json IS NOT NULL
        ORDER BY rating DESC NULLS LAST, created_at DESC
-       LIMIT 3`,
+       LIMIT 10`, // Fetch a few more to ensure we find at least 3 with valid photos
       [id]
     );
 
