@@ -238,39 +238,35 @@ export class TripGroupModel {
    * Get trip summary for public sharing
    */
   static async getSummary(id: string): Promise<any | null> {
-    const result = await query(
+    // 1. Get basic trip info and overall counts
+    const tripResult = await query(
       `SELECT tg.id, tg.name, tg.destination,
-        (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id) as memory_count
+        (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id) as total_saved_count,
+        (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id AND status = 'visited') as visited_count
        FROM trip_groups tg 
        WHERE tg.id = $1`, 
       [id]
     );
 
-    if (result.rows.length === 0) return null;
-
-    const row = result.rows[0];
+    if (tripResult.rows.length === 0) return null;
+    const row = tripResult.rows[0];
     
-    // Get up to 3 photos and names from across all items in the trip
-    // Removed strict jsonb check to handle both TEXT and JSONB column types safely
-    const photosResult = await query(
+    // 2. Get visited memories (photos and names) for the web teaser
+    const visitedResult = await query(
       `SELECT name, photos_json FROM saved_items 
-       WHERE trip_group_id = $1 AND photos_json IS NOT NULL
-       ORDER BY rating DESC NULLS LAST, created_at DESC
-       LIMIT 10`, // Fetch a few more to ensure we find at least 3 with valid photos
+       WHERE trip_group_id = $1 AND status = 'visited' AND photos_json IS NOT NULL
+       ORDER BY updated_at DESC, rating DESC NULLS LAST
+       LIMIT 10`,
       [id]
     );
 
-    const memories: Array<{ name: string, url: string }> = [];
+    const visitedMemories: Array<{ name: string, url: string }> = [];
     const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 
-    photosResult.rows.forEach((row: any) => {
+    visitedResult.rows.forEach((row: any) => {
       let photos = row.photos_json;
       if (typeof photos === 'string') {
-        try {
-          photos = JSON.parse(photos);
-        } catch (e) {
-          photos = null;
-        }
+        try { photos = JSON.parse(photos); } catch (e) { photos = null; }
       }
 
       if (Array.isArray(photos) && photos.length > 0) {
@@ -283,10 +279,7 @@ export class TripGroupModel {
         }
 
         if (url) {
-          memories.push({
-            name: row.name,
-            url: url
-          });
+          visitedMemories.push({ name: row.name, url: url });
         }
       }
     });
@@ -295,9 +288,12 @@ export class TripGroupModel {
       id: row.id,
       title: row.name,
       country: row.destination,
-      memoryCount: row.memory_count,
-      memories: memories.slice(0, 3),
-      mascotType: 'happy' // Default for now
+      memoryCount: row.visited_count, // Use visited count for "Memories" label
+      totalSavedCount: row.total_saved_count,
+      visitedCount: row.visited_count,
+      discoveriesCount: row.total_saved_count - row.visited_count,
+      memories: visitedMemories.slice(0, 3), // Still show top 3 for teaser
+      mascotType: 'happy'
     };
   }
 }

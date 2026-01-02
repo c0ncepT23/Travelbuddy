@@ -26,14 +26,14 @@ export async function generateMetadata(
 
   if (!trip) return { title: 'Yori - Travel Story' };
 
-  const ogUrl = new URL(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/og/journey`);
+  const ogUrl = new URL(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://yorisan.com'}/api/og/journey`);
   ogUrl.searchParams.set('tripId', id);
 
   return {
-    title: `${trip.title} - My Travel Story on Yori`,
-    description: `Check out my ${trip.memoryCount} memories from ${trip.country}. Created with Yori - Your Travel Note Keeper.`,
+    title: `${trip.title} - ${trip.visitedCount} Memories on Yori`,
+    description: `Exploring ${trip.country}. See the ${trip.visitedCount} spots they visited and ${trip.discoveriesCount} hidden gems they discovered.`,
     openGraph: {
-      title: `${trip.title} - My Travel Story`,
+      title: `${trip.title} - ${trip.visitedCount} Memories`,
       description: `Exploring ${trip.country} with Yori.`,
       images: [
         {
@@ -76,7 +76,9 @@ export default async function Page({ params }: Props) {
           Travel Story
         </div>
         <h1 className="text-3xl font-black text-white mb-1 tracking-tight">{trip.title}</h1>
-        <p className="text-sm text-slate-400 font-medium mb-6">{trip.country} • {trip.memoryCount} Memories</p>
+        <p className="text-sm text-slate-400 font-medium mb-6">
+          {trip.country} • {trip.visitedCount} {trip.visitedCount === 1 ? 'Memory' : 'Memories'}
+        </p>
         
         {/* TOP CTA */}
         <Link 
@@ -119,9 +121,9 @@ export default async function Page({ params }: Props) {
              <div className="w-16 h-16 bg-[#7FFF00] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(127,255,0,0.3)] rotate-3">
                 <span className="text-[#0F1115] text-3xl font-black italic">Y</span>
              </div>
-             <h2 className="text-2xl font-black text-white mb-3 tracking-tight">Unlock the Full Journey</h2>
+             <h2 className="text-2xl font-black text-white mb-3 tracking-tight">Unlock the Full Map</h2>
              <p className="text-slate-400 mb-2 leading-relaxed font-medium text-sm">
-               The creator has saved {trip.memoryCount - (trip.memories?.length || 0)} more spots and notes on their personal map.
+               The creator has visited {trip.visitedCount} spots and discovered {trip.discoveriesCount} more hidden gems.
              </p>
              <p className="mt-4 text-[#7FFF00] text-[10px] font-black uppercase tracking-[0.2em]">
                Available for iOS & Android

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data } = await response.json();
-    const { title, country, memories, memoryCount, mascotType } = data;
+    const { title, country, memories, visitedCount, discoveriesCount, mascotType } = data;
 
     // 2. Render the Polaroid Collage
     return new ImageResponse(
@@ -89,7 +89,9 @@ export async function GET(req: NextRequest) {
           }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: 64, fontWeight: 'bold', color: 'white' }}>{title}</span>
-              <span style={{ fontSize: 28, color: '#94A3B8', marginTop: 5 }}>{memoryCount} Unforgettable Memories • {country}</span>
+              <span style={{ fontSize: 28, color: '#94A3B8', marginTop: 5 }}>
+                {visitedCount} Memories • {discoveriesCount} Discoveries • {country}
+              </span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
