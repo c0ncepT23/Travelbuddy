@@ -6,7 +6,7 @@ import logger from '../config/logger';
 
 export class AICompanionController {
   /**
-   * Process a user query to the AI companion
+   * Process a user query to the AI companion - Yori
    */
   static async query(req: AuthRequest, res: Response): Promise<void> {
     try {
