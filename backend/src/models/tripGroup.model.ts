@@ -233,5 +233,52 @@ export class TripGroupModel {
 
     return result.rows[0] || null;
   }
+
+  /**
+   * Get trip summary for public sharing
+   */
+  static async getSummary(id: string): Promise<any | null> {
+    const result = await query(
+      `SELECT tg.id, tg.name, tg.destination,
+        (SELECT COUNT(*)::int FROM saved_items WHERE trip_group_id = tg.id) as memory_count
+       FROM trip_groups tg 
+       WHERE tg.id = $1`, 
+      [id]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    
+    // Get up to 3 photos from across all items in the trip
+    const photosResult = await query(
+      `SELECT photos_json FROM saved_items 
+       WHERE trip_group_id = $1 AND photos_json IS NOT NULL AND jsonb_array_length(photos_json) > 0
+       ORDER BY rating DESC NULLS LAST, created_at DESC
+       LIMIT 3`,
+      [id]
+    );
+
+    const photoUrls: string[] = [];
+    photosResult.rows.forEach((item: any) => {
+      const photos = item.photos_json;
+      if (Array.isArray(photos) && photos.length > 0) {
+        // Just take the first photo from each item
+        const photo = photos[0];
+        if (photo.photo_reference || photo.url) {
+          photoUrls.push(photo.url || photo.photo_reference);
+        }
+      }
+    });
+
+    return {
+      id: row.id,
+      title: row.name,
+      country: row.destination,
+      memoryCount: row.memory_count,
+      photoUrls: photoUrls.slice(0, 3),
+      mascotType: 'happy' // Default for now
+    };
+  }
 }
 

@@ -28,13 +28,6 @@ export class GeminiService {
    * UPDATED: Amnesic Agent - ONLY uses extracted context, zero external knowledge
    */
   private static getTravelAgentSystemPrompt(context: AgentContext): string {
-    const _startDateStr = context.startDate
-      ? new Date(context.startDate).toLocaleDateString()
-      : 'Not set';
-    const _endDateStr = context.endDate 
-      ? new Date(context.endDate).toLocaleDateString() 
-      : 'Not set';
-
     return `You are TravelPal, an excited travel co-pilot helping ${context.userName} with their notes for ${context.destination}.
 
 **CRITICAL PHILOSOPHY:**

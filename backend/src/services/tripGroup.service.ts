@@ -249,5 +249,21 @@ export class TripGroupService {
       throw error;
     }
   }
+
+  /**
+   * Get public trip summary
+   */
+  static async getPublicSummary(tripId: string): Promise<any> {
+    try {
+      const summary = await TripGroupModel.getSummary(tripId);
+      if (!summary) {
+        throw new Error('Trip not found');
+      }
+      return summary;
+    } catch (error: any) {
+      logger.error('Error fetching public trip summary:', error);
+      throw error;
+    }
+  }
 }
 

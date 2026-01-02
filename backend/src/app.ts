@@ -8,6 +8,7 @@ import { apiLimiter } from './middleware/rateLimiter';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
+import publicRoutes from './routes/public.routes';
 import tripGroupRoutes from './routes/tripGroup.routes';
 import tripRoutes from './routes/trip.routes';
 import chatRoutes from './routes/chat.routes';
@@ -65,6 +66,7 @@ app.get('/health', (_req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/public', publicRoutes); // Publicly accessible routes
 app.use('/api/trips', tripGroupRoutes);  // Trip CRUD operations
 app.use('/api/trips', tripRoutes);        // Trip items and search
 app.use('/api/trips', chatRoutes);       // Chat within trips
