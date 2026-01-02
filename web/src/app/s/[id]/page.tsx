@@ -91,7 +91,7 @@ export default async function Page({ params }: Props) {
       {/* Teaser Content */}
       <main className="flex-1 max-w-lg mx-auto w-full px-6 py-12 relative">
         <div className="space-y-16">
-          {trip.photoUrls.map((url: string, index: number) => (
+          {(trip.photoUrls || []).map((url: string, index: number) => (
             <div 
               key={index}
               className={`relative bg-[#1A1D23] p-3 pb-12 shadow-2xl border border-slate-800 transform ${
@@ -100,12 +100,9 @@ export default async function Page({ params }: Props) {
             >
               <div className="aspect-square relative overflow-hidden rounded-sm bg-slate-900">
                 <img 
-                  src={url} 
+                  src={url || 'https://yorisan.com/placeholder.png'} 
                   alt={`Memory ${index + 1}`}
                   className="object-cover w-full h-full"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://yorisan.com/placeholder.png';
-                  }}
                 />
               </div>
               <div className="absolute bottom-4 left-4 right-4 h-3 bg-[#7FFF00] rounded-full opacity-5" />
