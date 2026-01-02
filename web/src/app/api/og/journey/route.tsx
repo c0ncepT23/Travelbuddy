@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data } = await response.json();
-    const { title, country, photoUrls, memoryCount, mascotType } = data;
+    const { title, country, memories, memoryCount, mascotType } = data;
 
     // 2. Render the Polaroid Collage
     return new ImageResponse(
@@ -46,26 +46,26 @@ export async function GET(req: NextRequest) {
           <div style={{ display: 'flex', position: 'relative', width: '900px', height: '450px', alignItems: 'center', justifyContent: 'center' }}>
             
             {/* PHOTO 3 (Bottom) */}
-            {photoUrls[2] && (
+            {memories[2] && (
               <div style={{
                 display: 'flex', position: 'absolute',
                 transform: 'rotate(12deg) translate(180px, 30px)',
                 background: '#1A1D23', padding: '12px 12px 48px 12px',
                 boxShadow: '0 10px 25px rgba(0,0,0,0.3)', border: '1px solid #334155'
               }}>
-                <img src={photoUrls[2]} width="280" height="280" style={{ objectFit: 'cover' }} />
+                <img src={memories[2].url} width="280" height="280" style={{ objectFit: 'cover' }} />
               </div>
             )}
 
             {/* PHOTO 2 (Middle) */}
-            {photoUrls[1] && (
+            {memories[1] && (
               <div style={{
                 display: 'flex', position: 'absolute',
                 transform: 'rotate(-8deg) translate(-180px, -30px)',
                 background: '#1A1D23', padding: '12px 12px 48px 12px',
                 boxShadow: '0 15px 35px rgba(0,0,0,0.4)', border: '1px solid #334155'
               }}>
-                <img src={photoUrls[1]} width="300" height="300" style={{ objectFit: 'cover' }} />
+                <img src={memories[1].url} width="300" height="300" style={{ objectFit: 'cover' }} />
               </div>
             )}
 
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
               background: '#1A1D23', padding: '16px 16px 72px 16px',
               boxShadow: '0 25px 60px rgba(0,0,0,0.5)', border: '1px solid #334155',
             }}>
-              <img src={photoUrls[0] || 'https://yorisan.com/placeholder.png'} width="380" height="380" style={{ objectFit: 'cover' }} />
+              <img src={memories[0]?.url || 'https://yorisan.com/placeholder.png'} width="380" height="380" style={{ objectFit: 'cover' }} />
               {/* "Tape" Decoration */}
               <div style={{ position: 'absolute', top: -15, left: '50%', marginLeft: -50, width: 100, height: 35, background: 'rgba(127, 255, 0, 0.4)', transform: 'rotate(-3deg)' }} />
             </div>

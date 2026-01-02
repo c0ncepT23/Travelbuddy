@@ -91,7 +91,7 @@ export default async function Page({ params }: Props) {
       {/* Teaser Content */}
       <main className="flex-1 max-w-lg mx-auto w-full px-6 py-12 relative">
         <div className="space-y-16">
-          {(trip.photoUrls || []).map((url: string, index: number) => (
+          {(trip.memories || []).map((memory: { name: string, url: string }, index: number) => (
             <div 
               key={index}
               className={`relative bg-[#1A1D23] p-3 pb-12 shadow-2xl border border-slate-800 transform ${
@@ -100,10 +100,13 @@ export default async function Page({ params }: Props) {
             >
               <div className="aspect-square relative overflow-hidden rounded-sm bg-slate-900">
                 <img 
-                  src={url || 'https://yorisan.com/placeholder.png'} 
-                  alt={`Memory ${index + 1}`}
+                  src={memory.url || 'https://yorisan.com/placeholder.png'} 
+                  alt={memory.name}
                   className="object-cover w-full h-full"
                 />
+              </div>
+              <div className="mt-3 px-1">
+                <h3 className="text-white text-sm font-bold truncate">{memory.name}</h3>
               </div>
               <div className="absolute bottom-4 left-4 right-4 h-3 bg-[#7FFF00] rounded-full opacity-5" />
             </div>
@@ -111,14 +114,14 @@ export default async function Page({ params }: Props) {
         </div>
 
         {/* THE FEAR OF MISSING OUT (FOMO) BLUR */}
-        <div className="absolute bottom-0 left-0 right-0 h-[500px] bg-gradient-to-t from-[#0F1115] via-[#0F1115]/98 to-transparent z-10 flex flex-col items-center justify-end pb-24 px-6">
+        <div className="absolute bottom-0 left-0 right-0 h-[500px] bg-gradient-to-t from-[#0F1115] via-[#0F1115]/98 to-transparent z-10 flex flex-col items-center justify-end pb-24 px-6 text-center">
           <div className="backdrop-blur-xl bg-[#1A1D23]/80 border border-slate-700/50 p-8 rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] text-center max-w-sm w-full">
              <div className="w-16 h-16 bg-[#7FFF00] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(127,255,0,0.3)] rotate-3">
                 <span className="text-[#0F1115] text-3xl font-black italic">Y</span>
              </div>
              <h2 className="text-2xl font-black text-white mb-3 tracking-tight">Unlock the Full Journey</h2>
              <p className="text-slate-400 mb-2 leading-relaxed font-medium text-sm">
-               Vamsi has saved {trip.memoryCount - 3} more spots and notes on their personal map.
+               The creator has saved {trip.memoryCount - (trip.memories?.length || 0)} more spots and notes on their personal map.
              </p>
              <p className="mt-4 text-[#7FFF00] text-[10px] font-black uppercase tracking-[0.2em]">
                Available for iOS & Android

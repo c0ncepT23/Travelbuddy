@@ -250,20 +250,20 @@ export class TripGroupModel {
 
     const row = result.rows[0];
     
-    // Get up to 3 photos from across all items in the trip
+    // Get up to 3 photos and names from across all items in the trip
     const photosResult = await query(
-      `SELECT photos_json FROM saved_items 
+      `SELECT name, photos_json FROM saved_items 
        WHERE trip_group_id = $1 AND photos_json IS NOT NULL AND jsonb_array_length(photos_json) > 0
        ORDER BY rating DESC NULLS LAST, created_at DESC
        LIMIT 3`,
       [id]
     );
 
-    const photoUrls: string[] = [];
+    const memories: Array<{ name: string, url: string }> = [];
     const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 
-    photosResult.rows.forEach((item: any) => {
-      let photos = item.photos_json;
+    photosResult.rows.forEach((row: any) => {
+      let photos = row.photos_json;
       if (typeof photos === 'string') {
         try {
           photos = JSON.parse(photos);
@@ -273,14 +273,19 @@ export class TripGroupModel {
       }
 
       if (Array.isArray(photos) && photos.length > 0) {
-        // Just take the first photo from each item
         const photo = photos[0];
+        let url = '';
         if (photo.url) {
-          photoUrls.push(photo.url);
+          url = photo.url;
         } else if (photo.photo_reference) {
-          // Construct full Google Places photo URL
-          const fullUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_MAPS_API_KEY}`;
-          photoUrls.push(fullUrl);
+          url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_MAPS_API_KEY}`;
+        }
+
+        if (url) {
+          memories.push({
+            name: row.name,
+            url: url
+          });
         }
       }
     });
@@ -290,7 +295,7 @@ export class TripGroupModel {
       title: row.name,
       country: row.destination,
       memoryCount: row.memory_count,
-      photoUrls: photoUrls.slice(0, 3),
+      memories: memories.slice(0, 3),
       mascotType: 'happy' // Default for now
     };
   }
