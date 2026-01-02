@@ -1,12 +1,49 @@
+# Dependencies (biggest culprit)
 node_modules
+
+# Build output (will be built on Railway)
 dist
+
+# Logs
 logs
 *.log
+
+# Git
 .git
+.gitignore
+
+# Other project folders (not needed)
 ../web
 ../mobile
 ../docs
 ../.cursor
 ../builds
+
+# Large binaries
 *.apk
+*.aab
+*.ipa
+
+# Debug/test output files
+*.txt
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Scripts not needed for deployment
+*.ps1
+
+# Test files
+manual_test_*.ts
+test_*.ts
+check-*.ts
+enrich-*.ts
+
+# Documentation
+*.md
+!README.md
+
+# Example files
+*.example
 
