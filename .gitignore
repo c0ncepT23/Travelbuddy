@@ -6,6 +6,10 @@ mobile/node_modules/
 .next/
 web/.next/
 
+# Lock files (not needed in git for web/mobile - Railway only deploys backend)
+web/package-lock.json
+mobile/package-lock.json
+
 # Build outputs
 backend/dist/
 web/out/
