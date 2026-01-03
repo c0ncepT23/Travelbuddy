@@ -5,6 +5,7 @@ import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
 import { ItemCategory, ProcessedContent } from '../types';
 import logger from '../config/logger';
+import { API_LIMITS } from '../config/constants';
 
 // Apify API configuration
 const APIFY_API_BASE = 'https://api.apify.com/v2';
@@ -121,7 +122,7 @@ export class ApifyInstagramService {
             'Content-Type': 'application/json',
           },
           params: {
-            waitForFinish: 180, // Wait up to 3 minutes for completion
+            waitForFinish: API_LIMITS.APIFY_WAIT_SECONDS, // Wait up to 3 minutes for completion
           },
         }
       );
@@ -203,7 +204,7 @@ export class ApifyInstagramService {
           'Content-Type': 'application/json',
         },
         params: {
-          waitForFinish: 180,
+          waitForFinish: API_LIMITS.APIFY_WAIT_SECONDS,
         },
       }
     );
@@ -431,8 +432,8 @@ export class ApifyInstagramService {
       
       logger.info(`[Apify] Analysis complete. Method: ${usedVideoAnalysis ? 'VIDEO' : 'CAPTION'}, Places found: ${analysisResult.places?.length || 0}`)
 
-      // Step 3: Enrich with Google Places (max 3 concurrent)
-      const limit = pLimit(3);
+      // Step 3: Enrich with Google Places (max concurrent)
+      const limit = pLimit(API_LIMITS.GOOGLE_PLACES_CONCURRENT);
       const enrichedPlaces = await Promise.all(
         analysisResult.places.map(async (place, index) => {
           return limit(async () => {

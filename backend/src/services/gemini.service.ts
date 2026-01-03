@@ -4,7 +4,9 @@ import { config } from '../config/env';
 import { ItemCategory, AgentContext, DiscoveryIntent } from '../types';
 import logger from '../config/logger';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import { VideoDownloader } from '../utils/videoDownloader';
+import { GEMINI_CONFIG, VIDEO_CONFIG } from '../config/constants';
 
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
@@ -111,8 +113,8 @@ Tone guidelines:
         model: MODELS.FLASH,
         systemInstruction: this.getTravelAgentSystemPrompt(context),
         generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 500,
+          temperature: GEMINI_CONFIG.CHAT.TEMPERATURE,
+          maxOutputTokens: GEMINI_CONFIG.CHAT.MAX_TOKENS,
         }
       });
 
@@ -251,9 +253,9 @@ Tone guidelines:
       const model = genAI.getGenerativeModel({ 
         model: MODELS.FLASH,
         generationConfig: {
-          temperature: 0.1, // Low temp for consistent parsing
+          temperature: GEMINI_CONFIG.EXTRACTION.TEMPERATURE, // Low temp for consistent parsing
           responseMimeType: 'application/json',
-          responseSchema: intentSchema, // THE MAGIC - Schema enforcement
+          responseSchema: intentSchema as any, // THE MAGIC - Schema enforcement
         }
       });
 
@@ -336,8 +338,8 @@ Extract the structured intent from the query.`;
       const model = genAI.getGenerativeModel({ 
         model: MODELS.FLASH,
         generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 500,
+          temperature: GEMINI_CONFIG.CHAT.TEMPERATURE,
+          maxOutputTokens: GEMINI_CONFIG.CHAT.MAX_TOKENS,
         }
       });
 
@@ -499,6 +501,7 @@ Generate a SHORT, friendly response:`;
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: extractionSchema as any,
+          temperature: GEMINI_CONFIG.EXTRACTION.TEMPERATURE,
         }
       });
 
@@ -533,7 +536,11 @@ ${contentToAnalyze}`;
         duration_days: parsed.duration_days,
       };
     } catch (error: any) {
-      logger.error('Gemini metadata analysis error:', error);
+      logger.error('Gemini metadata analysis error:', {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      });
       throw new Error(`Failed to analyze metadata: ${error.message}`);
     }
   }
@@ -567,6 +574,7 @@ ${contentToAnalyze}`;
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: extractionSchema as any,
+          temperature: GEMINI_CONFIG.EXTRACTION.TEMPERATURE,
         }
       });
 
@@ -595,7 +603,11 @@ RESPOND ONLY WITH VALID JSON matching the provided schema.`;
         places: parsed.places || [],
       };
     } catch (error: any) {
-      logger.error('Gemini Reddit analysis error:', error);
+      logger.error('Gemini Reddit analysis error:', {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      });
       throw new Error(`Failed to analyze Reddit post: ${error.message}`);
     }
   }
@@ -628,6 +640,7 @@ RESPOND ONLY WITH VALID JSON matching the provided schema.`;
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: extractionSchema as any,
+          temperature: GEMINI_CONFIG.EXTRACTION.TEMPERATURE,
         }
       });
 
@@ -653,7 +666,11 @@ RESPOND ONLY WITH VALID JSON matching the provided schema.`;
         places: parsed.places || [],
       };
     } catch (error: any) {
-      logger.error('Gemini Instagram analysis error:', error);
+      logger.error('Gemini Instagram analysis error:', {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      });
       return { summary: caption.substring(0, 100) + '...', places: [] };
     }
   }
@@ -747,6 +764,18 @@ RESPOND WITH VALID JSON matching the provided schema.`;
       // Use unified VideoDownloader
       tempFilePath = await VideoDownloader.download(videoUrl, options.platform);
       
+      // Before upload
+      const stats = fs.statSync(tempFilePath);
+      const maxSize = VIDEO_CONFIG.MAX_SIZE_MB * 1024 * 1024;
+
+      if (stats.size > maxSize) {
+        throw new Error(
+          `Video too large for Gemini: ${(stats.size / 1024 / 1024).toFixed(2)}MB (max ${VIDEO_CONFIG.MAX_SIZE_MB}MB)`
+        );
+      }
+
+      logger.info(`[Gemini Video] Uploading ${(stats.size / 1024 / 1024).toFixed(2)}MB file`);
+
       const uploadResult = await fileManager.uploadFile(tempFilePath, {
         mimeType: 'video/mp4',
         displayName: `${options.platform}_${crypto.randomUUID()}`,
@@ -788,7 +817,11 @@ RESPOND WITH VALID JSON matching the provided schema.`;
       
     } catch (error: any) {
       const errorMsg = error.message || error.toString();
-      logger.error(`[Gemini Video] Analysis error: ${errorMsg}`);
+      logger.error(`[Gemini Video] Analysis error:`, {
+        message: errorMsg,
+        stack: error.stack,
+        cause: error.cause,
+      });
       throw new Error(`Video analysis failed: ${errorMsg}`);
     } finally {
       VideoDownloader.cleanup(tempFilePath);

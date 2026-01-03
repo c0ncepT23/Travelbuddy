@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import config from '../config/env';
 import logger from '../config/logger';
+import { VIDEO_CONFIG } from '../config/constants';
 
 export class VideoDownloader {
   /**
@@ -14,10 +15,8 @@ export class VideoDownloader {
    */
   static async download(videoUrl: string, platform: string): Promise<string> {
     const tempDir = os.tmpdir();
-    const filename = `${platform}_video_${crypto.randomUUID()}.mp4`;
-    const filepath = path.join(tempDir, filename);
-
-    logger.info(`[VideoDownloader] Downloading ${platform} video via Proxy to: ${filepath}`);
+    
+    logger.info(`[VideoDownloader] Starting ${platform} download via Proxy: ${videoUrl}`);
 
     // Configure Proxy Agent
     const { host, port, user, pass } = config.proxy || {};
@@ -35,11 +34,22 @@ export class VideoDownloader {
         url: videoUrl,
         responseType: 'stream',
         httpsAgent: httpsAgent,
-        timeout: 60000, // 60s timeout
+        timeout: VIDEO_CONFIG.DOWNLOAD_TIMEOUT_MS,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
       });
+
+      // Detect file extension from Content-Type header
+      const contentType = response.headers['content-type'] || 'video/mp4';
+      const ext = contentType.includes('webm') ? '.webm' 
+                : contentType.includes('quicktime') ? '.mov'
+                : '.mp4';
+      
+      const filename = `${platform}_video_${crypto.randomUUID()}${ext}`;
+      const filepath = path.join(tempDir, filename);
+
+      logger.info(`[VideoDownloader] Detected format: ${ext} from ${contentType} -> ${filepath}`);
 
       const writer = fs.createWriteStream(filepath);
       response.data.pipe(writer);
@@ -53,7 +63,6 @@ export class VideoDownloader {
       });
     } catch (error: any) {
       logger.error(`[VideoDownloader] Failed to download from ${videoUrl}: ${error.message}`);
-      if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
       throw error;
     }
   }
@@ -80,19 +89,22 @@ export class VideoDownloader {
     try {
       const tempDir = os.tmpdir();
       const files = fs.readdirSync(tempDir);
-      const prefixes = ['insta_reel_', 'youtube_video_', 'tiktok_video_', 'yori_video_'];
+      const prefixes = ['insta_reel_', 'youtube_video_', 'tiktok_video_', 'yori_video_', 'instagram_video_'];
       
       let count = 0;
       for (const file of files) {
         if (prefixes.some(p => file.startsWith(p))) {
           const filePath = path.join(tempDir, file);
+          const stats = fs.statSync(filePath);
           
-          // Delete files older than 1 hour or just clean all on startup
-          fs.unlinkSync(filePath);
-          count++;
+          // Only delete files older than 1 hour to avoid deleting active downloads
+          if (Date.now() - stats.mtimeMs > VIDEO_CONFIG.CLEANUP_AGE_MS) {
+            fs.unlinkSync(filePath);
+            count++;
+          }
         }
       }
-      if (count > 0) logger.info(`[VideoDownloader] Cleaned up ${count} orphaned video files`);
+      if (count > 0) logger.info(`[VideoDownloader] Cleaned up ${count} orphaned video files (>1hr old)`);
     } catch (error: any) {
       logger.error(`[VideoDownloader] Startup cleanup failed: ${error.message}`);
     }

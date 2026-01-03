@@ -9,6 +9,7 @@ import { ApifyInstagramService } from './apifyInstagram.service';
 import { YouTubeTranscriptService } from './youtubeTranscript.service';
 import { GeminiDirectUrlService } from './geminiDirectUrl.service';
 import { VideoCacheModel } from '../models/videoCache.model';
+import { API_LIMITS } from '../config/constants';
 import {
   extractYouTubeVideoId,
   extractInstagramPostId,
@@ -723,9 +724,9 @@ export class ContentProcessorService {
         },
       }));
 
-      // Enrich places with Google Places API data (max 3 concurrent to avoid rate limits)
+      // Enrich places with Google Places API data (max concurrent to avoid rate limits)
       logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} YouTube places...`);
-      const limit = pLimit(3);
+      const limit = pLimit(API_LIMITS.GOOGLE_PLACES_CONCURRENT);
       const enrichedPlaces = await Promise.all(
         processedPlaces.map(async (place, index) => {
           return limit(async () => {
@@ -914,9 +915,9 @@ export class ContentProcessorService {
         original_content: redditData,
       }));
 
-      // Enrich places with Google Places API data (max 3 concurrent)
+      // Enrich places with Google Places API data (max concurrent)
       logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} Reddit places...`);
-      const limit = pLimit(3);
+      const limit = pLimit(API_LIMITS.GOOGLE_PLACES_CONCURRENT);
       const enrichedPlaces = await Promise.all(
         processedPlaces.map(async (place, index) => {
           return limit(async () => {
@@ -1129,9 +1130,9 @@ export class ContentProcessorService {
         original_content: instaData,
       }));
 
-      // Enrich places with Google Places API data (max 3 concurrent)
+      // Enrich places with Google Places API data (max concurrent)
       logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} Instagram places...`);
-      const limit = pLimit(3);
+      const limit = pLimit(API_LIMITS.GOOGLE_PLACES_CONCURRENT);
       const enrichedPlaces = await Promise.all(
         processedPlaces.map(async (place, index) => {
           return limit(async () => {
