@@ -5,7 +5,6 @@
  * Falls back to Gemini Direct URL if transcript unavailable.
  */
 
-import { YoutubeTranscript } from 'youtube-transcript';
 import axios from 'axios';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import config from '../config/env';
@@ -112,7 +111,11 @@ export class YouTubeTranscriptService {
           if (englishTrack?.baseUrl) {
             const transcriptResponse = await axios.get(englishTrack.baseUrl, {
               httpsAgent,
-              timeout: API_LIMITS.YOUTUBE_TRANSCRIPT_TIMEOUT_MS
+              timeout: API_LIMITS.YOUTUBE_TRANSCRIPT_TIMEOUT_MS,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+              }
             });
 
             transcript = transcriptResponse.data
@@ -121,6 +124,8 @@ export class YouTubeTranscriptService {
               .replace(/&amp;/g, '&')
               .replace(/&quot;/g, '"')
               .replace(/&#39;/g, "'")
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
               .replace(/<.*?>/g, '')
               .replace(/\s+/g, ' ')
               .trim();
@@ -130,17 +135,6 @@ export class YouTubeTranscriptService {
         }
       } catch (e: any) {
         logger.warn(`[YouTubeTranscript] Failed to fetch transcript for ${videoId}: ${e.message}`);
-      }
-
-      // 5. Library Fallback for transcript if manual failed
-      if (!transcript) {
-        try {
-          const segments = await YoutubeTranscript.fetchTranscript(videoId);
-          if (segments && segments.length > 0) {
-            transcript = segments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
-            logger.info(`[YouTubeTranscript] Library fallback success (${transcript.length} chars)`);
-          }
-        } catch (e) { /* ignore */ }
       }
 
       return { 
