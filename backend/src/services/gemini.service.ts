@@ -8,6 +8,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
@@ -17,6 +18,57 @@ export const MODELS = {
   FLASH: 'gemini-2.5-flash',  // Fast, cheap - for chat, intent detection (stable GA)
   PRO: 'gemini-2.5-pro',      // Complex reasoning - for planning, guides (stable GA)
   FLASH_LEGACY: 'gemini-2.0-flash',  // Fallback
+};
+
+// JSON Schemas for guaranteed extraction structure
+const extractionSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    summary: { type: SchemaType.STRING },
+    destination: { type: SchemaType.STRING, nullable: true },
+    destination_country: { type: SchemaType.STRING, nullable: true },
+    video_type: { type: SchemaType.STRING, enum: ['places', 'howto', 'guide'], nullable: true },
+    duration_days: { type: SchemaType.INTEGER, nullable: true },
+    places: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          name: { type: SchemaType.STRING },
+          category: { type: SchemaType.STRING, enum: ['food', 'accommodation', 'place', 'shopping', 'activity', 'tip'] },
+          description: { type: SchemaType.STRING },
+          location: { type: SchemaType.STRING, nullable: true },
+          cuisine_type: { type: SchemaType.STRING, nullable: true },
+          place_type: { type: SchemaType.STRING, nullable: true },
+          tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true }
+        },
+        required: ['name', 'category', 'description']
+      }
+    },
+    itinerary: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          day: { type: SchemaType.INTEGER },
+          title: { type: SchemaType.STRING },
+          places: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+        }
+      },
+      nullable: true
+    },
+    discovery_intent: {
+      type: SchemaType.OBJECT,
+      properties: {
+        type: { type: SchemaType.STRING },
+        item: { type: SchemaType.STRING },
+        city: { type: SchemaType.STRING },
+        vibe: { type: SchemaType.STRING, nullable: true }
+      },
+      nullable: true
+    }
+  },
+  required: ['summary', 'places']
 };
 
 export class GeminiService {
@@ -447,9 +499,10 @@ Generate a SHORT, friendly response:`;
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: MODELS.FLASH,
         generationConfig: {
           responseMimeType: 'application/json',
+          responseSchema: extractionSchema as any,
         }
       });
 
@@ -468,45 +521,10 @@ RULES FOR EXTRACTION:
 
 Title: ${title}
 
-${contentToAnalyze}
-
-RESPOND ONLY WITH VALID JSON:
-{
-  "video_type": "guide" or "places" or "howto",
-  "summary": "Brief summary",
-  "destination": "Tokyo",
-  "destination_country": "Japan",
-  "duration_days": 4,
-  "itinerary": [
-    { "day": 1, "title": "Day 1 Title", "places": ["Major Place Name"] }
-  ],
-  "places": [
-    {
-      "name": "Safari World Bangkok",
-      "category": "place",
-      "description": "Large open zoo. Highlights:\n• Giraffe Terrace: Feed giraffes (150 THB)\n• Blossom Restaurant: Lunch buffet included",
-      "location": "Bangkok",
-      "place_type": "zoo",
-      "tags": ["family"]
-    }
-  ],
-  "discovery_intent": {
-    "type": "CULINARY_GOAL",
-    "item": "Sushi",
-    "city": "Tokyo",
-    "vibe": "traditional"
-  }
-}`;
+${contentToAnalyze}`;
 
       const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      
-      let cleanText = text.trim();
-      if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      }
-
-      const parsed = JSON.parse(cleanText.match(/\{[\s\S]*\}/)?.[0] || '{}');
+      const parsed = JSON.parse(result.response.text());
 
       return {
         video_type: parsed.video_type || 'places',
@@ -802,7 +820,7 @@ RESPOND WITH VALID JSON:
       const ext = contentType.includes('mp4') ? '.mp4' : 
                   contentType.includes('webm') ? '.webm' : '.mp4';
       
-      tempFilePath = path.join(os.tmpdir(), `yori_video_${Date.now()}${ext}`);
+      tempFilePath = path.join(os.tmpdir(), `yori_video_${crypto.randomUUID()}${ext}`);
       fs.writeFileSync(tempFilePath, response.data);
       
       const uploadResult = await fileManager.uploadFile(tempFilePath, {
@@ -818,9 +836,13 @@ RESPOND WITH VALID JSON:
       
       if (file.state === 'FAILED') throw new Error('Video processing failed');
       
+      // Use Gemini 2.0 Flash Exp for multimodal analysis (supports video)
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash-exp',
-        generationConfig: { responseMimeType: 'application/json' }
+        model: MODELS.FLASH,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: extractionSchema as any,
+        }
       });
       
       const result = await model.generateContent([
@@ -828,8 +850,7 @@ RESPOND WITH VALID JSON:
         { text: prompt },
       ]);
       
-      const cleanText = result.response.text().replace(/^```json\s*/, '').replace(/```\s*$/, '');
-      const parsed = JSON.parse(cleanText);
+      const parsed = JSON.parse(result.response.text());
       
       await fileManager.deleteFile(file.name);
       

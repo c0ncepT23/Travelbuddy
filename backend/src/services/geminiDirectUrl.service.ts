@@ -5,7 +5,7 @@
  * Used for Shorts and when transcript is unavailable.
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { MODELS } from './gemini.service';
 import config from '../config/env';
 import logger from '../config/logger';
@@ -21,6 +21,33 @@ interface ExtractedPlace {
   place_type?: string;
   tags?: string[];
 }
+
+// JSON Schema for YouTube Direct Extraction
+const youtubeExtractionSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    summary: { type: SchemaType.STRING },
+    destination: { type: SchemaType.STRING, nullable: true },
+    destination_country: { type: SchemaType.STRING, nullable: true },
+    places: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          name: { type: SchemaType.STRING },
+          category: { type: SchemaType.STRING, enum: ['food', 'accommodation', 'place', 'shopping', 'activity', 'tip'] },
+          description: { type: SchemaType.STRING },
+          location: { type: SchemaType.STRING, nullable: true },
+          cuisine_type: { type: SchemaType.STRING, nullable: true },
+          place_type: { type: SchemaType.STRING, nullable: true },
+          tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, nullable: true }
+        },
+        required: ['name', 'category', 'description']
+      }
+    }
+  },
+  required: ['summary', 'places']
+};
 
 export class GeminiDirectUrlService {
   private static genAI = new GoogleGenerativeAI(config.gemini.apiKey);
@@ -48,6 +75,7 @@ export class GeminiDirectUrlService {
         model: MODELS.FLASH,
         generationConfig: {
           responseMimeType: 'application/json',
+          responseSchema: youtubeExtractionSchema as any,
         },
       });
 
@@ -99,8 +127,7 @@ Return JSON:
         prompt,
       ]);
 
-      const responseText = result.response.text();
-      const parsed = JSON.parse(responseText);
+      const parsed = JSON.parse(result.response.text());
 
       logger.info(`[GeminiDirectUrl] Extracted ${parsed.places?.length || 0} places`);
       return parsed;

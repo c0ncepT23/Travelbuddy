@@ -3,6 +3,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 import { config } from '../config/env';
 import { GeminiService, MODELS } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
@@ -171,17 +172,18 @@ export class ApifyInstagramService {
         type: result.type || (result.videoUrl || result.video_url ? 'Video' : 'Image'),
       };
     } catch (error: any) {
-      logger.error('[Apify] Scrape error:', error.response?.data || error.message);
+      logger.warn(`[Apify] Primary scraper failed: ${error.message}`);
       
       // If first actor fails, try the community fallback
       logger.info('[Apify] Trying community scraper as fallback...');
       try {
         return await this.scrapeWithActor(url, INSTAGRAM_POST_SCRAPER, postId);
-      } catch (fallbackError) {
-        logger.error('[Apify] Fallback also failed');
+      } catch (fallbackError: any) {
+        // Capture both errors for better debugging
+        const msg = `All Instagram scrapers failed. Primary: ${error.message}. Fallback: ${fallbackError.message}`;
+        logger.error(`[Apify] ${msg}`);
+        throw new Error(msg);
       }
-      
-      throw new Error(`Apify scrape failed: ${error.message}`);
     }
   }
 
@@ -247,7 +249,7 @@ export class ApifyInstagramService {
    */
   private static async downloadVideo(videoUrl: string): Promise<string> {
     const tempDir = os.tmpdir();
-    const filename = `insta_reel_${Date.now()}.mp4`;
+    const filename = `insta_reel_${crypto.randomUUID()}.mp4`;
     const filepath = path.join(tempDir, filename);
 
     logger.info(`[Apify] Downloading video via Proxy to: ${filepath}`);
@@ -436,8 +438,8 @@ RESPOND WITH VALID JSON:
       .replace(/\n+/g, ' ')
       .trim();
     
-    // Check minimum length (at least 50 chars of actual content)
-    if (cleaned.length < 50) {
+    // Check minimum length (at least 15 chars of actual content)
+    if (cleaned.length < 15) {
       logger.info(`[Apify] Caption too short (${cleaned.length} chars) - not useful`);
       return false;
     }
