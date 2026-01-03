@@ -94,7 +94,16 @@ export const categoryColors: Record<string, { bg: string; text: string; accent: 
 // ============================================
 
 export const typography = {
-  // Font weights
+  // Font families
+  fonts: {
+    regular: 'Inter-Regular',
+    medium: 'Inter-Medium',
+    semibold: 'Inter-SemiBold',
+    bold: 'Inter-Bold',
+    black: 'Inter-Black',
+  },
+
+  // Font weights (kept for compatibility, but using font families is better)
   weights: {
     regular: '400' as const,
     medium: '500' as const,

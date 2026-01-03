@@ -14,6 +14,14 @@ const shareIntentEmitter = Platform.OS === 'android' && ShareIntentModule
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { 
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_900Black 
+} from '@expo-google-fonts/inter';
 import { useAuthStore } from './src/stores/authStore';
 import { useTripStore } from './src/stores/tripStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -70,6 +78,14 @@ const linking = {
 };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    'Inter-Regular': Inter_400Regular,
+    'Inter-Medium': Inter_500Medium,
+    'Inter-SemiBold': Inter_600SemiBold,
+    'Inter-Bold': Inter_700Bold,
+    'Inter-Black': Inter_900Black,
+  });
+
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sharedContent, setSharedContent] = useState<SharedContent | null>(null);
@@ -378,7 +394,7 @@ export default function App() {
     };
   }, [isAuthenticated]);
 
-  if (!isReady || isLoading) {
+  if (!isReady || isLoading || !fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
         <View style={{

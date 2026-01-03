@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
     fontWeight: '900', 
     color: '#ffffff', 
     letterSpacing: -2.5,
-    fontFamily: Platform.OS === 'ios' ? 'Inter-Black' : 'sans-serif-condensed', // Aiming for that heavy weight
+    fontFamily: 'Inter-Black', 
   },
   logoDot: {
     color: '#7FFF00', // Signature Zenly Green

@@ -27,6 +27,7 @@ export default {
     },
     platforms: ["ios", "android", "web"],
     plugins: [
+      "expo-font",
       [
         "expo-location",
         {
