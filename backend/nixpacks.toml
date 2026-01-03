@@ -5,7 +5,7 @@
 nixPkgs = ["nodejs_20", "python311", "ffmpeg", "yt-dlp"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm ci", "pip3 install -U yt-dlp --break-system-packages"]
 
 [phases.build]
 cmds = ["npm run build"]

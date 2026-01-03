@@ -99,12 +99,12 @@ export class ContentProcessorService {
   }
 
   /**
-   * UPDATED: Fetch YouTube video data (No Apify)
+   * UPDATED: Fetch YouTube video data using 3-Tier Pipeline
    * 
-   * Flow:
-   * 1. If Short → Gemini Direct URL (skip transcript)
-   * 2. If Long-form → Try Transcript API with proxy
-   * 3. If no transcript → Fall back to Gemini Direct URL
+   * Flow (Architecture v1.2):
+   * 1. Tier 1 (Native) or Tier 2 (yt-dlp) via YouTubeTranscriptService
+   * 2. If Short → Gemini Vision (Direct URL)
+   * 3. If long-form but NO transcript → Gemini Vision (Direct URL)
    */
   private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData> {
     const videoId = YouTubeTranscriptService.extractVideoId(url);
@@ -112,10 +112,10 @@ export class ContentProcessorService {
       throw new Error('Invalid YouTube URL');
     }
 
-    // New unified fetch: Get everything (transcript, description, metadata) in one proxy-call
+    // New unified fetch: Runs Tier 1 (Native) -> Tier 2 (yt-dlp)
     const videoData = await YouTubeTranscriptService.fetchVideoData(videoId);
     
-    // Fallback metadata via oEmbed if scraping failed to get title/author
+    // Fallback metadata via oEmbed if both tiers failed to get title/author
     if (!videoData.title) {
       const oembed = await YouTubeTranscriptService.fetchMetadata(videoId);
       if (oembed) {
@@ -124,26 +124,26 @@ export class ContentProcessorService {
       }
     }
 
-    // Path 1: YouTube Shorts → Skip transcript, use Gemini Direct URL
+    // Path 1: YouTube Shorts → Always use Gemini Direct URL (Vision)
     if (YouTubeTranscriptService.isShort(url)) {
-      logger.info(`[ContentProcessor] YouTube Short detected → Gemini Direct URL`);
+      logger.info(`[ContentProcessor] YouTube Short detected → Tier 3 Gemini Vision fallback`);
       return {
         title: videoData.title || 'YouTube Short',
         description: videoData.description || '',
-        transcript: '', // Empty - will trigger Gemini Direct URL path
+        transcript: '', 
         thumbnail_url: videoData.thumbnailUrl || '',
         thumbnail: videoData.thumbnailUrl || '',
         channel: videoData.author || 'Unknown',
-        useDirectUrl: true, // Flag for downstream processing
+        useDirectUrl: true, 
       };
     }
 
-    // Path 2: Long-form video → Use transcript or rich description
+    // Path 2: Long-form video → Use transcript or rich description if available
     const hasTranscript = videoData.transcript && videoData.transcript.length > 100;
     const hasRichDescription = videoData.description && videoData.description.length > 200;
 
     if (hasTranscript || hasRichDescription) {
-      logger.info(`[ContentProcessor] Got useful text context (Transcript: ${!!hasTranscript}, Desc: ${!!hasRichDescription})`);
+      logger.info(`[ContentProcessor] Tier ${videoData.extractionMethod === 'native' ? '1' : '2'} Success: Got text context`);
       return {
         title: videoData.title || 'YouTube Video',
         description: videoData.description || '',
@@ -151,12 +151,13 @@ export class ContentProcessorService {
         thumbnail_url: videoData.thumbnailUrl || '',
         thumbnail: videoData.thumbnailUrl || '',
         channel: videoData.author || 'Unknown',
-        useDirectUrl: false, // Text analysis is good enough
+        useDirectUrl: false, 
+        extractionMethod: videoData.extractionMethod,
       };
     }
 
-    // Path 3: No useful text → Fall back to Gemini Direct URL (Vision)
-    logger.info(`[ContentProcessor] No useful text context → Gemini Direct URL fallback`);
+    // Path 3: No useful text from Tier 1 or 2 → Tier 3: Gemini Vision (Direct URL)
+    logger.info(`[ContentProcessor] Tier 1 & 2 Failed → Tier 3 Gemini Vision fallback`);
     return {
       title: videoData.title || 'YouTube Video',
       description: videoData.description || '',

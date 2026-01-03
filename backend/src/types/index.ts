@@ -241,6 +241,7 @@ export interface YouTubeVideoData {
   thumbnail: string;
   channel: string;
   useDirectUrl?: boolean;
+  extractionMethod?: 'native' | 'yt-dlp';
 }
 
 export interface InstagramPostData {
