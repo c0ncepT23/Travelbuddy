@@ -215,11 +215,14 @@ export class YouTubeTranscriptService {
       const proxyUrl = this.getProxyUrl();
       const proxyArg = proxyUrl ? `--proxy "${proxyUrl}"` : '';
       const url = `https://www.youtube.com/watch?v=${videoId}`;
+      
+      // ✅ FIX: Use Node.js as JS runtime for PO Token generation to avoid 429s
+      const commonFlags = '--no-warnings --no-check-certificate --js-runtimes node';
 
       // Step 1: Get metadata via --dump-json
       logger.info(`[YouTubeTranscript] yt-dlp: Fetching metadata for ${videoId}`);
       const { stdout: jsonOutput } = await execAsync(
-        `yt-dlp ${proxyArg} --dump-json --skip-download "${url}"`,
+        `yt-dlp ${proxyArg} ${commonFlags} --dump-json --skip-download "${url}"`,
         { timeout: 30000 }
       );
       
@@ -236,7 +239,7 @@ export class YouTubeTranscriptService {
         try {
           // Download subtitles to temp file
           await execAsync(
-            `yt-dlp ${proxyArg} --skip-download --write-auto-sub --sub-lang en --sub-format vtt -o "${path.join(tempDir, '%(id)s')}" "${url}"`,
+            `yt-dlp ${proxyArg} ${commonFlags} --skip-download --write-auto-sub --sub-lang en --sub-format vtt -o "${path.join(tempDir, '%(id)s')}" "${url}"`,
             { timeout: 30000 }
           );
           
