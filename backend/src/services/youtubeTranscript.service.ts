@@ -223,7 +223,7 @@ export class YouTubeTranscriptService {
       logger.info(`[YouTubeTranscript] yt-dlp: Fetching metadata for ${videoId}`);
       const { stdout: jsonOutput } = await execAsync(
         `yt-dlp ${proxyArg} ${commonFlags} --dump-json --skip-download "${url}"`,
-        { timeout: 30000 }
+        { timeout: 60000 }
       );
       
       const metadata = JSON.parse(jsonOutput);
@@ -240,7 +240,7 @@ export class YouTubeTranscriptService {
           // Download subtitles to temp file
           await execAsync(
             `yt-dlp ${proxyArg} ${commonFlags} --skip-download --write-auto-sub --sub-lang en --sub-format vtt -o "${path.join(tempDir, '%(id)s')}" "${url}"`,
-            { timeout: 30000 }
+            { timeout: 60000 }
           );
           
           // Read and parse the VTT file
