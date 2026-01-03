@@ -4,6 +4,7 @@ import { config } from '../config/env';
 import { ItemCategory, AgentContext, DiscoveryIntent } from '../types';
 import logger from '../config/logger';
 import axios from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -675,7 +676,7 @@ RESPOND ONLY WITH VALID JSON:
 
   /**
    * Analyze video content directly using Gemini's vision capabilities
-   * Updated with HIERARCHY DETECTION
+   * UPDATED: Cloud-Native Strategy (Direct URL for YouTube, Proxy for others)
    */
   static async analyzeVideoContent(
     videoUrl: string,
@@ -694,57 +695,17 @@ RESPOND ONLY WITH VALID JSON:
       category: string;
       description: string;
       location?: string;
-      parent_location?: string; // NEW
+      parent_location?: string;
       cuisine_type?: string;
       place_type?: string;
       tags?: string[];
     }>;
     discovery_intent?: DiscoveryIntent;
   }> {
-    let tempFilePath: string | null = null;
+    const contextInfo = options.caption ? `\n\nAdditional context: "${options.caption}"` : '';
+    const titleInfo = options.title ? `\nVideo title: "${options.title}"` : '';
     
-    try {
-      logger.info(`[Gemini Video] Starting video analysis for ${options.platform}: ${videoUrl}`);
-      
-      const response = await axios({
-        method: 'GET',
-        url: videoUrl,
-        responseType: 'arraybuffer',
-        timeout: 120000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-      
-      const contentType = response.headers['content-type'] || 'video/mp4';
-      const ext = contentType.includes('mp4') ? '.mp4' : 
-                  contentType.includes('webm') ? '.webm' : '.mp4';
-      
-      tempFilePath = path.join(os.tmpdir(), `yori_video_${Date.now()}${ext}`);
-      fs.writeFileSync(tempFilePath, response.data);
-      
-      const uploadResult = await fileManager.uploadFile(tempFilePath, {
-        mimeType: contentType.split(';')[0],
-        displayName: `video_${Date.now()}`,
-      });
-      
-      let file = uploadResult.file;
-      while (file.state === 'PROCESSING') {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        file = await fileManager.getFile(file.name);
-      }
-      
-      if (file.state === 'FAILED') throw new Error('Video processing failed');
-      
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash-exp',
-        generationConfig: { responseMimeType: 'application/json' }
-      });
-      
-      const contextInfo = options.caption ? `\n\nAdditional context: "${options.caption}"` : '';
-      const titleInfo = options.title ? `\nVideo title: "${options.title}"` : '';
-      
-      const prompt = `Analyze this ${options.platform} travel video and extract only the MAJOR geographical locations (Hero Places) visited.
+    const prompt = `Analyze this ${options.platform} travel video and extract only the MAJOR geographical locations (Hero Places) visited.
 
 RULES FOR EXTRACTION:
 1. Identify the "HERO" locations: These are the main destinations or complexes visited.
@@ -774,6 +735,94 @@ RESPOND WITH VALID JSON:
   "discovery_intent": { ... }
 }`;
 
+    // 1. YOUTUBE OPTION: Direct URL (No download, zero bandwidth/disk impact)
+    if (options.platform === 'youtube') {
+      try {
+        logger.info(`[Gemini Video] Using Direct YouTube URL analysis: ${videoUrl}`);
+        
+        const model = genAI.getGenerativeModel({ 
+          model: 'gemini-2.0-flash-exp', // Vision capable
+          generationConfig: { responseMimeType: 'application/json' }
+        });
+
+        const result = await model.generateContent([
+          { 
+            fileData: { 
+              mimeType: 'video/youtube', 
+              fileUri: videoUrl 
+            } 
+          },
+          { text: prompt },
+        ]);
+        
+        const cleanText = result.response.text().replace(/^```json\s*/, '').replace(/```\s*$/, '');
+        const parsed = JSON.parse(cleanText);
+        
+        return {
+          summary: parsed.summary || '',
+          video_type: parsed.video_type || 'places',
+          destination: parsed.destination,
+          destination_country: parsed.destination_country,
+          places: parsed.places || [],
+          discovery_intent: parsed.discovery_intent,
+        };
+      } catch (error: any) {
+        logger.error(`[Gemini Video] YouTube Direct analysis failed: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // 2. INSTAGRAM/TIKTOK OPTION: Download via Proxy (IPRoyal)
+    let tempFilePath: string | null = null;
+    
+    try {
+      logger.info(`[Gemini Video] Downloading ${options.platform} video via Proxy: ${videoUrl}`);
+      
+      const { host, port, user, pass } = config.proxy || {};
+      let httpsAgent;
+      
+      if (host && port && user && pass) {
+        const proxyUrl = `http://${user}:${pass}@${host}:${port}`;
+        httpsAgent = new HttpsProxyAgent(proxyUrl);
+        logger.info('[Gemini Video] Routing download through IPRoyal Proxy');
+      }
+
+      const response = await axios({
+        method: 'GET',
+        url: videoUrl,
+        responseType: 'arraybuffer',
+        httpsAgent: httpsAgent,
+        timeout: 60000, // 60s timeout for Reels/TikToks
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+      
+      const contentType = response.headers['content-type'] || 'video/mp4';
+      const ext = contentType.includes('mp4') ? '.mp4' : 
+                  contentType.includes('webm') ? '.webm' : '.mp4';
+      
+      tempFilePath = path.join(os.tmpdir(), `yori_video_${Date.now()}${ext}`);
+      fs.writeFileSync(tempFilePath, response.data);
+      
+      const uploadResult = await fileManager.uploadFile(tempFilePath, {
+        mimeType: contentType.split(';')[0],
+        displayName: `video_${Date.now()}`,
+      });
+      
+      let file = uploadResult.file;
+      while (file.state === 'PROCESSING') {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        file = await fileManager.getFile(file.name);
+      }
+      
+      if (file.state === 'FAILED') throw new Error('Video processing failed');
+      
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.0-flash-exp',
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      
       const result = await model.generateContent([
         { fileData: { mimeType: file.mimeType, fileUri: file.uri } },
         { text: prompt },
@@ -796,10 +845,16 @@ RESPOND WITH VALID JSON:
     } catch (error: any) {
       const errorMsg = error.message || error.toString();
       logger.error(`[Gemini Video] Analysis error: ${errorMsg}`);
-      if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
       throw new Error(`Video analysis failed: ${errorMsg}`);
     } finally {
-      if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+          logger.info('[Gemini Video] Cleaned up temp video file');
+        } catch (e) {
+          // ignore
+        }
+      }
     }
   }
 
