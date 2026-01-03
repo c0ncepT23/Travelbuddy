@@ -3,12 +3,8 @@ import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { config } from '../config/env';
 import { ItemCategory, AgentContext, DiscoveryIntent } from '../types';
 import logger from '../config/logger';
-import axios from 'axios';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import * as crypto from 'crypto';
+import { VideoDownloader } from '../utils/videoDownloader';
 
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
@@ -21,7 +17,7 @@ export const MODELS = {
 };
 
 // JSON Schemas for guaranteed extraction structure
-const extractionSchema = {
+export const extractionSchema = {
   type: SchemaType.OBJECT,
   properties: {
     summary: { type: SchemaType.STRING },
@@ -567,9 +563,10 @@ ${contentToAnalyze}`;
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: MODELS.FLASH,
         generationConfig: {
           responseMimeType: 'application/json',
+          responseSchema: extractionSchema as any,
         }
       });
 
@@ -586,26 +583,10 @@ Title: ${title}
 Body: ${body}
 Comments: ${commentsText}
 
-RESPOND ONLY WITH VALID JSON:
-{
-  "summary": "Brief summary",
-  "destination": "Tokyo",
-  "destination_country": "Japan",
-  "places": [
-    {
-      "name": "Major Place Name",
-      "category": "food",
-      "description": "Rich details:\n• Tip 1\n• Tip 2",
-      "location": "Area, City",
-      "cuisine_type": "Only if major place is a restaurant",
-      "tags": ["local favorite"]
-    }
-  ]
-}`;
+RESPOND ONLY WITH VALID JSON matching the provided schema.`;
 
       const result = await model.generateContent(prompt);
-      const cleanText = result.response.text().replace(/^```json\s*/, '').replace(/```\s*$/, '');
-      const parsed = JSON.parse(cleanText.match(/\{[\s\S]*\}/)?.[0] || '{}');
+      const parsed = JSON.parse(result.response.text());
 
       return {
         summary: parsed.summary || 'No summary available',
@@ -643,9 +624,10 @@ RESPOND ONLY WITH VALID JSON:
   }> {
     try {
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
+        model: MODELS.FLASH,
         generationConfig: {
           responseMimeType: 'application/json',
+          responseSchema: extractionSchema as any,
         }
       });
 
@@ -659,26 +641,10 @@ RULES FOR EXTRACTION:
 Caption: ${caption}
 Image URL: ${imageUrl || 'Not available'}
 
-RESPOND ONLY WITH VALID JSON:
-{
-  "summary": "Brief summary",
-  "destination": "Tokyo",
-  "destination_country": "Japan",
-  "places": [
-    {
-      "name": "Major Place Name",
-      "category": "food",
-      "description": "Rich details:\n• Tip 1\n• Tip 2",
-      "location": "Area, City",
-      "cuisine_type": "cafe",
-      "tags": ["aesthetic"]
-    }
-  ]
-}`;
+RESPOND ONLY WITH VALID JSON matching the provided schema.`;
 
       const result = await model.generateContent(prompt);
-      const cleanText = result.response.text().replace(/^```json\s*/, '').replace(/```\s*$/, '');
-      const parsed = JSON.parse(cleanText.match(/\{[\s\S]*\}/)?.[0] || '{}');
+      const parsed = JSON.parse(result.response.text());
 
       return {
         summary: parsed.summary || 'No summary available',
@@ -733,25 +699,7 @@ RULES FOR EXTRACTION:
 
 ${titleInfo}${contextInfo}
 
-RESPOND WITH VALID JSON:
-{
-  "summary": "Brief description",
-  "video_type": "places",
-  "destination": "City",
-  "destination_country": "Country",
-  "places": [
-    {
-      "name": "Exact Major Business Name",
-      "category": "food" or "place" or "shopping" or "activity",
-      "description": "Rich details:\n• Tip 1\n• Tip 2",
-      "location": "Area",
-      "cuisine_type": "Only if major place is a restaurant",
-      "place_type": "Zoo, Mall, etc.",
-      "tags": ["michelin", "budget-friendly"]
-    }
-  ],
-  "discovery_intent": { ... }
-}`;
+RESPOND WITH VALID JSON matching the provided schema.`;
 
     // 1. YOUTUBE OPTION: Direct URL (No download, zero bandwidth/disk impact)
     if (options.platform === 'youtube') {
@@ -759,8 +707,11 @@ RESPOND WITH VALID JSON:
         logger.info(`[Gemini Video] Using Direct YouTube URL analysis: ${videoUrl}`);
         
         const model = genAI.getGenerativeModel({ 
-          model: 'gemini-2.0-flash-exp', // Vision capable
-          generationConfig: { responseMimeType: 'application/json' }
+          model: MODELS.FLASH, // Use stable model
+          generationConfig: { 
+            responseMimeType: 'application/json',
+            responseSchema: extractionSchema as any,
+          }
         });
 
         const result = await model.generateContent([
@@ -773,8 +724,7 @@ RESPOND WITH VALID JSON:
           { text: prompt },
         ]);
         
-        const cleanText = result.response.text().replace(/^```json\s*/, '').replace(/```\s*$/, '');
-        const parsed = JSON.parse(cleanText);
+        const parsed = JSON.parse(result.response.text());
         
         return {
           summary: parsed.summary || '',
@@ -794,38 +744,12 @@ RESPOND WITH VALID JSON:
     let tempFilePath: string | null = null;
     
     try {
-      logger.info(`[Gemini Video] Downloading ${options.platform} video via Proxy: ${videoUrl}`);
-      
-      const { host, port, user, pass } = config.proxy || {};
-      let httpsAgent;
-      
-      if (host && port && user && pass) {
-        const proxyUrl = `http://${user}:${pass}@${host}:${port}`;
-        httpsAgent = new HttpsProxyAgent(proxyUrl);
-        logger.info('[Gemini Video] Routing download through IPRoyal Proxy');
-      }
-
-      const response = await axios({
-        method: 'GET',
-        url: videoUrl,
-        responseType: 'arraybuffer',
-        httpsAgent: httpsAgent,
-        timeout: 60000, // 60s timeout for Reels/TikToks
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
-      
-      const contentType = response.headers['content-type'] || 'video/mp4';
-      const ext = contentType.includes('mp4') ? '.mp4' : 
-                  contentType.includes('webm') ? '.webm' : '.mp4';
-      
-      tempFilePath = path.join(os.tmpdir(), `yori_video_${crypto.randomUUID()}${ext}`);
-      fs.writeFileSync(tempFilePath, response.data);
+      // Use unified VideoDownloader
+      tempFilePath = await VideoDownloader.download(videoUrl, options.platform);
       
       const uploadResult = await fileManager.uploadFile(tempFilePath, {
-        mimeType: contentType.split(';')[0],
-        displayName: `video_${Date.now()}`,
+        mimeType: 'video/mp4',
+        displayName: `${options.platform}_${crypto.randomUUID()}`,
       });
       
       let file = uploadResult.file;
@@ -836,10 +760,9 @@ RESPOND WITH VALID JSON:
       
       if (file.state === 'FAILED') throw new Error('Video processing failed');
       
-      // Use Gemini 2.0 Flash Exp for multimodal analysis (supports video)
       const model = genAI.getGenerativeModel({ 
         model: MODELS.FLASH,
-        generationConfig: {
+        generationConfig: { 
           responseMimeType: 'application/json',
           responseSchema: extractionSchema as any,
         }
@@ -868,14 +791,7 @@ RESPOND WITH VALID JSON:
       logger.error(`[Gemini Video] Analysis error: ${errorMsg}`);
       throw new Error(`Video analysis failed: ${errorMsg}`);
     } finally {
-      if (tempFilePath && fs.existsSync(tempFilePath)) {
-        try {
-          fs.unlinkSync(tempFilePath);
-          logger.info('[Gemini Video] Cleaned up temp video file');
-        } catch (e) {
-          // ignore
-        }
-      }
+      VideoDownloader.cleanup(tempFilePath);
     }
   }
 

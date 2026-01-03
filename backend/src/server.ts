@@ -4,6 +4,7 @@ import { config } from './config/env';
 import logger from './config/logger';
 import { pool } from './config/database';
 import { WebSocketService } from './services/websocket.service';
+import { VideoDownloader } from './utils/videoDownloader';
 
 const server = http.createServer(app);
 
@@ -35,6 +36,9 @@ const testDatabaseConnection = async () => {
 const startServer = async () => {
   try {
     await testDatabaseConnection();
+
+    // Cleanup orphaned video files on startup
+    VideoDownloader.cleanupOldFiles();
 
     server.listen(PORT, () => {
       logger.info('=================================');

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { load } from 'cheerio';
 import Tesseract from 'tesseract.js';
+import pLimit from 'p-limit';
 import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
@@ -722,72 +723,75 @@ export class ContentProcessorService {
         },
       }));
 
-      // Enrich places with Google Places API data
+      // Enrich places with Google Places API data (max 3 concurrent to avoid rate limits)
       logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} YouTube places...`);
+      const limit = pLimit(3);
       const enrichedPlaces = await Promise.all(
         processedPlaces.map(async (place, index) => {
-          try {
-            logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
-            const enriched = await GooglePlacesService.enrichPlace(
-              place.name,
-              place.location_name
-            );
-            if (enriched) {
-              // Validate/enrich AI's sub-type extraction with Google's data
-              let finalCuisineType = place.cuisine_type;
-              let finalPlaceType = place.place_type;
-              
-              // If Google has cuisine/place type, use it to validate or fill gaps
-              if (enriched.google_cuisine_type) {
-                if (!place.cuisine_type) {
-                  finalCuisineType = enriched.google_cuisine_type;
-                  logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
-                } else if (place.cuisine_type !== enriched.google_cuisine_type) {
-                  logger.info(`🔍 [VALIDATE] AI said "${place.cuisine_type}", Google says "${enriched.google_cuisine_type}" for "${place.name}" - keeping AI's choice`);
-                } else {
-                  logger.info(`✅ [VALIDATE] Google confirms cuisine_type: "${place.cuisine_type}" for "${place.name}"`);
+          return limit(async () => {
+            try {
+              logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
+              const enriched = await GooglePlacesService.enrichPlace(
+                place.name,
+                place.location_name
+              );
+              if (enriched) {
+                // Validate/enrich AI's sub-type extraction with Google's data
+                let finalCuisineType = place.cuisine_type;
+                let finalPlaceType = place.place_type;
+                
+                // If Google has cuisine/place type, use it to validate or fill gaps
+                if (enriched.google_cuisine_type) {
+                  if (!place.cuisine_type) {
+                    finalCuisineType = enriched.google_cuisine_type;
+                    logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+                  } else if (place.cuisine_type !== enriched.google_cuisine_type) {
+                    logger.info(`🔍 [VALIDATE] AI said "${place.cuisine_type}", Google says "${enriched.google_cuisine_type}" for "${place.name}" - keeping AI's choice`);
+                  } else {
+                    logger.info(`✅ [VALIDATE] Google confirms cuisine_type: "${place.cuisine_type}" for "${place.name}"`);
+                  }
                 }
-              }
-              
-              if (enriched.google_place_type) {
-                if (!place.place_type) {
-                  finalPlaceType = enriched.google_place_type;
-                  logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
-                } else if (place.place_type !== enriched.google_place_type) {
-                  logger.info(`🔍 [VALIDATE] AI said "${place.place_type}", Google says "${enriched.google_place_type}" for "${place.name}" - keeping AI's choice`);
-                } else {
-                  logger.info(`✅ [VALIDATE] Google confirms place_type: "${place.place_type}" for "${place.name}"`);
+                
+                if (enriched.google_place_type) {
+                  if (!place.place_type) {
+                    finalPlaceType = enriched.google_place_type;
+                    logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
+                  } else if (place.place_type !== enriched.google_place_type) {
+                    logger.info(`🔍 [VALIDATE] AI said "${place.place_type}", Google says "${enriched.google_place_type}" for "${place.name}" - keeping AI's choice`);
+                  } else {
+                    logger.info(`✅ [VALIDATE] Google confirms place_type: "${place.place_type}" for "${place.name}"`);
+                  }
                 }
+                
+                logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Photos=${enriched.photos?.length || 0}, Tags=${enriched.google_tags?.length || 0}`);
+                return {
+                  ...place,
+                  google_place_id: enriched.place_id,
+                  rating: enriched.rating,
+                  user_ratings_total: enriched.user_ratings_total,
+                  price_level: enriched.price_level,
+                  formatted_address: enriched.formatted_address,
+                  area_name: enriched.area_name,
+                  photos_json: enriched.photos,
+                  opening_hours_json: enriched.opening_hours,
+                  location_lat: enriched.geometry?.location.lat || place.location_lat,
+                  location_lng: enriched.geometry?.location.lng || place.location_lng,
+                  // Use validated sub-types
+                  cuisine_type: finalCuisineType,
+                  place_type: finalPlaceType,
+                  parent_location: place.parent_location,
+                  // Add tags from Google
+                  tags: enriched.google_tags || [],
+                };
+              } else {
+                logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
               }
-              
-              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Photos=${enriched.photos?.length || 0}, Tags=${enriched.google_tags?.length || 0}`);
-              return {
-                ...place,
-                google_place_id: enriched.place_id,
-                rating: enriched.rating,
-                user_ratings_total: enriched.user_ratings_total,
-                price_level: enriched.price_level,
-                formatted_address: enriched.formatted_address,
-                area_name: enriched.area_name,
-                photos_json: enriched.photos,
-                opening_hours_json: enriched.opening_hours,
-                location_lat: enriched.geometry?.location.lat || place.location_lat,
-                location_lng: enriched.geometry?.location.lng || place.location_lng,
-                // Use validated sub-types
-                cuisine_type: finalCuisineType,
-                place_type: finalPlaceType,
-                parent_location: place.parent_location,
-                // Add tags from Google
-                tags: enriched.google_tags || [],
-              };
-            } else {
-              logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
+              return place;
+            } catch (error: any) {
+              logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
+              return place;
             }
-            return place;
-          } catch (error: any) {
-            logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
-            return place;
-          }
+          });
         })
       );
       const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;
@@ -910,57 +914,60 @@ export class ContentProcessorService {
         original_content: redditData,
       }));
 
-      // Enrich places with Google Places API data
+      // Enrich places with Google Places API data (max 3 concurrent)
       logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} Reddit places...`);
+      const limit = pLimit(3);
       const enrichedPlaces = await Promise.all(
         processedPlaces.map(async (place, index) => {
-          try {
-            logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
-            const enriched = await GooglePlacesService.enrichPlace(
-              place.name,
-              place.location_name
-            );
-            if (enriched) {
-              // Validate/enrich AI's sub-type extraction with Google's data
-              let finalCuisineType = place.cuisine_type;
-              let finalPlaceType = place.place_type;
-              
-              if (enriched.google_cuisine_type && !place.cuisine_type) {
-                finalCuisineType = enriched.google_cuisine_type;
-                logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+          return limit(async () => {
+            try {
+              logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
+              const enriched = await GooglePlacesService.enrichPlace(
+                place.name,
+                place.location_name
+              );
+              if (enriched) {
+                // Validate/enrich AI's sub-type extraction with Google's data
+                let finalCuisineType = place.cuisine_type;
+                let finalPlaceType = place.place_type;
+                
+                if (enriched.google_cuisine_type && !place.cuisine_type) {
+                  finalCuisineType = enriched.google_cuisine_type;
+                  logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+                }
+                if (enriched.google_place_type && !place.place_type) {
+                  finalPlaceType = enriched.google_place_type;
+                  logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
+                }
+                
+                logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Tags=${enriched.google_tags?.length || 0}`);
+                return {
+                  ...place,
+                  google_place_id: enriched.place_id,
+                  rating: enriched.rating,
+                  user_ratings_total: enriched.user_ratings_total,
+                  price_level: enriched.price_level,
+                  formatted_address: enriched.formatted_address,
+                  area_name: enriched.area_name,
+                  photos_json: enriched.photos,
+                  opening_hours_json: enriched.opening_hours,
+                  location_lat: enriched.geometry?.location.lat || place.location_lat,
+                  location_lng: enriched.geometry?.location.lng || place.location_lng,
+                  cuisine_type: finalCuisineType,
+                  place_type: finalPlaceType,
+                  parent_location: place.parent_location,
+                  tags: enriched.google_tags || [],
+                  original_content: place.original_content,
+                };
+              } else {
+                logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
               }
-              if (enriched.google_place_type && !place.place_type) {
-                finalPlaceType = enriched.google_place_type;
-                logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
-              }
-              
-              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Tags=${enriched.google_tags?.length || 0}`);
-              return {
-                ...place,
-                google_place_id: enriched.place_id,
-                rating: enriched.rating,
-                user_ratings_total: enriched.user_ratings_total,
-                price_level: enriched.price_level,
-                formatted_address: enriched.formatted_address,
-                area_name: enriched.area_name,
-                photos_json: enriched.photos,
-                opening_hours_json: enriched.opening_hours,
-                location_lat: enriched.geometry?.location.lat || place.location_lat,
-                location_lng: enriched.geometry?.location.lng || place.location_lng,
-                cuisine_type: finalCuisineType,
-                place_type: finalPlaceType,
-                parent_location: place.parent_location,
-                tags: enriched.google_tags || [],
-                original_content: place.original_content,
-              };
-            } else {
-              logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
+              return place;
+            } catch (error: any) {
+              logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
+              return place;
             }
-            return place;
-          } catch (error: any) {
-            logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
-            return place;
-          }
+          });
         })
       );
       const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;
@@ -1122,57 +1129,60 @@ export class ContentProcessorService {
         original_content: instaData,
       }));
 
-      // Enrich places with Google Places API data
+      // Enrich places with Google Places API data (max 3 concurrent)
       logger.info(`🔍 [ENRICH] Starting enrichment for ${processedPlaces.length} Instagram places...`);
+      const limit = pLimit(3);
       const enrichedPlaces = await Promise.all(
         processedPlaces.map(async (place, index) => {
-          try {
-            logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
-            const enriched = await GooglePlacesService.enrichPlace(
-              place.name,
-              place.location_name
-            );
-            if (enriched) {
-              // Validate/enrich AI's sub-type extraction with Google's data
-              let finalCuisineType = place.cuisine_type;
-              let finalPlaceType = place.place_type;
-              
-              if (enriched.google_cuisine_type && !place.cuisine_type) {
-                finalCuisineType = enriched.google_cuisine_type;
-                logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+          return limit(async () => {
+            try {
+              logger.info(`🔍 [ENRICH] [${index + 1}/${processedPlaces.length}] Enriching "${place.name}" in "${place.location_name}"`);
+              const enriched = await GooglePlacesService.enrichPlace(
+                place.name,
+                place.location_name
+              );
+              if (enriched) {
+                // Validate/enrich AI's sub-type extraction with Google's data
+                let finalCuisineType = place.cuisine_type;
+                let finalPlaceType = place.place_type;
+                
+                if (enriched.google_cuisine_type && !place.cuisine_type) {
+                  finalCuisineType = enriched.google_cuisine_type;
+                  logger.info(`🔍 [VALIDATE] Google filled missing cuisine_type: "${enriched.google_cuisine_type}" for "${place.name}"`);
+                }
+                if (enriched.google_place_type && !place.place_type) {
+                  finalPlaceType = enriched.google_place_type;
+                  logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
+                }
+                
+                logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Tags=${enriched.google_tags?.length || 0}`);
+                return {
+                  ...place,
+                  google_place_id: enriched.place_id,
+                  rating: enriched.rating,
+                  user_ratings_total: enriched.user_ratings_total,
+                  price_level: enriched.price_level,
+                  formatted_address: enriched.formatted_address,
+                  area_name: enriched.area_name,
+                  photos_json: enriched.photos,
+                  opening_hours_json: enriched.opening_hours,
+                  location_lat: enriched.geometry?.location.lat || place.location_lat,
+                  location_lng: enriched.geometry?.location.lng || place.location_lng,
+                  cuisine_type: finalCuisineType,
+                  place_type: finalPlaceType,
+                  parent_location: place.parent_location,
+                  tags: enriched.google_tags || [],
+                  original_content: place.original_content,
+                };
+              } else {
+                logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
               }
-              if (enriched.google_place_type && !place.place_type) {
-                finalPlaceType = enriched.google_place_type;
-                logger.info(`🔍 [VALIDATE] Google filled missing place_type: "${enriched.google_place_type}" for "${place.name}"`);
-              }
-              
-              logger.info(`✅ [ENRICH] Got data for "${place.name}": Rating=${enriched.rating}, Area=${enriched.area_name}, Tags=${enriched.google_tags?.length || 0}`);
-              return {
-                ...place,
-                google_place_id: enriched.place_id,
-                rating: enriched.rating,
-                user_ratings_total: enriched.user_ratings_total,
-                price_level: enriched.price_level,
-                formatted_address: enriched.formatted_address,
-                area_name: enriched.area_name,
-                photos_json: enriched.photos,
-                opening_hours_json: enriched.opening_hours,
-                location_lat: enriched.geometry?.location.lat || place.location_lat,
-                location_lng: enriched.geometry?.location.lng || place.location_lng,
-                cuisine_type: finalCuisineType,
-                place_type: finalPlaceType,
-                parent_location: place.parent_location,
-                tags: enriched.google_tags || [],
-                original_content: place.original_content,
-              };
-            } else {
-              logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
+              return place;
+            } catch (error: any) {
+              logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
+              return place;
             }
-            return place;
-          } catch (error: any) {
-            logger.error(`❌ [ENRICH] Failed to enrich "${place.name}":`, error.message);
-            return place;
-          }
+          });
         })
       );
       const enrichedCount = enrichedPlaces.filter((p: any) => p.google_place_id).length;

@@ -1,6 +1,10 @@
 import axios from 'axios';
+import pLimit from 'p-limit';
 import { config } from '../config/env';
 import logger from '../config/logger';
+
+// Rate limiter for Google Places API (max 3 concurrent requests to avoid OVER_QUERY_LIMIT)
+const limit = pLimit(3);
 
 // Simple in-memory cache for nearby search results (TTL: 1 hour)
 const nearbySearchCache = new Map<string, { data: NearbyPlace[]; timestamp: number }>();

@@ -1,11 +1,7 @@
 import axios from 'axios';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import * as crypto from 'crypto';
+import pLimit from 'p-limit';
 import { config } from '../config/env';
-import { GeminiService, MODELS } from './gemini.service';
+import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
 import { ItemCategory, ProcessedContent } from '../types';
 import logger from '../config/logger';
@@ -244,52 +240,11 @@ export class ApifyInstagramService {
   }
 
   /**
-   * Download video to temp file for Gemini analysis
-   * UPDATED: Routes through IPRoyal Proxy to avoid Instagram blocks
-   */
-  private static async downloadVideo(videoUrl: string): Promise<string> {
-    const tempDir = os.tmpdir();
-    const filename = `insta_reel_${crypto.randomUUID()}.mp4`;
-    const filepath = path.join(tempDir, filename);
-
-    logger.info(`[Apify] Downloading video via Proxy to: ${filepath}`);
-
-    // 1. Configure Proxy Agent (Same as Gemini Service)
-    const { host, port, user, pass } = config.proxy || {};
-    let httpsAgent;
-
-    if (host && port && user && pass) {
-      const proxyUrl = `http://${user}:${pass}@${host}:${port}`;
-      httpsAgent = new HttpsProxyAgent(proxyUrl);
-      logger.info('[Apify] Routing download through IPRoyal Proxy');
-    }
-
-    // 2. Download with Agent
-    const response = await axios({
-      method: 'GET',
-      url: videoUrl,
-      responseType: 'stream',
-      httpsAgent: httpsAgent, // <--- CRITICAL: Routes traffic through IPRoyal
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    });
-
-    const writer = fs.createWriteStream(filepath);
-    response.data.pipe(writer);
-
-    return new Promise((resolve, reject) => {
-      writer.on('finish', () => resolve(filepath));
-      writer.on('error', reject);
-    });
-  }
-
-  /**
    * Analyze Instagram video using Gemini 2.5 multimodal
+   * UPDATED: Now calls the unified GeminiService.analyzeVideoContent
    */
   static async analyzeVideoWithGemini(
-    videoPath: string,
+    videoUrl: string,
     caption: string,
     locationHint?: string
   ): Promise<{
@@ -306,121 +261,21 @@ export class ApifyInstagramService {
       parent_location?: string;
     }>;
   }> {
-    try {
-      // Import Gemini SDK
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { GoogleAIFileManager, FileState } = await import('@google/generative-ai/server');
+    const result = await GeminiService.analyzeVideoContent(videoUrl, {
+      platform: 'instagram',
+      caption: caption,
+      title: locationHint ? `Reel at ${locationHint}` : 'Instagram Reel',
+    });
 
-      const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
-      const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
-
-      logger.info('[Apify] Uploading video to Gemini...');
-
-      // Upload the video file
-      const uploadResult = await fileManager.uploadFile(videoPath, {
-        mimeType: 'video/mp4',
-        displayName: 'Instagram Reel',
-      });
-
-      logger.info(`[Apify] Video uploaded: ${uploadResult.file.name}`);
-
-      // Wait for processing
-      let file = await fileManager.getFile(uploadResult.file.name);
-      while (file.state === FileState.PROCESSING) {
-        logger.info('[Apify] Waiting for video processing...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        file = await fileManager.getFile(uploadResult.file.name);
-      }
-
-      if (file.state === FileState.FAILED) {
-        throw new Error('Video processing failed');
-      }
-
-      logger.info('[Apify] Video ready, analyzing with Gemini...');
-
-      // Use stable Gemini 2.5 Flash for multimodal analysis
-      const model = genAI.getGenerativeModel({ 
-        model: MODELS.FLASH,
-        generationConfig: {
-          responseMimeType: 'application/json',
-        }
-      });
-
-      const prompt = `Analyze this Instagram Reel and extract only the MAJOR geographical locations (Hero Places) visited.
-
-RULES FOR EXTRACTION:
-1. Identify the "HERO" locations: These are the main destinations the creator actually spent time at.
-2. ONE PIN PER COMPLEX: If the video shows multiple spots inside a single complex (e.g., "Giraffe Terrace" or "Blossom Restaurant" inside "Safari World"), do NOT create separate entries for them. 
-3. RICH DESCRIPTIONS: Instead, create ONE entry for the Parent Place (e.g., "Safari World Bangkok") and put all the specific spots, food items, and tips into the "description" field as bullet points.
-4. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports unless they are an actual destination visited.
-
-Caption: "${caption}"
-${locationHint ? `Location tagged: ${locationHint}` : ''}
-
-RESPOND WITH VALID JSON:
-{
-  "summary": "Brief description of the reel",
-  "destination": "City name",
-  "destination_country": "Country name",
-  "places": [
-    {
-      "name": "Exact Major Place Name",
-      "category": "food" or "place" or "shopping" or "activity",
-      "description": "Rich summary with tips:\n• Highlight 1\n• Highlight 2",
-      "location": "Area if mentioned",
-      "cuisine_type": "Only if major place is a restaurant",
-      "place_type": "Zoo, Mall, etc."
-    }
-  ]
-}`;
-
-      const result = await model.generateContent([
-        prompt,
-        {
-          fileData: {
-            fileUri: file.uri,
-            mimeType: 'video/mp4',
-          },
-        },
-      ]);
-
-      const response = result.response;
-      const text = response.text();
-
-      // Parse JSON
-      let cleanText = text.trim();
-      cleanText = cleanText.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
-
-      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('Failed to parse Gemini response');
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]);
-
-      logger.info(`[Apify] Gemini extracted ${parsed.places?.length || 0} places from video`);
-      if (parsed.destination) {
-        logger.info(`[Apify] Destination: ${parsed.destination} (${parsed.destination_country})`);
-      }
-
-      // Cleanup: Delete the uploaded file
-      try {
-        await fileManager.deleteFile(uploadResult.file.name);
-        logger.info('[Apify] Cleaned up uploaded video from Gemini');
-      } catch (e) {
-        // Non-critical cleanup error
-      }
-
-      return {
-        summary: parsed.summary || 'Instagram Reel',
-        destination: parsed.destination,
-        destination_country: parsed.destination_country,
-        places: parsed.places || [],
-      };
-    } catch (error: any) {
-      logger.error('[Apify] Gemini video analysis error:', error.message);
-      throw error;
-    }
+    return {
+      summary: result.summary,
+      destination: result.destination,
+      destination_country: result.destination_country,
+      places: result.places.map(p => ({
+        ...p,
+        category: p.category as ItemCategory,
+      })),
+    };
   }
 
   /**
@@ -438,8 +293,8 @@ RESPOND WITH VALID JSON:
       .replace(/\n+/g, ' ')
       .trim();
     
-    // Check minimum length (at least 15 chars of actual content)
-    if (cleaned.length < 15) {
+    // Check minimum length (at least 30 chars of actual content)
+    if (cleaned.length < 30) {
       logger.info(`[Apify] Caption too short (${cleaned.length} chars) - not useful`);
       return false;
     }
@@ -476,8 +331,6 @@ RESPOND WITH VALID JSON:
    * Smart approach: Try caption first (cheaper), video analysis as fallback
    */
   static async extractPlacesFromInstagram(url: string): Promise<InstagramExtractionResult> {
-    let videoPath: string | null = null;
-
     try {
       // Step 1: Scrape with Apify
       const scraped = await this.scrapeInstagramPost(url);
@@ -534,9 +387,8 @@ RESPOND WITH VALID JSON:
           } else if (scraped.videoUrl) {
             // No places from caption, try video analysis
             logger.info('[Apify] Caption analysis found 0 places, falling back to video analysis...');
-            videoPath = await this.downloadVideo(scraped.videoUrl);
             analysisResult = await this.analyzeVideoWithGemini(
-              videoPath,
+              scraped.videoUrl,
               scraped.caption,
               scraped.locationName
             );
@@ -549,9 +401,8 @@ RESPOND WITH VALID JSON:
           logger.warn(`[Apify] Caption analysis failed: ${captionError.message}`);
           if (scraped.videoUrl) {
             logger.info('[Apify] Falling back to video analysis...');
-            videoPath = await this.downloadVideo(scraped.videoUrl);
             analysisResult = await this.analyzeVideoWithGemini(
-              videoPath,
+              scraped.videoUrl,
               scraped.caption,
               scraped.locationName
             );
@@ -563,9 +414,8 @@ RESPOND WITH VALID JSON:
       } else if (scraped.videoUrl) {
         // Caption not useful - use video analysis directly (reads burned-in subtitles)
         logger.info('[Apify] Caption not useful, using VIDEO analysis (reads on-screen text)...');
-        videoPath = await this.downloadVideo(scraped.videoUrl);
         analysisResult = await this.analyzeVideoWithGemini(
-          videoPath,
+          scraped.videoUrl,
           scraped.caption,
           scraped.locationName
         );
@@ -581,78 +431,81 @@ RESPOND WITH VALID JSON:
       
       logger.info(`[Apify] Analysis complete. Method: ${usedVideoAnalysis ? 'VIDEO' : 'CAPTION'}, Places found: ${analysisResult.places?.length || 0}`)
 
-      // Step 3: Enrich with Google Places
+      // Step 3: Enrich with Google Places (max 3 concurrent)
+      const limit = pLimit(3);
       const enrichedPlaces = await Promise.all(
         analysisResult.places.map(async (place, index) => {
-          try {
-            logger.info(`[Apify] Enriching place ${index + 1}/${analysisResult.places.length}: "${place.name}"`);
-            
-            const enriched = await GooglePlacesService.enrichPlace(
-              place.name,
-              place.location
-            );
+          return limit(async () => {
+            try {
+              logger.info(`[Apify] Enriching place ${index + 1}/${analysisResult.places.length}: "${place.name}"`);
+              
+              const enriched = await GooglePlacesService.enrichPlace(
+                place.name,
+                place.location
+              );
 
-            if (enriched) {
-              // Validate/enrich cuisine and place types with Google data
-              let finalCuisineType = place.cuisine_type;
-              let finalPlaceType = place.place_type;
-              
-              if (enriched.google_cuisine_type && !place.cuisine_type) {
-                finalCuisineType = enriched.google_cuisine_type;
+              if (enriched) {
+                // Validate/enrich cuisine and place types with Google data
+                let finalCuisineType = place.cuisine_type;
+                let finalPlaceType = place.place_type;
+                
+                if (enriched.google_cuisine_type && !place.cuisine_type) {
+                  finalCuisineType = enriched.google_cuisine_type;
+                }
+                if (enriched.google_place_type && !place.place_type) {
+                  finalPlaceType = enriched.google_place_type;
+                }
+                
+                return {
+                  name: place.name,
+                  category: place.category,
+                  description: place.description,
+                  location_name: place.location,
+                  location_lat: enriched.geometry?.location.lat,
+                  location_lng: enriched.geometry?.location.lng,
+                  google_place_id: enriched.place_id,
+                  rating: enriched.rating,
+                  user_ratings_total: enriched.user_ratings_total,
+                  price_level: enriched.price_level,
+                  formatted_address: enriched.formatted_address,
+                  area_name: enriched.area_name,
+                  photos_json: enriched.photos,
+                  opening_hours_json: enriched.opening_hours,
+                  cuisine_type: finalCuisineType,
+                  place_type: finalPlaceType,
+                  parent_location: place.parent_location,
+                  tags: enriched.google_tags || [],
+                  original_content: {
+                    ...scraped,
+                    analysisMethod: usedVideoAnalysis ? 'gemini_video' : 'gemini_caption',
+                  },
+                };
               }
-              if (enriched.google_place_type && !place.place_type) {
-                finalPlaceType = enriched.google_place_type;
-              }
-              
+
               return {
                 name: place.name,
                 category: place.category,
                 description: place.description,
                 location_name: place.location,
-                location_lat: enriched.geometry?.location.lat,
-                location_lng: enriched.geometry?.location.lng,
-                google_place_id: enriched.place_id,
-                rating: enriched.rating,
-                user_ratings_total: enriched.user_ratings_total,
-                price_level: enriched.price_level,
-                formatted_address: enriched.formatted_address,
-                area_name: enriched.area_name,
-                photos_json: enriched.photos,
-                opening_hours_json: enriched.opening_hours,
-                cuisine_type: finalCuisineType,
-                place_type: finalPlaceType,
+                cuisine_type: place.cuisine_type,
+                place_type: place.place_type,
                 parent_location: place.parent_location,
-                tags: enriched.google_tags || [],
-                original_content: {
-                  ...scraped,
-                  analysisMethod: usedVideoAnalysis ? 'gemini_video' : 'gemini_caption',
-                },
+                original_content: scraped,
+              };
+            } catch (error: any) {
+              logger.warn(`[Apify] Failed to enrich "${place.name}": ${error.message}`);
+              return {
+                name: place.name,
+                category: place.category,
+                description: place.description,
+                location_name: place.location,
+                cuisine_type: place.cuisine_type,
+                place_type: place.place_type,
+                parent_location: place.parent_location,
+                original_content: scraped,
               };
             }
-
-            return {
-              name: place.name,
-              category: place.category,
-              description: place.description,
-              location_name: place.location,
-              cuisine_type: place.cuisine_type,
-              place_type: place.place_type,
-              parent_location: place.parent_location,
-              original_content: scraped,
-            };
-          } catch (error: any) {
-            logger.warn(`[Apify] Failed to enrich "${place.name}": ${error.message}`);
-            return {
-              name: place.name,
-              category: place.category,
-              description: place.description,
-              location_name: place.location,
-              cuisine_type: place.cuisine_type,
-              place_type: place.place_type,
-              parent_location: place.parent_location,
-              original_content: scraped,
-            };
-          }
+          });
         })
       );
 
@@ -667,16 +520,9 @@ RESPOND WITH VALID JSON:
         destination_country: analysisResult.destination_country,
         places: enrichedPlaces,
       };
-    } finally {
-      // Cleanup temp video file
-      if (videoPath && fs.existsSync(videoPath)) {
-        try {
-          fs.unlinkSync(videoPath);
-          logger.info('[Apify] Cleaned up temp video file');
-        } catch (e) {
-          // Non-critical cleanup error
-        }
-      }
+    } catch (error: any) {
+      logger.error(`[Apify] Error in Instagram pipeline: ${error.message}`);
+      throw error;
     }
   }
 }
