@@ -53,36 +53,36 @@ export class GeminiDirectUrlService {
       const contextInfo = options?.title ? `\nVideo title: "${options.title}"` : '';
       const descInfo = options?.description ? `\nDescription: "${options.description}"` : '';
 
-      const prompt = `Analyze this YouTube video and extract ALL travel-related places mentioned or shown.
-${contextInfo}${descInfo}
+      const prompt = `Analyze this YouTube video and extract only the MAJOR geographical locations (Hero Places) visited.
 
-For each place, identify:
-1. name: The specific place name (restaurant, cafe, attraction - NOT generic landmarks unless they ARE the destination)
-2. category: One of [food, accommodation, place, shopping, activity, tip]
-3. description: What makes this place special (from video context)
-4. location: City or area (if mentioned)
-5. parent_location: If this place is INSIDE a larger landmark (e.g., cafe inside a mall), specify the container
-6. cuisine_type: For restaurants/cafes only
-7. place_type: Specific type (e.g., "ramen shop", "vintage store", "observation deck")
-8. tags: Relevant tags ["instagrammable", "budget-friendly", "must-visit", etc.]
+RULES FOR EXTRACTION:
+1. Identify the "HERO" locations: These are the main destinations the creator actually spent time at.
+2. ONE PIN PER COMPLEX: If the video shows multiple spots inside a single complex (e.g., "Giraffe Terrace" or "Blossom Restaurant" inside "Safari World"), do NOT create separate entries for them. 
+3. RICH DESCRIPTIONS: Instead, create ONE entry for the Parent Place (e.g., "Safari World Bangkok") and put all the specific spots, food items, and tips into the "description" field as bullet points.
+4. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports (e.g., "Central World" used as a tour bus pickup) unless they are an actual destination visited.
 
-IMPORTANT: Apply the "Star Venue" rule - if a cafe is inside a famous mall, the cafe is the star (primary place), the mall is just parent_location metadata.
+For each Hero Place, identify:
+1. name: The official name of the Major Place (e.g., "Safari World Bangkok").
+2. category: One of [food, accommodation, place, shopping, activity, tip].
+3. description: A rich summary including all sub-locations and tips (e.g., "• Giraffe Terrace: Feed giraffes for 150 THB. • Blossom Restaurant: Buffet lunch usually included.").
+4. location: City or area.
+5. cuisine_type: Only if the Hero Place is primarily a restaurant.
+6. place_type: Specific type (e.g., "Theme Park", "Shopping Mall").
+7. tags: Relevant tags.
 
 Return JSON:
 {
-  "summary": "Brief summary of what this video is about",
-  "destination": "Main city/destination",
-  "destination_country": "Country name",
+  "summary": "Brief summary of the video",
+  "destination": "Main city",
+  "destination_country": "Country",
   "places": [
     {
-      "name": "Golden Cheese Cafe",
-      "category": "food",
-      "description": "Famous for cheese-pull toast",
-      "location": "Yeouido, Seoul",
-      "parent_location": "The Hyundai Seoul",
-      "cuisine_type": "cafe",
-      "place_type": "korean cafe",
-      "tags": ["instagrammable", "trendy"]
+      "name": "Safari World Bangkok",
+      "category": "place",
+      "description": "Large open zoo and marine park. Highlights:\n• Giraffe Terrace: Best spot for photos (feeding 150 THB)\n• Blossom Restaurant: Lunch buffet included in most tour packages\n• Arrive 20 mins early for the Dolphin Show.",
+      "location": "Khlong Sam Wa, Bangkok",
+      "place_type": "zoo",
+      "tags": ["family-friendly", "must-visit", "shows"]
     }
   ]
 }`;

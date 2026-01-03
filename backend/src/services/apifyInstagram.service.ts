@@ -329,45 +329,33 @@ export class ApifyInstagramService {
         }
       });
 
-      const prompt = `Analyze this Instagram Reel and extract ALL places mentioned or shown.
+      const prompt = `Analyze this Instagram Reel and extract only the MAJOR geographical locations (Hero Places) visited.
+
+RULES FOR EXTRACTION:
+1. Identify the "HERO" locations: These are the main destinations the creator actually spent time at.
+2. ONE PIN PER COMPLEX: If the video shows multiple spots inside a single complex (e.g., "Giraffe Terrace" or "Blossom Restaurant" inside "Safari World"), do NOT create separate entries for them. 
+3. RICH DESCRIPTIONS: Instead, create ONE entry for the Parent Place (e.g., "Safari World Bangkok") and put all the specific spots, food items, and tips into the "description" field as bullet points.
+4. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports unless they are an actual destination visited.
 
 Caption: "${caption}"
 ${locationHint ? `Location tagged: ${locationHint}` : ''}
 
-**IMPORTANT: Read ALL on-screen text carefully!**
-- Look for restaurant names, shop names, place names shown as text overlays/captions
-- Look for addresses or location indicators
-- Look for signs, logos, storefront text
-- Listen for spoken place names
-
-**CRITICAL RULES FOR PLACE EXTRACTION:**
-1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT dish descriptions
-   - ✅ CORRECT: "Pad Thai Fai Ta Lu" (the restaurant)
-   - ❌ WRONG: "Smoky Pad Thai" (the dish)
-2. Each place should appear ONLY ONCE
-3. Use the exact name as shown/spoken in the video
-
-For FOOD places, identify cuisine_type: "ramen", "street food", "cafe", "fine dining", etc.
-For OTHER places, identify place_type: "temple", "market", "viewpoint", "shopping mall", etc.
-
 RESPOND WITH VALID JSON:
 {
-  "summary": "Brief description of what this reel shows",
-  "destination": "City name (e.g., Bangkok, Tokyo)",
-  "destination_country": "Country name (e.g., Thailand, Japan)",
+  "summary": "Brief description of the reel",
+  "destination": "City name",
+  "destination_country": "Country name",
   "places": [
     {
-      "name": "Exact business/place name",
+      "name": "Exact Major Place Name",
       "category": "food" or "place" or "shopping" or "activity",
-      "description": "What makes this place special",
-      "location": "Area/neighborhood if mentioned",
-      "cuisine_type": "For food places",
-      "place_type": "For non-food places"
+      "description": "Rich summary with tips:\n• Highlight 1\n• Highlight 2",
+      "location": "Area if mentioned",
+      "cuisine_type": "Only if major place is a restaurant",
+      "place_type": "Zoo, Mall, etc."
     }
   ]
-}
-
-If no specific places are identifiable, return empty places array but still try to identify destination.`;
+}`;
 
       const result = await model.generateContent([
         prompt,

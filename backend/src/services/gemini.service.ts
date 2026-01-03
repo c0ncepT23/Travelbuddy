@@ -456,28 +456,18 @@ Generate a SHORT, friendly response:`;
         ? `Transcript:\n${transcript}`
         : `Description:\n${description}`;
 
-      const prompt = `Analyze this YouTube travel video and determine its type, then extract relevant information.
+      const prompt = `Analyze this YouTube travel video and extract only the MAJOR geographical locations (Hero Places) visited.
+
+RULES FOR EXTRACTION:
+1. Identify the "HERO" locations: These are the main destinations the creator actually spent time at.
+2. ONE PIN PER COMPLEX: If the video shows multiple spots inside a single complex (e.g., "Giraffe Terrace" or "Blossom Restaurant" inside "Safari World"), do NOT create separate entries for them. 
+3. RICH DESCRIPTIONS: Instead, create ONE entry for the Parent Place (e.g., "Safari World Bangkok") and put all the specific spots, food items, and tips into the "description" field as bullet points.
+4. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports unless they are an actual destination visited.
+5. INTENT DETECTION: If no specific businesses are named, but the video is clearly about a specific food/activity, return "discovery_intent".
 
 Title: ${title}
 
 ${contentToAnalyze}
-
-STEP 1 - CLASSIFY VIDEO TYPE:
-Determine if this is a GUIDE/ITINERARY VIDEO, PLACES VIDEO, or HOW-TO VIDEO.
-
-STEP 2 - EXTRACT DESTINATION:
-ALWAYS extract the destination country and city/region.
-
-STEP 3 - EXTRACT PLACES OR INTENT:
-
-**CRITICAL RULES FOR PLACE EXTRACTION:**
-1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME, NOT the dish name.
-2. **HIERARCHY DETECTION (CRITICAL):** If a specific venue (e.g., "Camel Coffee", "Nike Store", "Pool") is located INSIDE a larger landmark (e.g., "The Hyundai Seoul", "Siam Paragon", "Marina Bay Sands"), YOU MUST:
-   - Extract the specific venue as the 'name'.
-   - Store the larger landmark in the 'parent_location' field.
-   - **DO NOT** create a separate place entry for the larger landmark itself.
-   - Example: For "Camel Coffee inside The Hyundai Seoul", output name="Camel Coffee", parent_location="The Hyundai Seoul". Do NOT output a separate entry for "The Hyundai Seoul".
-3. If no specific businesses are named, but the video is clearly about a specific food/activity, return "discovery_intent".
 
 RESPOND ONLY WITH VALID JSON:
 {
@@ -486,20 +476,25 @@ RESPOND ONLY WITH VALID JSON:
   "destination": "Tokyo",
   "destination_country": "Japan",
   "duration_days": 4,
-  "itinerary": [ ... ],
+  "itinerary": [
+    { "day": 1, "title": "Day 1 Title", "places": ["Major Place Name"] }
+  ],
   "places": [
     {
-      "name": "Camel Coffee",
-      "category": "food",
-      "description": "Famous for their latte...",
-      "location": "Yeouido, Seoul",
-      "parent_location": "The Hyundai Seoul", 
-      "day": 1,
-      "cuisine_type": "cafe",
-      "tags": ["coffee", "wait-list"]
+      "name": "Safari World Bangkok",
+      "category": "place",
+      "description": "Large open zoo. Highlights:\n• Giraffe Terrace: Feed giraffes (150 THB)\n• Blossom Restaurant: Lunch buffet included",
+      "location": "Bangkok",
+      "place_type": "zoo",
+      "tags": ["family"]
     }
   ],
-  "discovery_intent": { ... }
+  "discovery_intent": {
+    "type": "CULINARY_GOAL",
+    "item": "Sushi",
+    "city": "Tokyo",
+    "vibe": "traditional"
+  }
 }`;
 
       const result = await model.generateContent(prompt);
@@ -561,17 +556,16 @@ RESPOND ONLY WITH VALID JSON:
 
       const commentsText = comments.map((c, i) => `Comment ${i + 1}: ${c}`).join('\n\n');
 
-      const prompt = `Analyze this Reddit travel discussion and extract ALL individual place recommendations.
+      const prompt = `Analyze this Reddit discussion and extract only the MAJOR geographical locations (Hero Places) visited or discussed.
+
+RULES FOR EXTRACTION:
+1. Identify the "HERO" locations: These are the main destinations or complexes discussed.
+2. ONE PIN PER COMPLEX: If multiple spots inside a single complex are mentioned (e.g. various restaurants inside "Terminal 21" mall), do NOT create separate entries. Create ONE entry for the Parent Place and list sub-spots in the description.
+3. RICH DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field as bullet points.
 
 Title: ${title}
 Body: ${body}
 Comments: ${commentsText}
-
-IMPORTANT INSTRUCTIONS:
-1. Extract EACH place individually.
-2. **HIERARCHY DETECTION:** If a place is mentioned as being INSIDE another place (e.g. "Use the food court in Terminal 21"), extract "Food Court" as the name and "Terminal 21" as 'parent_location'. Do not create separate entries for the parent if it's just a container.
-3. Use the exact name as mentioned.
-4. Determine destination context.
 
 RESPOND ONLY WITH VALID JSON:
 {
@@ -580,12 +574,11 @@ RESPOND ONLY WITH VALID JSON:
   "destination_country": "Japan",
   "places": [
     {
-      "name": "Place Name",
+      "name": "Major Place Name",
       "category": "food",
-      "description": "Details...",
+      "description": "Rich details:\n• Tip 1\n• Tip 2",
       "location": "Area, City",
-      "parent_location": "Mall or Landmark Name (if applicable)",
-      "cuisine_type": "ramen",
+      "cuisine_type": "Only if major place is a restaurant",
       "tags": ["local favorite"]
     }
   ]
@@ -637,15 +630,15 @@ RESPOND ONLY WITH VALID JSON:
         }
       });
 
-      const prompt = `Analyze this Instagram travel post (caption) and extract ALL individual place recommendations.
+      const prompt = `Analyze this Instagram travel post (caption) and extract only the MAJOR geographical locations (Hero Places) visited.
+
+RULES FOR EXTRACTION:
+1. Identify the "HERO" locations: These are the main destinations or complexes visited.
+2. ONE PIN PER COMPLEX: If multiple spots inside a single complex are mentioned (e.g. various restaurants inside a mall), do NOT create separate entries. Create ONE entry for the Parent Place.
+3. RICH DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field as bullet points.
 
 Caption: ${caption}
 Image URL: ${imageUrl || 'Not available'}
-
-IMPORTANT INSTRUCTIONS:
-1. Identify specific places.
-2. **HIERARCHY DETECTION:** If the caption says "Located in [Mall/Hotel]", extract the specific business name as 'name' and the mall/hotel as 'parent_location'. Do not create a separate entry for the mall/hotel unless it is the ONLY place mentioned.
-3. Look for hashtags for location context.
 
 RESPOND ONLY WITH VALID JSON:
 {
@@ -654,11 +647,10 @@ RESPOND ONLY WITH VALID JSON:
   "destination_country": "Japan",
   "places": [
     {
-      "name": "Place Name",
+      "name": "Major Place Name",
       "category": "food",
-      "description": "Details...",
+      "description": "Rich details:\n• Tip 1\n• Tip 2",
       "location": "Area, City",
-      "parent_location": "Parent Landmark (if nested)",
       "cuisine_type": "cafe",
       "tags": ["aesthetic"]
     }
@@ -752,24 +744,15 @@ RESPOND ONLY WITH VALID JSON:
       const contextInfo = options.caption ? `\n\nAdditional context: "${options.caption}"` : '';
       const titleInfo = options.title ? `\nVideo title: "${options.title}"` : '';
       
-      const prompt = `Analyze this ${options.platform} travel video and extract ALL places mentioned or shown.
+      const prompt = `Analyze this ${options.platform} travel video and extract only the MAJOR geographical locations (Hero Places) visited.
+
+RULES FOR EXTRACTION:
+1. Identify the "HERO" locations: These are the main destinations or complexes visited.
+2. ONE PIN PER COMPLEX: If multiple spots inside a single complex are shown (e.g. various restaurants inside a mall), do NOT create separate entries. Create ONE entry for the Parent Place.
+3. RICH DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field as bullet points.
+4. **IMPORTANT: Read ALL on-screen text carefully!** Look for restaurant names, shop names, signs, logos, and storefront text.
 
 ${titleInfo}${contextInfo}
-
-**IMPORTANT: Read ALL on-screen text carefully!**
-- Look for restaurant names, shop names, place names shown as text overlays
-- Look for addresses or location indicators
-- Look for price tags, menu items with restaurant context
-- Look for signs, logos, storefront text
-
-**CRITICAL RULES FOR PLACE EXTRACTION:**
-1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME.
-2. **HIERARCHY DETECTION (CRITICAL):** If a specific venue is shown INSIDE a larger landmark (e.g. a restaurant inside a mall or hotel):
-   - Extract the venue as 'name'.
-   - Store the larger landmark as 'parent_location'.
-   - **DO NOT** create a separate entry for the landmark itself.
-   - Example: For "Starbucks at Shibuya Crossing", name="Starbucks", parent_location="Shibuya Crossing".
-3. Use the exact name as shown in the video.
 
 RESPOND WITH VALID JSON:
 {
@@ -779,13 +762,12 @@ RESPOND WITH VALID JSON:
   "destination_country": "Country",
   "places": [
     {
-      "name": "Exact business name",
-      "category": "food",
-      "description": "Details",
+      "name": "Exact Major Business Name",
+      "category": "food" or "place" or "shopping" or "activity",
+      "description": "Rich details:\n• Tip 1\n• Tip 2",
       "location": "Area",
-      "parent_location": "Mall/Landmark (if nested)",
-      "cuisine_type": "For food",
-      "place_type": "For non-food",
+      "cuisine_type": "Only if major place is a restaurant",
+      "place_type": "Zoo, Mall, etc.",
       "tags": ["michelin", "budget-friendly"]
     }
   ],
