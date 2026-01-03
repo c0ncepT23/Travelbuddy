@@ -44,6 +44,29 @@ const youtubeExtractionSchema = {
         },
         required: ['name', 'category', 'description']
       }
+    },
+    discovery_intent: {
+      type: SchemaType.OBJECT,
+      properties: {
+        type: { type: SchemaType.STRING, enum: ['CULINARY_GOAL', 'ACTIVITY_GOAL', 'SIGHTSEEING_GOAL', 'DISH_GOAL'] },
+        item: { type: SchemaType.STRING },
+        city: { type: SchemaType.STRING },
+        vibe: { type: SchemaType.STRING, nullable: true },
+        grounded_suggestions: {
+          type: SchemaType.ARRAY,
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              name: { type: SchemaType.STRING },
+              street_hint: { type: SchemaType.STRING },
+              why_famous: { type: SchemaType.STRING }
+            },
+            required: ['name', 'street_hint', 'why_famous']
+          },
+          nullable: true
+        }
+      },
+      nullable: true
     }
   },
   required: ['summary', 'places']
@@ -95,6 +118,9 @@ RULES FOR EXTRACTION:
    - Use Title Case for sub-sections followed by a colon (e.g., "Highlights:", "Food to Try:").
    - Add a newline between sections to keep it readable.
 5. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports (e.g., "Central World" used as a tour bus pickup) unless they are an actual destination visited.
+6. INTENT DETECTION & SUGGESTIONS: 
+   - If no specific businesses are named, but the video is clearly about a specific food/activity, return "discovery_intent" in the response JSON.
+   - In the "discovery_intent", provide 3 real-world "grounded_suggestions" of famous places in that city that match the item/vibe. These must be REAL places from your knowledge.
 
 For each Hero Place, identify:
 1. name: The official name of the Major Place (e.g., "Safari World Bangkok").

@@ -50,6 +50,11 @@ interface DiscoveryItem {
   source_url?: string;
   source_title?: string;
   source_platform?: string;
+  grounded_suggestions?: Array<{
+    name: string;
+    street_hint: string;
+    why_famous: string;
+  }>;
   created_at: string;
 }
 
@@ -187,6 +192,7 @@ export default function ExploreTab({ tripId, countryName, onSavePlace }: Explore
   // Render a single discovery item
   const renderDiscoveryItem = (item: DiscoveryItem) => {
     const isSaving = savingIds.has(item.id);
+    const hasSuggestions = item.grounded_suggestions && item.grounded_suggestions.length > 0;
     
     return (
       <MotiView
@@ -203,46 +209,68 @@ export default function ExploreTab({ tripId, countryName, onSavePlace }: Explore
               <Text style={styles.itemName}>{item.item}</Text>
               <Text style={styles.itemCity}>{item.city}</Text>
             </View>
-          </View>
-          
-          {item.vibe && (
-            <Text style={styles.vibeText}>"{item.vibe}"</Text>
-          )}
-          
-          <View style={styles.cardActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => handleViewOnMaps(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="map-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.actionText}>View</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, styles.saveButton]}
-              onPress={() => handleSave(item)}
-              disabled={isSaving}
-              activeOpacity={0.7}
-            >
-              {isSaving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="bookmark-outline" size={18} color="#FFFFFF" />
-                  <Text style={[styles.actionText, styles.saveText]}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            
             <TouchableOpacity
               style={styles.dismissButton}
               onPress={() => handleDismiss(item)}
               activeOpacity={0.7}
             >
-              <Ionicons name="close" size={18} color={COLORS.textMuted} />
+              <Ionicons name="close" size={20} color={COLORS.textMuted} />
             </TouchableOpacity>
           </View>
+          
+          {item.vibe && (
+            <Text style={styles.vibeText}>"{item.vibe}"</Text>
+          )}
+
+          {hasSuggestions ? (
+            <View style={styles.suggestionsContainer}>
+              <Text style={styles.suggestionsTitle}>Yori-san's top picks:</Text>
+              {item.grounded_suggestions?.map((suggestion, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.suggestionRow}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    const query = encodeURIComponent(`${suggestion.name} ${suggestion.street_hint} ${item.city}`);
+                    Linking.openURL(`https://www.google.com/maps/search/${query}`);
+                  }}
+                >
+                  <View style={styles.suggestionContent}>
+                    <Text style={styles.suggestionName}>{suggestion.name}</Text>
+                    <Text style={styles.suggestionReason}>{suggestion.why_famous}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.cardActions}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handleViewOnMaps(item)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="map-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.actionText}>Research on Maps</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.actionButton, styles.saveButton]}
+                onPress={() => handleSave(item)}
+                disabled={isSaving}
+                activeOpacity={0.7}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="bookmark-outline" size={18} color="#FFFFFF" />
+                    <Text style={[styles.actionText, styles.saveText]}>Save</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </MotiView>
     );
@@ -497,8 +525,43 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   dismissButton: {
-    marginLeft: 'auto',
-    padding: 8,
+    padding: 4,
+  },
+  suggestionsContainer: {
+    marginTop: 12,
+    backgroundColor: 'rgba(6, 182, 212, 0.05)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.1)',
+  },
+  suggestionsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  suggestionContent: {
+    flex: 1,
+  },
+  suggestionName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  suggestionReason: {
+    fontSize: 12,
+    color: COLORS.textMuted,
   },
   loadingContainer: {
     flex: 1,

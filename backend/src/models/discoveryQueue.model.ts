@@ -11,6 +11,7 @@ export interface DiscoveryQueueItem {
   source_url?: string;
   source_title?: string;
   source_platform?: string;
+  grounded_suggestions?: any[]; // Array of suggested places from AI
   status: 'pending' | 'explored' | 'saved' | 'dismissed';
   created_at: Date;
   explored_at?: Date;
@@ -33,6 +34,7 @@ export class DiscoveryQueueModel {
       source_url?: string;
       source_title?: string;
       source_platform?: string;
+      grounded_suggestions?: any[];
     }
   ): Promise<DiscoveryQueueItem> {
     // First check if a pending item already exists (case-insensitive)
@@ -52,10 +54,11 @@ export class DiscoveryQueueModel {
         `UPDATE discovery_queue SET
            source_url = COALESCE($1, source_url),
            source_title = COALESCE($2, source_title),
+           grounded_suggestions = COALESCE($3, grounded_suggestions),
            updated_at = NOW()
-         WHERE id = $3
+         WHERE id = $4
          RETURNING *`,
-        [data.source_url, data.source_title, existing.rows[0].id]
+        [data.source_url, data.source_title, data.grounded_suggestions ? JSON.stringify(data.grounded_suggestions) : null, existing.rows[0].id]
       );
       return updated.rows[0];
     }
@@ -63,8 +66,8 @@ export class DiscoveryQueueModel {
     // Insert new item
     const result = await query(
       `INSERT INTO discovery_queue 
-       (user_id, trip_group_id, item, city, country, vibe, source_url, source_title, source_platform)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (user_id, trip_group_id, item, city, country, vibe, source_url, source_title, source_platform, grounded_suggestions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         userId,
@@ -75,7 +78,8 @@ export class DiscoveryQueueModel {
         data.vibe,
         data.source_url,
         data.source_title,
-        data.source_platform
+        data.source_platform,
+        data.grounded_suggestions ? JSON.stringify(data.grounded_suggestions) : null
       ]
     );
 

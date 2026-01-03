@@ -5,6 +5,25 @@ All notable changes to the Travel Research Companion project will be documented 
 ## [Unreleased]
 
 ### Added
+- **Next-Gen YouTube Extraction Pipeline** - A cost-optimized, hybrid architecture for processing YouTube content:
+  - **YouTube Transcript Service**: Fetches transcripts using `youtube-transcript` with residential proxy (IPRoyal) support for long-form videos.
+  - **Gemini Direct URL Integration**: Analyzes YouTube Shorts and videos without transcripts directly via URL, bypassing the need for downloads.
+  - **Cost Savings**: Reduced extraction costs by ~86% (from ~$55/mo to ~$8/mo).
+  - **Improved Reliability**: Decoupled YouTube extraction from Apify, reducing single points of failure.
+- **Hierarchy Detection (Parent/Child Locations)** - Updated Gemini extraction rules to detect nested venues (e.g., a cafe inside a mall):
+  - Added `parent_location` field to `saved_items` and `video_cache` database tables.
+  - Gemini now extracts the specific venue as the primary name and the landmark as the `parent_location`.
+  - Prevents creating duplicate pins for container landmarks (like malls or hotels) when a specific business inside them is the main subject.
+- **Amnesic AI Agent** - Reinforced the travel assistant's philosophy to strictly use provided notes and avoid external hallucinations.
+- **Schema-Enforced Intent Detection** - Upgraded `analyzeIntent` to use Gemini's `responseSchema` for guaranteed valid JSON output and better routing.
+- **Gemini 2.5 Upgrade** - Updated models to use `gemini-2.5-flash` for high-speed tasks and `gemini-2.5-pro` for complex reasoning.
+
+### Changed
+- Updated `ContentProcessorService`, `SavedItemModel`, and `VideoCacheModel` to support the new hierarchy data.
+- Migrated database schema to include `parent_location` column.
+
+
+### Added
 - **Journey Sharing (Viral Loop)** - Implemented a high-conversion sharing experience:
   - Added "Share Story" FAB in `MyJourneyView.tsx` with haptic feedback.
   - New Next.js project in `/web` for public journey teasers.

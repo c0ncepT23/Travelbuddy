@@ -694,13 +694,13 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
                 </Text>
                 
                 <View style={styles.discoveryCard}>
-                  <Ionicons name="chatbubbles" size={24} color="#A78BFA" />
+                  <Ionicons name="compass" size={24} color="#A78BFA" />
                   <View style={styles.discoveryCardText}>
                     <Text style={styles.discoveryCardTitle}>
-                      I'll remember this!
+                      I've added it to Explore!
                     </Text>
                     <Text style={styles.discoveryCardDesc}>
-                      Ask me in AI Chat for {result.queued_item.item} recommendations in {result.queued_item.city}
+                      Check the Explore tab for {result.queued_item.item} suggestions in {result.queued_item.city}
                     </Text>
                   </View>
                 </View>

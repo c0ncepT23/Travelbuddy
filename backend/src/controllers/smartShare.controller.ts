@@ -125,6 +125,7 @@ export class SmartShareController {
               vibe: intent.vibe,
               source_url: url,
               source_platform: contentType,
+              grounded_suggestions: intent.grounded_suggestions,
             }
           );
 
@@ -146,6 +147,7 @@ export class SmartShareController {
               item: intent.item,
               city: intent.city,
               vibe: intent.vibe,
+              grounded_suggestions: intent.grounded_suggestions,
             },
           });
           return;
@@ -362,14 +364,16 @@ export class SmartShareController {
 
       res.status(200).json({
         success: true,
-        queue: items.map(item => ({
+        items: items.map(item => ({
           id: item.id,
           item: item.item,
           city: item.city,
           country: item.country,
           vibe: item.vibe,
+          source_url: item.source_url,
           source_title: item.source_title,
           source_platform: item.source_platform,
+          grounded_suggestions: item.grounded_suggestions,
           created_at: item.created_at,
         }))
       });
