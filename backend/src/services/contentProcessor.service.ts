@@ -5,7 +5,8 @@ import { TravelAgent } from '../agents/travelAgent';
 import { GeminiService } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
 import { ApifyInstagramService } from './apifyInstagram.service';
-import { ApifyYoutubeService } from './apifyYoutube.service';
+import { YouTubeTranscriptService } from './youtubeTranscript.service';
+import { GeminiDirectUrlService } from './geminiDirectUrl.service';
 import { VideoCacheModel } from '../models/videoCache.model';
 import {
   extractYouTubeVideoId,
@@ -43,7 +44,7 @@ export class ContentProcessorService {
   /**
    * Process any URL
    */
-  static async processUrl(url: string): Promise<ProcessedContent & { originalContent: any }> {
+  static async processUrl(url: string): Promise<ProcessedContent & { original_content: any }> {
     if (!isValidUrl(url)) {
       throw new Error('Invalid URL');
     }
@@ -51,31 +52,31 @@ export class ContentProcessorService {
     const contentType = this.detectContentType(url);
 
     try {
-      let originalContent: any;
+      let original_content: any;
       let textContent: string;
 
       switch (contentType) {
         case ItemSourceType.YOUTUBE:
-          originalContent = await this.fetchYouTubeVideo(url);
-          textContent = `Title: ${originalContent.title}\nDescription: ${originalContent.description}\nTranscript: ${originalContent.transcript}`;
+          original_content = await this.fetchYouTubeVideo(url);
+          textContent = `Title: ${original_content.title}\nDescription: ${original_content.description}\nTranscript: ${original_content.transcript}`;
           break;
 
         case ItemSourceType.INSTAGRAM:
           console.log('Fetching Instagram post...');
-          originalContent = await this.fetchInstagramPost(url);
-          console.log('Fetched Instagram content:', JSON.stringify(originalContent));
+          original_content = await this.fetchInstagramPost(url);
+          console.log('Fetched Instagram content:', JSON.stringify(original_content));
           // Prioritize the caption for location extraction
-          textContent = `Instagram Post/Reel\nCaption: ${originalContent.caption}\nLocation: ${originalContent.location || 'Not specified'}`;
+          textContent = `Instagram Post/Reel\nCaption: ${original_content.caption}\nLocation: ${original_content.location || 'Not specified'}`;
           break;
 
         case ItemSourceType.REDDIT:
-          originalContent = await this.fetchRedditPost(url);
-          textContent = `Title: ${originalContent.title}\nBody: ${originalContent.body}\nTop Comments: ${originalContent.comments.join(' | ')}`;
+          original_content = await this.fetchRedditPost(url);
+          textContent = `Title: ${original_content.title}\nBody: ${original_content.body}\nTop Comments: ${original_content.comments.join(' | ')}`;
           break;
 
         default:
-          originalContent = await this.fetchWebPage(url);
-          textContent = originalContent.text;
+          original_content = await this.fetchWebPage(url);
+          textContent = original_content.text;
           break;
       }
 
@@ -86,7 +87,7 @@ export class ContentProcessorService {
 
       return {
         ...processed,
-        originalContent,
+        original_content,
       };
     } catch (error: any) {
       console.error('Detailed error in processUrl:', error);
@@ -96,86 +97,64 @@ export class ContentProcessorService {
   }
 
   /**
-   * Fetch YouTube video data using Apify (ONLY)
-   * yt-dlp removed - it gets blocked on Railway/cloud environments
+   * UPDATED: Fetch YouTube video data (No Apify)
    * 
    * Flow:
-   * 1. Apify transcript extraction
-   * 2. If no transcript, Apify downloads video for Gemini analysis
-   * 3. Final fallback: oEmbed metadata only
+   * 1. If Short → Gemini Direct URL (skip transcript)
+   * 2. If Long-form → Try Transcript API with proxy
+   * 3. If no transcript → Fall back to Gemini Direct URL
    */
-  private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData & { videoDownloadUrl?: string }> {
-    const videoId = extractYouTubeVideoId(url);
+  private static async fetchYouTubeVideo(url: string): Promise<YouTubeVideoData> {
+    const videoId = YouTubeTranscriptService.extractVideoId(url);
     if (!videoId) {
       throw new Error('Invalid YouTube URL');
     }
 
-    // Use Apify for everything (transcript + video download if needed)
-    if (ApifyYoutubeService.isConfigured()) {
-      logger.info(`[ContentProcessor] Fetching YouTube via Apify: ${videoId}`);
-      
-      const result = await ApifyYoutubeService.getVideoContent(url);
-      
-      if (result) {
-        return {
-          title: result.title,
-          description: result.description || '',
-          transcript: result.transcript || '',
-          thumbnail_url: result.thumbnailUrl,
-          thumbnail: result.thumbnailUrl,
-          channel: result.channelName,
-          videoDownloadUrl: result.videoDownloadUrl, // For Gemini video analysis
-        };
-      }
-    } else {
-      logger.warn('[ContentProcessor] Apify not configured - using oEmbed only');
-    }
+    // Always get metadata first (free, fast)
+    const metadata = await YouTubeTranscriptService.fetchMetadata(videoId);
 
-    // Final fallback: oEmbed (metadata only, no transcript/video)
-    logger.info('[ContentProcessor] Falling back to oEmbed API');
-    return await this.fetchYouTubeWithOembed(videoId);
-  }
-
-  /**
-   * Final fallback: Fetch basic YouTube metadata using oEmbed API
-   * Used when both yt-dlp and Apify fail
-   */
-  private static async fetchYouTubeWithOembed(videoId: string): Promise<YouTubeVideoData> {
-    try {
-      logger.info(`[ContentProcessor] Using oEmbed for: ${videoId}`);
-      
-      const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-      const response = await axios.get(oembedUrl, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-      
-      const data = response.data;
-      logger.info(`[ContentProcessor] oEmbed success: "${data.title}" by ${data.author_name}`);
-      
+    // Path 1: YouTube Shorts → Skip transcript, use Gemini Direct URL
+    if (YouTubeTranscriptService.isShort(url)) {
+      logger.info(`[ContentProcessor] YouTube Short detected → Gemini Direct URL`);
       return {
-        title: data.title || 'YouTube Video',
-        description: '', // oEmbed doesn't provide description
-        transcript: '', // No transcript - will trigger video analysis
-        thumbnail_url: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        channel: data.author_name || 'Unknown',
-      };
-    } catch (oembedError: any) {
-      logger.error('[ContentProcessor] oEmbed also failed:', oembedError.message);
-      
-      // Ultimate fallback: Return minimal data to trigger video analysis
-      return {
-        title: 'YouTube Video',
+        title: metadata?.title || 'YouTube Short',
         description: '',
-        transcript: '',
-        thumbnail_url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        channel: 'Unknown',
+        transcript: '', // Empty - will trigger Gemini Direct URL path
+        thumbnail_url: metadata?.thumbnailUrl || '',
+        thumbnail: metadata?.thumbnailUrl || '',
+        channel: metadata?.author || 'Unknown',
+        useDirectUrl: true, // Flag for downstream processing
       };
     }
+
+    // Path 2: Long-form video → Try transcript
+    logger.info(`[ContentProcessor] Long-form video → Trying transcript API`);
+    const transcript = await YouTubeTranscriptService.fetchTranscript(videoId);
+
+    if (transcript && transcript.length > 100) {
+      logger.info(`[ContentProcessor] Got transcript (${transcript.length} chars)`);
+      return {
+        title: metadata?.title || 'YouTube Video',
+        description: '',
+        transcript,
+        thumbnail_url: metadata?.thumbnailUrl || '',
+        thumbnail: metadata?.thumbnailUrl || '',
+        channel: metadata?.author || 'Unknown',
+        useDirectUrl: false,
+      };
+    }
+
+    // Path 3: No transcript → Fall back to Gemini Direct URL
+    logger.info(`[ContentProcessor] No transcript → Gemini Direct URL fallback`);
+    return {
+      title: metadata?.title || 'YouTube Video',
+      description: '',
+      transcript: '',
+      thumbnail_url: metadata?.thumbnailUrl || '',
+      thumbnail: metadata?.thumbnailUrl || '',
+      channel: metadata?.author || 'Unknown',
+      useDirectUrl: true,
+    };
   }
 
   private static async fetchInstagramPost(url: string): Promise<InstagramPostData> {
@@ -348,7 +327,7 @@ export class ContentProcessorService {
    */
   static async processImage(
     imageBuffer: Buffer
-  ): Promise<ProcessedContent & { originalContent: any }> {
+  ): Promise<ProcessedContent & { original_content: any }> {
     try {
       // Perform OCR
       const result = await Tesseract.recognize(imageBuffer, 'eng', {
@@ -369,7 +348,7 @@ export class ContentProcessorService {
 
       return {
         ...processed,
-        originalContent: {
+        original_content: {
           extractedText,
           confidence: result.data.confidence,
         },
@@ -385,7 +364,7 @@ export class ContentProcessorService {
    */
   static async processText(
     text: string
-  ): Promise<ProcessedContent & { originalContent: any }> {
+  ): Promise<ProcessedContent & { original_content: any }> {
     try {
       if (!text || text.trim().length < 10) {
         throw new Error('Text content too short');
@@ -395,7 +374,7 @@ export class ContentProcessorService {
 
       return {
         ...processed,
-        originalContent: { text },
+        original_content: { text },
       };
     } catch (error: any) {
       logger.error('Text processing error:', error);
@@ -408,7 +387,7 @@ export class ContentProcessorService {
    */
   static async processVoiceTranscript(
     transcript: string
-  ): Promise<ProcessedContent & { originalContent: any }> {
+  ): Promise<ProcessedContent & { original_content: any }> {
     try {
       if (!transcript || transcript.trim().length < 10) {
         throw new Error('Transcript too short');
@@ -421,7 +400,7 @@ export class ContentProcessorService {
 
       return {
         ...processed,
-        originalContent: { transcript },
+        original_content: { transcript },
       };
     } catch (error: any) {
       logger.error('Voice processing error:', error);
@@ -441,7 +420,7 @@ export class ContentProcessorService {
   ): Promise<{
     summary: string;
     video_type?: 'places' | 'howto' | 'guide';
-    places: Array<ProcessedContent & { originalContent: any; day?: number }>;
+    places: Array<ProcessedContent & { original_content: any; day?: number }>;
     // Guide-specific fields
     itinerary?: Array<{
       day: number;
@@ -497,18 +476,37 @@ export class ContentProcessorService {
 
       logger.info(`[YouTube] Processing video: ${videoId}`);
 
-      // ========== STEP 2: FETCH VIDEO DATA VIA APIFY ==========
+      // ========== STEP 2: FETCH VIDEO DATA ==========
       const videoData = await this.fetchYouTubeVideo(url);
 
       logger.info(`Video: ${videoData.title}`);
-      logger.info(`Transcript: ${videoData.transcript?.length || 0} chars, VideoURL: ${videoData.videoDownloadUrl ? 'YES' : 'NO'}`);
+      logger.info(`Transcript: ${videoData.transcript?.length || 0} chars, UseDirectUrl: ${videoData.useDirectUrl ? 'YES' : 'NO'}`);
 
       let analysis;
       
       // ========== STEP 3: ANALYZE CONTENT ==========
-      const hasGoodTranscript = videoData.transcript && videoData.transcript.length > 100;
-      
-      if (hasGoodTranscript) {
+      if (videoData.useDirectUrl) {
+        // Use Gemini Direct URL analysis
+        logger.info('[YouTube] Using Gemini Direct URL analysis');
+        const directAnalysis = await GeminiDirectUrlService.analyzeYouTubeVideo(url, {
+          title: videoData.title,
+          description: videoData.description
+        });
+        
+        analysis = {
+          summary: directAnalysis.summary,
+          video_type: 'places' as const, // Gemini Direct URL service currently returns places
+          destination: directAnalysis.destination,
+          destination_country: directAnalysis.destination_country,
+          places: directAnalysis.places.map(p => ({
+            ...p,
+            category: p.category as any,
+          })),
+          duration_days: undefined,
+          itinerary: undefined,
+          discovery_intent: undefined,
+        };
+      } else if (videoData.transcript && videoData.transcript.length > 100) {
         // Best case: We have a transcript - use text-based analysis (fast, cheap)
         logger.info('[YouTube] Using transcript-based analysis');
         analysis = await GeminiService.analyzeVideoMetadata(
@@ -516,46 +514,27 @@ export class ContentProcessorService {
           videoData.description,
           videoData.transcript
         );
-      } else if (videoData.videoDownloadUrl) {
-        // No transcript but Apify downloaded the video - use Gemini video analysis
-        logger.info('[YouTube] Using Gemini VIDEO analysis (Apify download)');
-        try {
-          const videoAnalysis = await GeminiService.analyzeVideoContent(videoData.videoDownloadUrl, {
-            platform: 'youtube',
-            title: videoData.title,
-            caption: videoData.description,
-          });
-          
-          analysis = {
-            summary: videoAnalysis.summary,
-            video_type: videoAnalysis.video_type,
-            destination: videoAnalysis.destination,
-            destination_country: videoAnalysis.destination_country,
-            places: videoAnalysis.places.map(p => ({
-              ...p,
-              category: p.category as any,
-            })),
-            duration_days: undefined,
-            itinerary: undefined,
-            discovery_intent: videoAnalysis.discovery_intent,
-          };
-        } catch (videoError: any) {
-          logger.error('[YouTube] Video analysis failed:', videoError.message);
-          // Fall back to metadata only
-          analysis = await GeminiService.analyzeVideoMetadata(
-            videoData.title,
-            videoData.description,
-            ''
-          );
-        }
       } else {
-        // No transcript, no video download - use metadata only
-        logger.info('[YouTube] Using metadata-only analysis (no transcript/video available)');
-        analysis = await GeminiService.analyzeVideoMetadata(
-          videoData.title,
-          videoData.description,
-          ''
-        );
+        // Fallback: Use Gemini Direct URL if transcript is poor or missing
+        logger.info('[YouTube] Poor transcript - falling back to Gemini Direct URL');
+        const directAnalysis = await GeminiDirectUrlService.analyzeYouTubeVideo(url, {
+          title: videoData.title,
+          description: videoData.description
+        });
+
+        analysis = {
+          summary: directAnalysis.summary,
+          video_type: 'places' as const,
+          destination: directAnalysis.destination,
+          destination_country: directAnalysis.destination_country,
+          places: directAnalysis.places.map(p => ({
+            ...p,
+            category: p.category as any,
+          })),
+          duration_days: undefined,
+          itinerary: undefined,
+          discovery_intent: undefined,
+        };
       }
 
       logger.info(`Video type: ${analysis.video_type}`);
@@ -581,38 +560,40 @@ export class ContentProcessorService {
           location_name: place.location || analysis.destination,
           location_lat: undefined as number | undefined,
           location_lng: undefined as number | undefined,
-          source_title: videoData.title,
-          day: place.day, // May be undefined for video analysis fallback
-          // Sub-categorization
-          cuisine_type: place.cuisine_type,
-          place_type: place.place_type,
-          tags: place.tags,
-          destination: analysis.destination,
-          destination_country: analysis.destination_country,
-          originalContent: {
-            ...videoData,
-            video_type: 'guide',
-          },
-        }));
+        source_title: videoData.title,
+        day: place.day, // May be undefined for video analysis fallback
+        // Sub-categorization
+        cuisine_type: place.cuisine_type,
+        place_type: place.place_type,
+        parent_location: place.parent_location,
+        tags: place.tags,
+        destination: analysis.destination,
+        destination_country: analysis.destination_country,
+        original_content: {
+          ...videoData,
+          video_type: 'guide',
+        },
+      }));
 
-        // Cache guide results
-        try {
-          await VideoCacheModel.set({
-            videoId,
-            platform: 'youtube',
-            url,
-            title: videoData.title,
-            channelName: videoData.channel,
-            thumbnailUrl: videoData.thumbnail_url,
-            summary: analysis.summary,
-            videoType: 'guide',
-            destination: analysis.destination,
-            destinationCountry: analysis.destination_country,
-            places: processedPlaces,
-            discoveryIntent: analysis.discovery_intent,
-            expiresInDays: 30,
-          });
-        } catch (e) { /* ignore cache errors */ }
+      // Cache guide results
+      try {
+        await VideoCacheModel.set({
+          videoId,
+          platform: 'youtube',
+          url,
+          title: videoData.title,
+          channelName: videoData.channel,
+          thumbnailUrl: videoData.thumbnail_url,
+          summary: analysis.summary,
+          videoType: 'guide',
+          destination: analysis.destination,
+          destinationCountry: analysis.destination_country,
+          parentLocation: undefined, // Guides don't usually have a single parent
+          places: processedPlaces,
+          discoveryIntent: analysis.discovery_intent,
+          expiresInDays: 30,
+        });
+      } catch (e) { /* ignore cache errors */ }
 
         return {
           summary: analysis.summary,
@@ -646,7 +627,7 @@ export class ContentProcessorService {
               destination: analysis.destination,
               destination_country: analysis.destination_country,
               tags: ['travel tips', 'guide'],
-              originalContent: {
+              original_content: {
                 ...videoData,
                 video_type: 'howto',
               },
@@ -709,7 +690,7 @@ export class ContentProcessorService {
               ...processed,
               destination: analysis.destination,
               destination_country: analysis.destination_country,
-              originalContent: {
+              original_content: {
                 ...videoData,
                 video_type: 'places',
               },
@@ -731,10 +712,11 @@ export class ContentProcessorService {
         // Sub-categorization for smart clustering
         cuisine_type: place.cuisine_type,
         place_type: place.place_type,
+        parent_location: place.parent_location,
         tags: place.tags,
         destination: analysis.destination,
         destination_country: analysis.destination_country,
-        originalContent: {
+        original_content: {
           ...videoData,
           video_type: 'places',
         },
@@ -794,6 +776,7 @@ export class ContentProcessorService {
                 // Use validated sub-types
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                parent_location: place.parent_location,
                 // Add tags from Google
                 tags: enriched.google_tags || [],
               };
@@ -830,6 +813,7 @@ export class ContentProcessorService {
           videoType: 'places',
           destination: analysis.destination,
           destinationCountry: analysis.destination_country,
+          parentLocation: undefined, // Multiple places, no single parent
           places: enrichedPlaces,
           discoveryIntent: analysis.discovery_intent,
           expiresInDays: 30, // Cache for 30 days
@@ -864,7 +848,7 @@ export class ContentProcessorService {
     summary: string;
     destination?: string;
     destination_country?: string;
-    places: Array<ProcessedContent & { originalContent: any }>;
+    places: Array<ProcessedContent & { original_content: any }>;
   }> {
     try {
       logger.info('Processing Reddit post...');
@@ -901,7 +885,7 @@ export class ContentProcessorService {
               ...processed,
               destination: analysis.destination,
               destination_country: analysis.destination_country,
-              originalContent: redditData,
+              original_content: redditData,
             },
           ],
         };
@@ -919,10 +903,11 @@ export class ContentProcessorService {
         // Sub-categorization for smart clustering
         cuisine_type: place.cuisine_type,
         place_type: place.place_type,
+        parent_location: place.parent_location,
         tags: place.tags,
         destination: analysis.destination,
         destination_country: analysis.destination_country,
-        originalContent: redditData,
+        original_content: redditData,
       }));
 
       // Enrich places with Google Places API data
@@ -964,7 +949,9 @@ export class ContentProcessorService {
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                parent_location: place.parent_location,
                 tags: enriched.google_tags || [],
+                original_content: place.original_content,
               };
             } else {
               logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);
@@ -1009,7 +996,7 @@ export class ContentProcessorService {
     summary: string;
     destination?: string;
     destination_country?: string;
-    places: Array<ProcessedContent & { originalContent: any }>;
+    places: Array<ProcessedContent & { original_content: any }>;
   }> {
     try {
       // Extract Instagram post ID for caching
@@ -1046,6 +1033,8 @@ export class ContentProcessorService {
         const places = result.places.map(place => ({
           ...place,
           source_title: result.source_title,
+          parent_location: place.parent_location,
+          original_content: { url },
         }));
 
         // ========== SAVE TO CACHE ==========
@@ -1059,6 +1048,7 @@ export class ContentProcessorService {
               summary: result.summary,
               destination: result.destination,
               destinationCountry: result.destination_country,
+              parentLocation: undefined,
               places,
               expiresInDays: 30,
             });
@@ -1107,7 +1097,7 @@ export class ContentProcessorService {
               ...processed,
               destination: analysis.destination,
               destination_country: analysis.destination_country,
-              originalContent: instaData,
+              original_content: instaData,
             },
           ],
         };
@@ -1125,10 +1115,11 @@ export class ContentProcessorService {
         // Sub-categorization for smart clustering
         cuisine_type: place.cuisine_type,
         place_type: place.place_type,
+        parent_location: place.parent_location,
         tags: place.tags,
         destination: analysis.destination,
         destination_country: analysis.destination_country,
-        originalContent: instaData,
+        original_content: instaData,
       }));
 
       // Enrich places with Google Places API data
@@ -1170,7 +1161,9 @@ export class ContentProcessorService {
                 location_lng: enriched.geometry?.location.lng || place.location_lng,
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                parent_location: place.parent_location,
                 tags: enriched.google_tags || [],
+                original_content: place.original_content,
               };
             } else {
               logger.warn(`⚠️ [ENRICH] No Google data found for "${place.name}"`);

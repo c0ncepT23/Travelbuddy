@@ -37,7 +37,7 @@ interface InstagramExtractionResult {
   destination?: string;
   destination_country?: string;
   places: Array<ProcessedContent & { 
-    originalContent: any;
+    original_content: any;
     google_place_id?: string;
     rating?: number;
     user_ratings_total?: number;
@@ -46,6 +46,7 @@ interface InstagramExtractionResult {
     area_name?: string;
     photos_json?: any[];
     opening_hours_json?: any;
+    parent_location?: string;
   }>;
 }
 
@@ -285,6 +286,7 @@ export class ApifyInstagramService {
       location?: string;
       cuisine_type?: string;
       place_type?: string;
+      parent_location?: string;
     }>;
   }> {
     try {
@@ -487,7 +489,7 @@ If no specific places are identifiable, return empty places array but still try 
           places: fallbackResult.places.map(place => ({
             ...place,
             location_name: place.location,
-            originalContent: { url },
+            original_content: { url },
           })),
         };
       }
@@ -503,6 +505,7 @@ If no specific places are identifiable, return empty places array but still try 
           location?: string;
           cuisine_type?: string;
           place_type?: string;
+          parent_location?: string;
         }>;
       };
 
@@ -613,8 +616,9 @@ If no specific places are identifiable, return empty places array but still try 
                 opening_hours_json: enriched.opening_hours,
                 cuisine_type: finalCuisineType,
                 place_type: finalPlaceType,
+                parent_location: place.parent_location,
                 tags: enriched.google_tags || [],
-                originalContent: {
+                original_content: {
                   ...scraped,
                   analysisMethod: usedVideoAnalysis ? 'gemini_video' : 'gemini_caption',
                 },
@@ -628,7 +632,8 @@ If no specific places are identifiable, return empty places array but still try 
               location_name: place.location,
               cuisine_type: place.cuisine_type,
               place_type: place.place_type,
-              originalContent: scraped,
+              parent_location: place.parent_location,
+              original_content: scraped,
             };
           } catch (error: any) {
             logger.warn(`[Apify] Failed to enrich "${place.name}": ${error.message}`);
@@ -639,7 +644,8 @@ If no specific places are identifiable, return empty places array but still try 
               location_name: place.location,
               cuisine_type: place.cuisine_type,
               place_type: place.place_type,
-              originalContent: scraped,
+              parent_location: place.parent_location,
+              original_content: scraped,
             };
           }
         })

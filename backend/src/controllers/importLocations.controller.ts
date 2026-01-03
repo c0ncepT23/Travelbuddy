@@ -100,7 +100,12 @@ export class ImportLocationsController {
             place.formatted_address,
             place.area_name,
             place.photos_json,
-            place.opening_hours_json
+            place.opening_hours_json,
+            place.tags,
+            place.cuisine_type,
+            place.place_type,
+            place.parent_location,
+            place.destination
           );
 
           savedItems.push(savedItem);

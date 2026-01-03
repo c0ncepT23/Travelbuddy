@@ -135,6 +135,7 @@ export interface SavedItem {
   tags?: string[];              // ["michelin", "hidden gem", "local favorite"]
   cuisine_type?: string;        // For food: "ramen", "wagyu", "cheesecake"
   place_type?: string;          // For places: "temple", "shrine", "market"
+  parent_location?: string;     // NEW: For nested places (e.g. "Inside The Hyundai Seoul")
   destination?: string;         // Auto-detected destination: "Tokyo", "Japan"
   destination_id?: string;      // Link to destinations table
   cloned_from_journey_id?: string;
@@ -223,6 +224,7 @@ export interface ProcessedContent {
   // Sub-categorization fields
   cuisine_type?: string;        // For food: "ramen", "wagyu", "cheesecake"
   place_type?: string;          // For places: "temple", "shrine", "market"
+  parent_location?: string;     // NEW: For nested places
   tags?: string[];              // ["michelin", "hidden gem", "local favorite"]
   destination?: string;         // Auto-detected: "Tokyo", "Japan"
   destination_country?: string; // Country name: "Japan"
@@ -238,6 +240,7 @@ export interface YouTubeVideoData {
   thumbnail_url: string;
   thumbnail: string;
   channel: string;
+  useDirectUrl?: boolean;
 }
 
 export interface InstagramPostData {

@@ -34,6 +34,7 @@ export class SavedItemModel {
     tags?: string[],
     cuisineType?: string,
     placeType?: string,
+    parentLocation?: string,
     destination?: string,
     clonedFromJourneyId?: string,
     clonedFromOwnerName?: string
@@ -44,8 +45,8 @@ export class SavedItemModel {
         location_lat, location_lng, original_source_type, original_source_url, source_title, original_content,
         location_confidence, location_confidence_score, google_place_id, rating, user_ratings_total, 
         price_level, formatted_address, area_name, photos_json, opening_hours_json,
-        tags, cuisine_type, place_type, destination, cloned_from_journey_id, cloned_from_owner_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+        tags, cuisine_type, place_type, parent_location, destination, cloned_from_journey_id, cloned_from_owner_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
        RETURNING *`,
       [
         tripGroupId,
@@ -73,6 +74,7 @@ export class SavedItemModel {
         tags ? JSON.stringify(tags) : '[]',
         cuisineType,
         placeType,
+        parentLocation,
         destination,
         clonedFromJourneyId,
         clonedFromOwnerName,
@@ -260,6 +262,11 @@ export class SavedItemModel {
     if (updates.cloned_from_owner_name !== undefined) {
       fields.push(`cloned_from_owner_name = $${paramCount++}`);
       values.push(updates.cloned_from_owner_name);
+    }
+
+    if (updates.parent_location !== undefined) {
+      fields.push(`parent_location = $${paramCount++}`);
+      values.push(updates.parent_location);
     }
 
     if (fields.length === 0) {

@@ -255,6 +255,7 @@ export class SmartShareController {
             place.tags || undefined,                    // tags
             place.cuisine_type || undefined,            // cuisineType
             place.place_type || undefined,              // placeType
+            place.parent_location || undefined,         // parentLocation
             destination                                 // destination
           );
 

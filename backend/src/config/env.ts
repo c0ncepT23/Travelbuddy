@@ -51,6 +51,14 @@ export const config = {
     token: process.env.APIFY_TOKEN || '',
   },
 
+  // NEW: Residential Proxy (IPRoyal)
+  proxy: {
+    host: process.env.IPROYAL_PROXY_HOST || 'geo.iproyal.com',
+    port: parseInt(process.env.IPROYAL_PROXY_PORT || '12321', 10),
+    user: process.env.IPROYAL_PROXY_USER || '',
+    pass: process.env.IPROYAL_PROXY_PASS || '',
+  },
+
   // Google OAuth
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',

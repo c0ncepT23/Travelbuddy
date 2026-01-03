@@ -14,6 +14,7 @@ export interface VideoCacheItem {
   video_type?: string;
   destination?: string;
   destination_country?: string;
+  parent_location?: string;
   places_json?: any[];
   discovery_intent_json?: any;
   created_at: Date;
@@ -66,6 +67,7 @@ export class VideoCacheModel {
     videoType?: string;
     destination?: string;
     destinationCountry?: string;
+    parentLocation?: string;
     places?: any[];
     discoveryIntent?: any;
     expiresInDays?: number; // Optional TTL in days
@@ -77,13 +79,14 @@ export class VideoCacheModel {
     const result = await query(
       `INSERT INTO video_cache 
        (video_id, platform, url, title, channel_name, thumbnail_url, transcript,
-        summary, video_type, destination, destination_country, places_json, discovery_intent_json, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        summary, video_type, destination, destination_country, parent_location, places_json, discovery_intent_json, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        ON CONFLICT (video_id, platform) 
        DO UPDATE SET
          title = COALESCE(EXCLUDED.title, video_cache.title),
          channel_name = COALESCE(EXCLUDED.channel_name, video_cache.channel_name),
          summary = COALESCE(EXCLUDED.summary, video_cache.summary),
+         parent_location = COALESCE(EXCLUDED.parent_location, video_cache.parent_location),
          places_json = COALESCE(EXCLUDED.places_json, video_cache.places_json),
          discovery_intent_json = COALESCE(EXCLUDED.discovery_intent_json, video_cache.discovery_intent_json)
        RETURNING *`,
@@ -99,6 +102,7 @@ export class VideoCacheModel {
         data.videoType,
         data.destination,
         data.destinationCountry,
+        data.parentLocation,
         data.places ? JSON.stringify(data.places) : null,
         data.discoveryIntent ? JSON.stringify(data.discoveryIntent) : null,
         expiresAt,

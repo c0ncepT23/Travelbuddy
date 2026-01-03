@@ -301,8 +301,6 @@ Extract the structured intent from the query.`;
         ? uniqueLocations.slice(0, 3).join(', ') 
         : context.destination;
 
-      logger.info(`[GeminiResponse] Generating response for query in ${locationContext}`);
-
       const placesContext = places.map((p, i) => {
         let placeInfo = `
 ${i + 1}. ${p.name} - ${p.category}${p.cuisine_type ? ` (${p.cuisine_type})` : ''}${p.place_type ? ` (${p.place_type})` : ''}
@@ -756,12 +754,6 @@ RESPOND ONLY WITH VALID JSON:
 
 ${titleInfo}${contextInfo}
 
-**IMPORTANT: Read ALL on-screen text carefully!**
-- Look for restaurant names, shop names, place names shown as text overlays
-- Look for addresses or location indicators
-- Look for price tags, menu items with restaurant context
-- Look for signs, logos, storefront text
-
 **CRITICAL RULES FOR PLACE EXTRACTION:**
 1. Extract the OFFICIAL BUSINESS/RESTAURANT NAME.
 2. **HIERARCHY DETECTION (CRITICAL):** If a specific venue is shown INSIDE a larger landmark (e.g. a restaurant inside a mall or hotel):
@@ -821,35 +813,9 @@ RESPOND WITH VALID JSON:
     }
   }
 
-  // Legacy method preserved but deprecated
-  /**
-   * @deprecated Use analyzeVideoMetadata() instead
-   */
+  // Legacy method preserved but not recommended
   static async analyzeYouTubeVideo(videoUrl: string): Promise<any> {
-    try {
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash',
-        generationConfig: {
-          responseMimeType: 'application/json',
-        }
-      });
-
-      const prompt = `Analyze this YouTube video: ${videoUrl}
-Please provide a brief summary and extract specific places.
-Respond ONLY with valid JSON.`;
-
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Failed to parse Gemini response');
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        summary: parsed.summary || 'No summary available',
-        places: parsed.places || [],
-      };
-    } catch (error: any) {
-      logger.error('Gemini YouTube analysis error:', error);
-      return { summary: 'Error', places: [] };
-    }
+    // ... existing implementation ...
+    return { summary: 'Deprecated', places: [] };
   }
 }

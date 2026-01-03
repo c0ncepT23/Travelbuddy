@@ -24,6 +24,7 @@ export class SavedItemService {
       clonedFromJourneyId?: string;
       clonedFromOwnerName?: string;
       destination?: string;
+      parent_location?: string;
     }
   ): Promise<SavedItem> {
     try {
@@ -59,6 +60,7 @@ export class SavedItemService {
         undefined, // tags
         undefined, // cuisineType
         undefined, // placeType
+        itemData.parent_location,
         itemData.destination,
         itemData.clonedFromJourneyId,
         itemData.clonedFromOwnerName
@@ -520,6 +522,7 @@ export class SavedItemService {
           item.tags,
           item.cuisine_type,
           item.place_type,
+          item.parent_location,
           item.destination,
           sourceTripGroupId,
           ownerName
