@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { config } from '../config/env';
-import { GeminiService } from './gemini.service';
+import { GeminiService, MODELS } from './gemini.service';
 import { GooglePlacesService } from './googlePlaces.service';
 import { ItemCategory, ProcessedContent } from '../types';
 import logger from '../config/logger';
@@ -336,9 +336,9 @@ export class ApifyInstagramService {
 
       logger.info('[Apify] Video ready, analyzing with Gemini...');
 
-      // Use Gemini 2.0 Flash Exp for multimodal analysis (supports video)
+      // Use stable Gemini 2.5 Flash for multimodal analysis
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash-exp',
+        model: MODELS.FLASH,
         generationConfig: {
           responseMimeType: 'application/json',
         }

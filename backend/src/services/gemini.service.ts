@@ -13,7 +13,7 @@ const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 const fileManager = new GoogleAIFileManager(config.gemini.apiKey);
 
 // Model tiers for different use cases
-const MODELS = {
+export const MODELS = {
   FLASH: 'gemini-2.5-flash',  // Fast, cheap - for chat, intent detection (stable GA)
   PRO: 'gemini-2.5-pro',      // Complex reasoning - for planning, guides (stable GA)
   FLASH_LEGACY: 'gemini-2.0-flash',  // Fallback

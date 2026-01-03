@@ -6,6 +6,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { MODELS } from './gemini.service';
 import config from '../config/env';
 import logger from '../config/logger';
 import { ItemCategory } from '../types';
@@ -44,7 +45,7 @@ export class GeminiDirectUrlService {
       logger.info(`[GeminiDirectUrl] Analyzing video: ${videoUrl}`);
 
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash-exp',
+        model: MODELS.FLASH,
         generationConfig: {
           responseMimeType: 'application/json',
         },
