@@ -112,49 +112,58 @@ export class ContentProcessorService {
       throw new Error('Invalid YouTube URL');
     }
 
-    // Always get metadata first (free, fast)
-    const metadata = await YouTubeTranscriptService.fetchMetadata(videoId);
+    // New unified fetch: Get everything (transcript, description, metadata) in one proxy-call
+    const videoData = await YouTubeTranscriptService.fetchVideoData(videoId);
+    
+    // Fallback metadata via oEmbed if scraping failed to get title/author
+    if (!videoData.title) {
+      const oembed = await YouTubeTranscriptService.fetchMetadata(videoId);
+      if (oembed) {
+        videoData.title = oembed.title;
+        videoData.author = oembed.author;
+      }
+    }
 
     // Path 1: YouTube Shorts → Skip transcript, use Gemini Direct URL
     if (YouTubeTranscriptService.isShort(url)) {
       logger.info(`[ContentProcessor] YouTube Short detected → Gemini Direct URL`);
       return {
-        title: metadata?.title || 'YouTube Short',
-        description: '',
+        title: videoData.title || 'YouTube Short',
+        description: videoData.description || '',
         transcript: '', // Empty - will trigger Gemini Direct URL path
-        thumbnail_url: metadata?.thumbnailUrl || '',
-        thumbnail: metadata?.thumbnailUrl || '',
-        channel: metadata?.author || 'Unknown',
+        thumbnail_url: videoData.thumbnailUrl || '',
+        thumbnail: videoData.thumbnailUrl || '',
+        channel: videoData.author || 'Unknown',
         useDirectUrl: true, // Flag for downstream processing
       };
     }
 
-    // Path 2: Long-form video → Try transcript
-    logger.info(`[ContentProcessor] Long-form video → Trying transcript API`);
-    const transcript = await YouTubeTranscriptService.fetchTranscript(videoId);
+    // Path 2: Long-form video → Use transcript or rich description
+    const hasTranscript = videoData.transcript && videoData.transcript.length > 100;
+    const hasRichDescription = videoData.description && videoData.description.length > 200;
 
-    if (transcript && transcript.length > 100) {
-      logger.info(`[ContentProcessor] Got transcript (${transcript.length} chars)`);
+    if (hasTranscript || hasRichDescription) {
+      logger.info(`[ContentProcessor] Got useful text context (Transcript: ${!!hasTranscript}, Desc: ${!!hasRichDescription})`);
       return {
-        title: metadata?.title || 'YouTube Video',
-        description: '',
-        transcript,
-        thumbnail_url: metadata?.thumbnailUrl || '',
-        thumbnail: metadata?.thumbnailUrl || '',
-        channel: metadata?.author || 'Unknown',
-        useDirectUrl: false,
+        title: videoData.title || 'YouTube Video',
+        description: videoData.description || '',
+        transcript: videoData.transcript || '',
+        thumbnail_url: videoData.thumbnailUrl || '',
+        thumbnail: videoData.thumbnailUrl || '',
+        channel: videoData.author || 'Unknown',
+        useDirectUrl: false, // Text analysis is good enough
       };
     }
 
-    // Path 3: No transcript → Fall back to Gemini Direct URL
-    logger.info(`[ContentProcessor] No transcript → Gemini Direct URL fallback`);
+    // Path 3: No useful text → Fall back to Gemini Direct URL (Vision)
+    logger.info(`[ContentProcessor] No useful text context → Gemini Direct URL fallback`);
     return {
-      title: metadata?.title || 'YouTube Video',
-      description: '',
+      title: videoData.title || 'YouTube Video',
+      description: videoData.description || '',
       transcript: '',
-      thumbnail_url: metadata?.thumbnailUrl || '',
-      thumbnail: metadata?.thumbnailUrl || '',
-      channel: metadata?.author || 'Unknown',
+      thumbnail_url: videoData.thumbnailUrl || '',
+      thumbnail: videoData.thumbnailUrl || '',
+      channel: videoData.author || 'Unknown',
       useDirectUrl: true,
     };
   }

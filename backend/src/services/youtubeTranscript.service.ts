@@ -51,92 +51,128 @@ export class YouTubeTranscriptService {
   }
 
   /**
-   * Fetch transcript with proxy support
-   * Returns null if transcript unavailable (common for Shorts)
+   * Fetch transcript and description with proxy support
+   * Returns object with both or nulls if unavailable
    */
-  static async fetchTranscript(videoId: string): Promise<string | null> {
+  static async fetchVideoData(videoId: string): Promise<{ 
+    transcript: string | null; 
+    description: string | null;
+    title?: string;
+    author?: string;
+    thumbnailUrl?: string;
+  }> {
     try {
-      logger.info(`[YouTubeTranscript] Fetching transcript for ${videoId}`);
-
-      // We use the library but attempt to fetch it via the proxy
-      // The library might not support a custom agent directly, 
-      // so if this fails we might need a direct Axios call to the timedtext API.
-      const segments: any[] = await YoutubeTranscript.fetchTranscript(
-        videoId,
-        {
-          // youtube-transcript doesn't support custom fetch or agents directly.
-          // Fallback to manual fetch if needed.
-        }
-      );
-
-      if (!segments || segments.length === 0) {
-        logger.info(`[YouTubeTranscript] No transcript available for ${videoId}`);
-        return null;
-      }
-
-      const fullTranscript = segments
-        .map(seg => seg.text)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      logger.info(`[YouTubeTranscript] Got ${fullTranscript.length} chars for ${videoId}`);
-      return fullTranscript;
-
-    } catch (error: any) {
-      logger.warn(`[YouTubeTranscript] Primary fetch failed for ${videoId}: ${error.message}. Trying manual fallback...`);
-      
-      // Manual fallback to timedtext API with proxy
-      return await this.fetchTranscriptManually(videoId);
-    }
-  }
-
-  /**
-   * Manual fallback to YouTube's timedtext API
-   */
-  private static async fetchTranscriptManually(videoId: string): Promise<string | null> {
-    try {
+      logger.info(`[YouTubeTranscript] Fetching full video data for ${videoId}`);
       const httpsAgent = this.getHttpsAgent();
       
-      // First, get the video page to find the timedtext URL
+      // 1. Fetch the main video page to get description and caption tracks
       const videoPageResponse = await axios.get(`https://www.youtube.com/watch?v=${videoId}`, {
         httpsAgent,
         timeout: API_LIMITS.YOUTUBE_TRANSCRIPT_TIMEOUT_MS,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
         }
       });
 
-      const playerCaptionsMatch = videoPageResponse.data.match(/"captionTracks":\s*(\[.*?\])/);
-      if (!playerCaptionsMatch) return null;
-
-      const captionTracks = JSON.parse(playerCaptionsMatch[1]);
-      const englishTrack = captionTracks.find((t: any) => t.languageCode === 'en') || captionTracks[0];
+      const html = videoPageResponse.data;
       
-      if (!englishTrack?.baseUrl) return null;
+      // 2. Extract Description (it's hidden in the ytInitialData JSON)
+      let description = null;
+      try {
+        const descMatch = html.match(/"shortDescription":"(.*?)"/);
+        if (descMatch) {
+          description = descMatch[1]
+            .replace(/\\n/g, '\n')
+            .replace(/\\u([\d\w]{4})/gi, (_, grp) => String.fromCharCode(parseInt(grp, 16)));
+          logger.info(`[YouTubeTranscript] Extracted description (${description.length} chars)`);
+        }
+      } catch (e) {
+        logger.warn(`[YouTubeTranscript] Failed to parse description for ${videoId}`);
+      }
 
-      const transcriptResponse = await axios.get(englishTrack.baseUrl, {
-        httpsAgent,
-        timeout: API_LIMITS.YOUTUBE_TRANSCRIPT_TIMEOUT_MS
-      });
+      // 3. Extract Metadata (Title, Author) if not provided
+      let title = undefined;
+      let author = undefined;
+      try {
+        const titleMatch = html.match(/"title":"(.*?)"/);
+        if (titleMatch) title = titleMatch[1];
+        const authorMatch = html.match(/"author":"(.*?)"/);
+        if (authorMatch) author = authorMatch[1];
+      } catch (e) { /* ignore */ }
 
-      // Simple XML to Text extraction (removing tags)
-      const transcript = transcriptResponse.data
-        .replace(/<text.*?>/g, '')
-        .replace(/<\/text>/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/<.*?>/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      // 4. Try to fetch Transcript
+      let transcript = null;
+      try {
+        const playerCaptionsMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
+        if (playerCaptionsMatch) {
+          const captionTracks = JSON.parse(playerCaptionsMatch[1]);
+          const englishTrack = captionTracks.find((t: any) => t.languageCode === 'en' || t.languageCode === 'en-US') || captionTracks[0];
+          
+          if (englishTrack?.baseUrl) {
+            const transcriptResponse = await axios.get(englishTrack.baseUrl, {
+              httpsAgent,
+              timeout: API_LIMITS.YOUTUBE_TRANSCRIPT_TIMEOUT_MS
+            });
 
-      logger.info(`[YouTubeTranscript] Manual fetch success: ${transcript.length} chars`);
-      return transcript;
+            transcript = transcriptResponse.data
+              .replace(/<text.*?>/g, '')
+              .replace(/<\/text>/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'")
+              .replace(/<.*?>/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            
+            logger.info(`[YouTubeTranscript] Extracted transcript (${transcript.length} chars)`);
+          }
+        }
+      } catch (e) {
+        logger.warn(`[YouTubeTranscript] Failed to fetch transcript for ${videoId}: ${e.message}`);
+      }
+
+      // 5. Library Fallback for transcript if manual failed
+      if (!transcript) {
+        try {
+          const segments = await YoutubeTranscript.fetchTranscript(videoId);
+          if (segments && segments.length > 0) {
+            transcript = segments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+            logger.info(`[YouTubeTranscript] Library fallback success (${transcript.length} chars)`);
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      return { 
+        transcript, 
+        description,
+        title,
+        author,
+        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+      };
+
     } catch (error: any) {
-      logger.error(`[YouTubeTranscript] Manual fetch failed: ${error.message}`);
-      return null;
+      logger.error(`[YouTubeTranscript] Failed to fetch video data for ${videoId}: ${error.message}`);
+      return { transcript: null, description: null };
     }
+  }
+
+  /**
+   * Fetch transcript with proxy support
+   * @deprecated Use fetchVideoData() instead
+   */
+  static async fetchTranscript(videoId: string): Promise<string | null> {
+    const data = await this.fetchVideoData(videoId);
+    return data.transcript;
+  }
+
+  /**
+   * Manual fallback to YouTube's timedtext API
+   * @deprecated Integrated into fetchVideoData()
+   */
+  private static async fetchTranscriptManually(videoId: string): Promise<string | null> {
+    const data = await this.fetchVideoData(videoId);
+    return data.transcript;
   }
 
   /**

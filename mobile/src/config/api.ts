@@ -10,7 +10,7 @@ export const API_BASE_URL = Platform.OS === 'web'
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // Increased to 60s for AI processing (video analysis takes time)
+  timeout: 120000, // Increased to 120s for AI processing (video vision analysis takes time)
   headers: {
     'Content-Type': 'application/json',
   },
