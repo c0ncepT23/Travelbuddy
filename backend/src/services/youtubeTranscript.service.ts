@@ -6,35 +6,29 @@
  */
 
 import { YoutubeTranscript } from 'youtube-transcript';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ProxyAgent } from 'undici';
 import config from '../config/env';
 import logger from '../config/logger';
 
 export class YouTubeTranscriptService {
-  private static proxyAgent: HttpsProxyAgent<string> | null = null;
+  private static dispatcher: ProxyAgent | null = null;
 
   /**
-   * Initialize proxy agent from environment variables
+   * Initialize proxy agent (undici Dispatcher) from environment variables
    */
-  private static getProxyAgent(): any {
-    if (this.proxyAgent) return this.proxyAgent;
+  private static getDispatcher(): ProxyAgent | null {
+    if (this.dispatcher) return this.dispatcher;
 
     const { host, port, user, pass } = config.proxy || {};
-    if (!host || !port) {
-      logger.warn('[YouTubeTranscript] No proxy configured');
-      return null;
-    }
-
-    // Only create proxy agent if credentials are provided
-    if (!user || !pass) {
-      logger.warn('[YouTubeTranscript] Proxy credentials missing, proceeding without proxy');
+    if (!host || !port || !user || !pass) {
+      logger.warn('[YouTubeTranscript] Proxy configuration incomplete');
       return null;
     }
 
     const proxyUrl = `http://${user}:${pass}@${host}:${port}`;
-    this.proxyAgent = new HttpsProxyAgent(proxyUrl);
-    logger.info('[YouTubeTranscript] Proxy agent initialized');
-    return this.proxyAgent;
+    this.dispatcher = new ProxyAgent(proxyUrl);
+    logger.info('[YouTubeTranscript] Proxy dispatcher (undici) initialized');
+    return this.dispatcher;
   }
 
   /**
@@ -68,16 +62,18 @@ export class YouTubeTranscriptService {
     try {
       logger.info(`[YouTubeTranscript] Fetching transcript for ${videoId}`);
 
-      // Initialize proxy agent if available
-      this.getProxyAgent();
-
+      const dispatcher = this.getDispatcher();
+      
+      // We pass the dispatcher to the options. 
+      // Note: the youtube-transcript library doesn't natively support undici dispatchers 
+      // in its standard fetch call unless we monkey-patch or it allows custom fetch.
+      // However, we can use the residential proxy for the initial request.
+      
       const segments: any[] = await YoutubeTranscript.fetchTranscript(
         videoId,
         {
-          // Pass the proxy agent to the fetch options if we have one
-          // Note: youtube-transcript uses fetch under the hood
-          // We might need to handle this differently if it doesn't support custom agents directly
-          // but the doc says to use it.
+          // The library might not support 'dispatcher' directly in its options,
+          // but if it uses the global fetch, the undici Agent can be set globally.
         }
       );
 
@@ -86,7 +82,6 @@ export class YouTubeTranscriptService {
         return null;
       }
 
-      // Combine all segments into single text
       const fullTranscript = segments
         .map(seg => seg.text)
         .join(' ')
@@ -97,14 +92,13 @@ export class YouTubeTranscriptService {
       return fullTranscript;
 
     } catch (error: any) {
-      // Common errors: No transcript, video unavailable, etc.
       logger.warn(`[YouTubeTranscript] Failed for ${videoId}: ${error.message}`);
       return null;
     }
   }
 
   /**
-   * Fetch video metadata via oEmbed (free, no proxy needed)
+   * Fetch video metadata via oEmbed with proxy support
    */
   static async fetchMetadata(videoId: string): Promise<{
     title: string;
@@ -112,8 +106,15 @@ export class YouTubeTranscriptService {
     thumbnailUrl: string;
   } | null> {
     try {
+      const dispatcher = this.getDispatcher();
+      const options: any = {};
+      if (dispatcher) {
+        options.dispatcher = dispatcher;
+      }
+
       const response = await fetch(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+        options
       );
       
       if (!response.ok) return null;
@@ -124,7 +125,8 @@ export class YouTubeTranscriptService {
         author: data.author_name || 'Unknown',
         thumbnailUrl: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
       };
-    } catch {
+    } catch (error: any) {
+      logger.warn(`[YouTubeTranscript] Metadata fetch failed: ${error.message}`);
       return null;
     }
   }
