@@ -54,6 +54,7 @@ export class GeminiDirectUrlService {
       const descInfo = options?.description ? `\nDescription: "${options.description}"` : '';
 
       const prompt = `Analyze this YouTube video and extract only the MAJOR geographical locations (Hero Places) visited.
+${contextInfo}${descInfo}
 
 RULES FOR EXTRACTION:
 1. Identify the "HERO" locations: These are the main destinations the creator actually spent time at.
