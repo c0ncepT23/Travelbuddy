@@ -71,11 +71,11 @@ interface SmartShareProcessorProps {
 type ProcessingStage = 'detecting' | 'extracting' | 'enriching' | 'complete' | 'error';
 
 const STAGE_MESSAGES: Record<ProcessingStage, string> = {
-  detecting: 'Discovering destinations...',
-  extracting: 'Finding hidden gems...',
-  enriching: 'Adding the magic touches...',
-  complete: 'Adventure awaits!',
-  error: 'Oops, hit a bump!',
+  detecting: 'Yori-san is watching the reel...',
+  extracting: 'Yori-san is checking the local maps...',
+  enriching: 'Yori-san is finding the perfect spot!',
+  complete: 'Almost there! Yori-san is pinning it.',
+  error: 'Yori-san dropped the map!',
 };
 
 const SUB_MESSAGES = [
@@ -133,7 +133,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
   const { setYoriState, resetToIdle } = useYoriStore();
 
   // Animation values
@@ -252,7 +252,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
       if (retryCount === 0) {
         HapticFeedback.light();
         setStage('detecting');
-        setYoriState('THINKING', "Yori-san is watching the reel...");
+        setYoriState('RESEARCHER', STAGE_MESSAGES.detecting);
       }
       
       // Minimal delay - just enough for UI to render
@@ -260,6 +260,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
 
       // Stage 2: Extracting
       setStage('extracting');
+      setYoriState('SCOUT', STAGE_MESSAGES.extracting);
       if (retryCount === 0) HapticFeedback.light();
 
       // Make API call
@@ -286,6 +287,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
 
       // Stage 3: Enriching
       setStage('enriching');
+      setYoriState('LIBRARIAN', STAGE_MESSAGES.enriching);
       HapticFeedback.medium();
       await delay(600);
 
@@ -347,34 +349,79 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   if (isMinimized) {
     const isComplete = stage === 'complete';
     const isError = stage === 'error';
+    const isProcessing = !isComplete && !isError;
     
     return (
-      <TouchableOpacity 
+      <MotiView
+        from={{ translateY: 100, opacity: 0 }}
+        animate={{ translateY: 0, opacity: 1 }}
         style={styles.minimizedContainer}
-        onPress={() => setIsMinimized(false)}
       >
-        <LinearGradient
-          colors={isComplete ? ['#10B981', '#059669'] : isError ? ['#EF4444', '#DC2626'] : ['#A78BFA', '#818CF8']}
+        <TouchableOpacity 
           style={styles.minimizedBubble}
+          onPress={() => {
+            HapticFeedback.light();
+            setIsMinimized(false);
+          }}
+          activeOpacity={0.9}
         >
-          {isComplete ? (
-            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-          ) : isError ? (
-            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
-          ) : (
-            <MotiView
-              from={{ rotate: '0deg' }}
-              animate={{ rotate: '360deg' }}
-              transition={{ type: 'timing', duration: 2000, loop: true }}
-            >
-              <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-            </MotiView>
-          )}
-          <Text style={styles.minimizedText}>
-            {isComplete ? 'Done! Tap to view' : isError ? 'Error occurred' : 'Processing...'}
-          </Text>
-        </LinearGradient>
-      </TouchableOpacity>
+          <LinearGradient
+            colors={
+              isComplete 
+                ? ['#10B981', '#059669'] 
+                : isError 
+                ? ['#EF4444', '#DC2626'] 
+                : ['#6366F1', '#4F46E5']
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.minimizedGradient}
+          >
+            <View style={styles.minimizedContent}>
+              <View style={styles.minimizedIconContainer}>
+                {isProcessing ? (
+                  <MotiView
+                    from={{ rotate: '0deg', scale: 0.8 }}
+                    animate={{ rotate: '360deg', scale: 1 }}
+                    transition={{ type: 'timing', duration: 2000, loop: true }}
+                  >
+                    <Image 
+                      source={require('../../assets/yori-san.gif')} 
+                      style={styles.minimizedMascot}
+                      resizeMode="contain"
+                    />
+                  </MotiView>
+                ) : isComplete ? (
+                  <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
+                )}
+              </View>
+              
+              <View style={styles.minimizedTextContainer}>
+                <Text style={styles.minimizedTitle}>
+                  {isComplete ? 'Yori-san found it!' : isError ? 'Yori-san got stuck' : 'Yori-san is watching...'}
+                </Text>
+                <Text style={styles.minimizedSubtext}>
+                  {isProcessing ? STAGE_MESSAGES[stage] : 'Tap to see results'}
+                </Text>
+              </View>
+
+              {isProcessing && (
+                <View style={styles.miniProgressContainer}>
+                   <MotiView
+                    from={{ width: '0%' }}
+                    animate={{ 
+                      width: stage === 'detecting' ? '30%' : stage === 'extracting' ? '60%' : '90%' 
+                    }}
+                    style={styles.miniProgressBar}
+                  />
+                </View>
+              )}
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </MotiView>
     );
   }
 
@@ -763,26 +810,71 @@ const styles = StyleSheet.create({
   },
   minimizedContainer: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 40,
+    left: 20,
     right: 20,
     zIndex: 9999,
   },
   minimizedBubble: {
+    width: '100%',
+    height: 70,
+    borderRadius: 35,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  minimizedGradient: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  minimizedContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 24,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    paddingHorizontal: 20,
   },
-  minimizedText: {
+  minimizedIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  minimizedMascot: {
+    width: 34,
+    height: 34,
+  },
+  minimizedTextContainer: {
+    flex: 1,
+  },
+  minimizedTitle: {
     color: '#FFFFFF',
-    fontWeight: '600',
-    marginLeft: 8,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  minimizedSubtext: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  miniProgressContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  miniProgressBar: {
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   content: {
     alignItems: 'center',

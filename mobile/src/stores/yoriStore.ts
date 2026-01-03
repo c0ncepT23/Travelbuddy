@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type YoriState = 'IDLE' | 'THINKING' | 'CELEBRATING' | 'SLEEPING' | 'ANNOYED' | 'HAPPY';
+export type YoriState = 'IDLE' | 'THINKING' | 'RESEARCHER' | 'SCOUT' | 'LIBRARIAN' | 'CELEBRATING' | 'SLEEPING' | 'ANNOYED' | 'HAPPY';
 
 interface YoriStore {
   currentState: YoriState;
