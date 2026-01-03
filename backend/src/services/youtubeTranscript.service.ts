@@ -10,14 +10,8 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import config from '../config/env';
 import logger from '../config/logger';
 
-interface TranscriptSegment {
-  text: string;
-  offset: number;
-  duration: number;
-}
-
 export class YouTubeTranscriptService {
-  private static proxyAgent: HttpsProxyAgent | null = null;
+  private static proxyAgent: HttpsProxyAgent<string> | null = null;
 
   /**
    * Initialize proxy agent from environment variables
@@ -74,8 +68,8 @@ export class YouTubeTranscriptService {
     try {
       logger.info(`[YouTubeTranscript] Fetching transcript for ${videoId}`);
 
-      // Get proxy agent if available
-      const agent = this.getProxyAgent();
+      // Initialize proxy agent if available
+      this.getProxyAgent();
 
       const segments: any[] = await YoutubeTranscript.fetchTranscript(
         videoId,
@@ -135,4 +129,3 @@ export class YouTubeTranscriptService {
     }
   }
 }
-
