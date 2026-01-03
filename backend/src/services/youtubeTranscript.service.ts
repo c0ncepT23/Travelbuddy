@@ -84,7 +84,7 @@ export class YouTubeTranscriptService {
         if (descMatch) {
           description = descMatch[1]
             .replace(/\\n/g, '\n')
-            .replace(/\\u([\d\w]{4})/gi, (_, grp) => String.fromCharCode(parseInt(grp, 16)));
+            .replace(/\\u([\d\w]{4})/gi, (_: string, grp: string) => String.fromCharCode(parseInt(grp, 16)));
           logger.info(`[YouTubeTranscript] Extracted description (${description.length} chars)`);
         }
       } catch (e) {
@@ -128,7 +128,7 @@ export class YouTubeTranscriptService {
             logger.info(`[YouTubeTranscript] Extracted transcript (${transcript.length} chars)`);
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         logger.warn(`[YouTubeTranscript] Failed to fetch transcript for ${videoId}: ${e.message}`);
       }
 
@@ -162,15 +162,6 @@ export class YouTubeTranscriptService {
    * @deprecated Use fetchVideoData() instead
    */
   static async fetchTranscript(videoId: string): Promise<string | null> {
-    const data = await this.fetchVideoData(videoId);
-    return data.transcript;
-  }
-
-  /**
-   * Manual fallback to YouTube's timedtext API
-   * @deprecated Integrated into fetchVideoData()
-   */
-  private static async fetchTranscriptManually(videoId: string): Promise<string | null> {
     const data = await this.fetchVideoData(videoId);
     return data.transcript;
   }
