@@ -62,12 +62,8 @@ export class YouTubeTranscriptService {
     try {
       logger.info(`[YouTubeTranscript] Fetching transcript for ${videoId}`);
 
-      const dispatcher = this.getDispatcher();
-      
-      // We pass the dispatcher to the options. 
-      // Note: the youtube-transcript library doesn't natively support undici dispatchers 
-      // in its standard fetch call unless we monkey-patch or it allows custom fetch.
-      // However, we can use the residential proxy for the initial request.
+      // Initialize proxy agent if available
+      this.getDispatcher();
       
       const segments: any[] = await YoutubeTranscript.fetchTranscript(
         videoId,
