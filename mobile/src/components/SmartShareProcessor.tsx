@@ -74,9 +74,20 @@ const STAGE_MESSAGES: Record<ProcessingStage, string> = {
   detecting: 'Yori-san is watching the reel...',
   extracting: 'Yori-san is checking the local maps...',
   enriching: 'Yori-san is finding the perfect spot!',
-  complete: 'Almost there! Yori-san is pinning it.',
+  complete: 'Yori-san found it!',
   error: 'Yori-san dropped the map!',
 };
+
+const FUN_MESSAGES = [
+  'Sharpening my travel pencils... ✏️',
+  'Scanning for hidden gems... 💎',
+  'Consulting the local experts... 🐈',
+  'Double-checking the coordinates... 📍',
+  'Almost ready for takeoff... ✈️',
+  'Brewing some fresh coffee... ☕',
+  'Translating creator secrets... 💬',
+  'Polishing the map pins... ✨',
+];
 
 const SUB_MESSAGES = [
   'Your AI travel scout is on it ✨',
@@ -134,7 +145,19 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [isMinimized, setIsMinimized] = useState(true);
+  const [funMessageIndex, setFunMessageIndex] = useState(0);
   const { setYoriState, resetToIdle } = useYoriStore();
+
+  // Cycle fun messages every 3 seconds while processing
+  useEffect(() => {
+    if (stage === 'complete' || stage === 'error') return;
+    
+    const interval = setInterval(() => {
+      setFunMessageIndex(prev => (prev + 1) % FUN_MESSAGES.length);
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [stage]);
 
   // Animation values
   const orbScale = useRef(new Animated.Value(1)).current;
@@ -381,9 +404,12 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
               <View style={styles.minimizedIconContainer}>
                 {isProcessing ? (
                   <MotiView
-                    from={{ rotate: '0deg', scale: 0.8 }}
-                    animate={{ rotate: '360deg', scale: 1 }}
-                    transition={{ type: 'timing', duration: 2000, loop: true }}
+                    from={{ scale: 0.9, rotate: '0deg' }}
+                    animate={{ scale: 1.1, rotate: '360deg' }}
+                    transition={{ 
+                      scale: { type: 'timing', duration: 1000, loop: true, easing: RNEasing.inOut(RNEasing.ease) },
+                      rotate: { type: 'timing', duration: 3000, loop: true, easing: RNEasing.linear }
+                    }}
                   >
                     <Image 
                       source={require('../../assets/yori-san.gif')} 
@@ -399,12 +425,22 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
               </View>
               
               <View style={styles.minimizedTextContainer}>
-                <Text style={styles.minimizedTitle}>
-                  {isComplete ? 'Yori-san found it!' : isError ? 'Yori-san got stuck' : 'Yori-san is watching...'}
+                <Text style={styles.minimizedTitle} numberOfLines={1}>
+                  {isComplete ? 'Yori-san found it!' : isError ? 'Yori-san dropped the map' : FUN_MESSAGES[funMessageIndex]}
                 </Text>
-                <Text style={styles.minimizedSubtext}>
-                  {isProcessing ? STAGE_MESSAGES[stage] : 'Tap to see results'}
-                </Text>
+                <AnimatePresence exitBeforeEnter>
+                  <MotiView
+                    key={stage}
+                    from={{ opacity: 0, translateX: -5 }}
+                    animate={{ opacity: 1, translateX: 0 }}
+                    exit={{ opacity: 0, translateX: 5 }}
+                    transition={{ type: 'timing', duration: 200 }}
+                  >
+                    <Text style={styles.minimizedSubtext} numberOfLines={1}>
+                      {isProcessing ? STAGE_MESSAGES[stage] : 'Tap to see results'}
+                    </Text>
+                  </MotiView>
+                </AnimatePresence>
               </View>
 
               {isProcessing && (
@@ -550,11 +586,16 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
           >
             {/* Yori-san Mascot Image */}
             <View style={styles.mascotImageContainer}>
-              <Image 
-                source={require('../../assets/yori-san.gif')} 
-                style={styles.mascotImage}
-                resizeMode="contain"
-              />
+              <MotiView
+                animate={{ translateY: [0, -10, 0] }}
+                transition={{ type: 'timing', duration: 2000, loop: true, easing: RNEasing.inOut(RNEasing.ease) }}
+              >
+                <Image 
+                  source={require('../../assets/yori-san.gif')} 
+                  style={styles.mascotImage}
+                  resizeMode="contain"
+                />
+              </MotiView>
             </View>
 
             {/* Stage indicator overlay (subtle) */}
@@ -841,10 +882,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
   },
   minimizedMascot: {
     width: 34,
