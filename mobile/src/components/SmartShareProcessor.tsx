@@ -407,8 +407,8 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
                     from={{ scale: 0.9, rotate: '0deg' }}
                     animate={{ scale: 1.1, rotate: '360deg' }}
                     transition={{ 
-                      scale: { type: 'timing', duration: 1000, loop: true, easing: RNEasing.inOut(RNEasing.ease) },
-                      rotate: { type: 'timing', duration: 3000, loop: true, easing: RNEasing.linear }
+                      scale: { type: 'timing', duration: 1000, loop: true, easing: Easing.inOut(Easing.ease) },
+                      rotate: { type: 'timing', duration: 3000, loop: true, easing: Easing.linear }
                     }}
                   >
                     <Image 
@@ -588,7 +588,7 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
             <View style={styles.mascotImageContainer}>
               <MotiView
                 animate={{ translateY: [0, -10, 0] }}
-                transition={{ type: 'timing', duration: 2000, loop: true, easing: RNEasing.inOut(RNEasing.ease) }}
+                transition={{ type: 'timing', duration: 2000, loop: true, easing: Easing.inOut(Easing.ease) }}
               >
                 <Image 
                   source={require('../../assets/yori-san.gif')} 
