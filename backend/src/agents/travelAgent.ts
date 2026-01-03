@@ -122,7 +122,7 @@ ${contentText}
 Extract:
 1. Name of the place/restaurant/activity (be specific)
 2. Category (choose one: food, accommodation, place, shopping, activity, tip)
-3. Brief description (2-3 sentences highlighting key features)
+3. Brief description (2-3 sentences highlighting key features. NO HTML TAGS. Use crisp plain text.)
 4. Location name (city/area if mentioned)
 
 Respond ONLY with a valid JSON object in this exact format:
@@ -377,7 +377,7 @@ Transcript: ${transcript.substring(0, 3000)}
 
 List each place with:
 - Name
-- Brief description (what makes it special)
+- Brief description (what makes it special. NO HTML TAGS. Use clean bullets if listing sub-items.)
 - Location (if mentioned)
 
 Respond with JSON:

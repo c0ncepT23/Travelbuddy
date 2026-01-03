@@ -34,7 +34,10 @@ export const extractionSchema = {
         properties: {
           name: { type: SchemaType.STRING },
           category: { type: SchemaType.STRING, enum: ['food', 'accommodation', 'place', 'shopping', 'activity', 'tip'] },
-          description: { type: SchemaType.STRING },
+          description: { 
+            type: SchemaType.STRING,
+            description: 'Crisp Markdown summary. Use "•" for bullets. NO HTML TAGS. Use Title Case for sub-headings. Max 1000 chars.'
+          },
           location: { type: SchemaType.STRING, nullable: true },
           cuisine_type: { type: SchemaType.STRING, nullable: true },
           place_type: { type: SchemaType.STRING, nullable: true },
@@ -514,9 +517,15 @@ Generate a SHORT, friendly response:`;
 RULES FOR EXTRACTION:
 1. Identify the "HERO" locations: These are the main destinations the creator actually spent time at.
 2. ONE PIN PER COMPLEX: If the video shows multiple spots inside a single complex (e.g., "Giraffe Terrace" or "Blossom Restaurant" inside "Safari World"), do NOT create separate entries for them. 
-3. RICH DESCRIPTIONS: Instead, create ONE entry for the Parent Place (e.g., "Safari World Bangkok") and put all the specific spots, food items, and tips into the "description" field as bullet points.
-4. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports unless they are an actual destination visited.
-5. INTENT DETECTION: If no specific businesses are named, but the video is clearly about a specific food/activity, return "discovery_intent".
+3. RICH & CRISP DESCRIPTIONS: Instead, create ONE entry for the Parent Place (e.g., "Safari World Bangkok") and put all the specific spots, food items, and tips into the "description" field.
+4. FORMATTING RULE: 
+   - NEVER use HTML tags (<ul>, <li>, <b>, etc.).
+   - Use clean Markdown-style bullet points (•).
+   - Use Title Case for sub-sections followed by a colon (e.g., "Highlights:", "Food to Try:").
+   - Add a newline between sections to keep it readable.
+   - Be descriptive but concise.
+5. IGNORE TRANSIT POINTS: Do not extract pickup points, meeting spots, or airports unless they are an actual destination visited.
+6. INTENT DETECTION: If no specific businesses are named, but the video is clearly about a specific food/activity, return "discovery_intent".
 
 Title: ${title}
 
@@ -585,7 +594,12 @@ ${contentToAnalyze}`;
 RULES FOR EXTRACTION:
 1. Identify the "HERO" locations: These are the main destinations or complexes discussed.
 2. ONE PIN PER COMPLEX: If multiple spots inside a single complex are mentioned (e.g. various restaurants inside "Terminal 21" mall), do NOT create separate entries. Create ONE entry for the Parent Place and list sub-spots in the description.
-3. RICH DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field as bullet points.
+3. RICH & CRISP DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field.
+4. FORMATTING RULE: 
+   - NEVER use HTML tags. 
+   - Use clean bullets (•).
+   - Use Title Case for sections. 
+   - Use double newlines to separate paragraphs or major blocks.
 
 Title: ${title}
 Body: ${body}
@@ -649,7 +663,12 @@ RESPOND ONLY WITH VALID JSON matching the provided schema.`;
 RULES FOR EXTRACTION:
 1. Identify the "HERO" locations: These are the main destinations or complexes visited.
 2. ONE PIN PER COMPLEX: If multiple spots inside a single complex are mentioned (e.g. various restaurants inside a mall), do NOT create separate entries. Create ONE entry for the Parent Place.
-3. RICH DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field as bullet points.
+3. RICH & CRISP DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field.
+4. FORMATTING RULE: 
+   - NEVER use HTML tags. 
+   - Use clean bullets (•).
+   - Use Title Case for sections. 
+   - Use double newlines to separate paragraphs or major blocks.
 
 Caption: ${caption}
 Image URL: ${imageUrl || 'Not available'}
@@ -711,8 +730,13 @@ RESPOND ONLY WITH VALID JSON matching the provided schema.`;
 RULES FOR EXTRACTION:
 1. Identify the "HERO" locations: These are the main destinations or complexes visited.
 2. ONE PIN PER COMPLEX: If multiple spots inside a single complex are shown (e.g. various restaurants inside a mall), do NOT create separate entries. Create ONE entry for the Parent Place.
-3. RICH DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field as bullet points.
-4. **IMPORTANT: Read ALL on-screen text carefully!** Look for restaurant names, shop names, signs, logos, and storefront text.
+3. RICH & CRISP DESCRIPTIONS: Put all specific recommendations, food items, and tips into the "description" field.
+4. FORMATTING RULE: 
+   - NEVER use HTML tags. 
+   - Use clean bullets (•).
+   - Use Title Case for sections. 
+   - Use double newlines to separate paragraphs or major blocks.
+5. **IMPORTANT: Read ALL on-screen text carefully!** Look for restaurant names, shop names, signs, logos, and storefront text.
 
 ${titleInfo}${contextInfo}
 
