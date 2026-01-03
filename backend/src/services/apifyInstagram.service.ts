@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -242,20 +243,34 @@ export class ApifyInstagramService {
 
   /**
    * Download video to temp file for Gemini analysis
+   * UPDATED: Routes through IPRoyal Proxy to avoid Instagram blocks
    */
   private static async downloadVideo(videoUrl: string): Promise<string> {
     const tempDir = os.tmpdir();
     const filename = `insta_reel_${Date.now()}.mp4`;
     const filepath = path.join(tempDir, filename);
 
-    logger.info(`[Apify] Downloading video to: ${filepath}`);
+    logger.info(`[Apify] Downloading video via Proxy to: ${filepath}`);
 
+    // 1. Configure Proxy Agent (Same as Gemini Service)
+    const { host, port, user, pass } = config.proxy || {};
+    let httpsAgent;
+
+    if (host && port && user && pass) {
+      const proxyUrl = `http://${user}:${pass}@${host}:${port}`;
+      httpsAgent = new HttpsProxyAgent(proxyUrl);
+      logger.info('[Apify] Routing download through IPRoyal Proxy');
+    }
+
+    // 2. Download with Agent
     const response = await axios({
       method: 'GET',
       url: videoUrl,
       responseType: 'stream',
+      httpsAgent: httpsAgent, // <--- CRITICAL: Routes traffic through IPRoyal
+      timeout: 30000,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
     });
 
