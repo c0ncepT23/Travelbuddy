@@ -177,6 +177,18 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
     })), 
   []);
 
+  // Random sparkle positions for the minimized pill
+  const miniSparkles = useMemo(() => 
+    Array.from({ length: 12 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%` as any,
+      top: `${Math.random() * 100}%` as any,
+      size: Math.random() * 4 + 2,
+      duration: Math.random() * 2000 + 1000,
+      delay: Math.random() * 3000,
+    })),
+  []);
+
   // Platform detection
   const platform = detectPlatform(url);
   const platformInfo = getPlatformInfo(platform);
@@ -443,17 +455,31 @@ export const SmartShareProcessor: React.FC<SmartShareProcessorProps> = ({
                 </AnimatePresence>
               </View>
 
-              {isProcessing && (
-                <View style={styles.miniProgressContainer}>
-                   <MotiView
-                    from={{ width: '0%' }}
-                    animate={{ 
-                      width: stage === 'detecting' ? '30%' : stage === 'extracting' ? '60%' : '90%' 
-                    }}
-                    style={styles.miniProgressBar}
-                  />
-                </View>
-              )}
+              {isProcessing && miniSparkles.map((sparkle) => (
+                <MotiView
+                  key={sparkle.id}
+                  from={{ opacity: 0, scale: 0 }}
+                  animate={{ opacity: [0, 0.8, 0], scale: [0, 1.2, 0] }}
+                  transition={{
+                    type: 'timing',
+                    duration: sparkle.duration,
+                    delay: sparkle.delay,
+                    loop: true,
+                    repeatReverse: false,
+                    easing: Easing.inOut(Easing.ease),
+                  }}
+                  style={[
+                    styles.miniSparkle,
+                    {
+                      left: sparkle.left,
+                      top: sparkle.top,
+                      width: sparkle.size,
+                      height: sparkle.size,
+                      borderRadius: sparkle.size / 2,
+                    }
+                  ]}
+                />
+              ))}
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -906,17 +932,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
-  miniProgressContainer: {
+  miniSparkle: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  miniProgressBar: {
-    height: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: -1, // Keep behind text
   },
   content: {
     alignItems: 'center',
