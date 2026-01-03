@@ -416,17 +416,17 @@ export class SavedItemModel {
 
     const conditions: string[] = [];
     
-    // Condition 1: Name match (ILIKE)
-    conditions.push(`name ILIKE $${paramCount++}`);
-    params.push(`%${name}%`);
-
-    // Condition 2: Location name match
+    // Condition 1: Name match AND Location match (Stricter)
     if (locationName) {
-      conditions.push(`location_name ILIKE $${paramCount++}`);
-      params.push(`%${locationName}%`);
+      conditions.push(`(name ILIKE $${paramCount} AND (location_name ILIKE $${paramCount + 1} OR area_name ILIKE $${paramCount + 1}))`);
+      params.push(`%${name}%`, `%${locationName}%`);
+      paramCount += 2;
+    } else {
+      conditions.push(`name ILIKE $${paramCount++}`);
+      params.push(`%${name}%`);
     }
 
-    // Condition 3: Google Place ID match (Strongest signal)
+    // Condition 2: Google Place ID match (Strongest signal)
     if (googlePlaceId) {
       conditions.push(`google_place_id = $${paramCount++}`);
       params.push(googlePlaceId);
