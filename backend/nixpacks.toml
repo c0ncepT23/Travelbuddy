@@ -2,10 +2,10 @@
 # Adds Node.js, Python, and yt-dlp for reliable YouTube video processing
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311", "ffmpeg", "yt-dlp"]
+nixPkgs = ["nodejs_20", "python311", "python311Packages.pip", "ffmpeg", "yt-dlp"]
 
 [phases.install]
-cmds = ["npm ci", "pip3 install -U yt-dlp --break-system-packages"]
+cmds = ["npm ci", "python3 -m pip install -U yt-dlp --break-system-packages"]
 
 [phases.build]
 cmds = ["npm run build"]
